@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Confirm Project Archive - MUST StarTrack</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Lexend', sans-serif;
+        }
+        .checkbox-custom:checked {
+            background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e");
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark min-h-screen flex items-center justify-center p-4">
+<!-- Modal Container -->
+<div class="relative w-full max-w-md overflow-hidden rounded-xl bg-white dark:bg-slate-900 shadow-2xl border border-primary/10">
+<!-- Top App Bar / Header -->
+<div class="flex items-center justify-between p-4 border-b border-primary/10 bg-white dark:bg-slate-900">
+<div class="flex items-center gap-3">
+<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+<span class="material-symbols-outlined text-2xl">archive</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-tight">Archive Project</h2>
+</div>
+<button class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<!-- Content Body -->
+<div class="p-6">
+<h3 class="text-slate-900 dark:text-slate-100 text-2xl font-bold leading-tight mb-3">Confirm Project Archive</h3>
+<p class="text-slate-600 dark:text-slate-400 text-base font-normal leading-relaxed mb-6">
+                Archiving this project will move it out of your main feed and digital portfolio. All data will be preserved for your future reference and can be restored at any time.
+            </p>
+<!-- Settings Section -->
+<div class="bg-primary/5 dark:bg-primary/10 rounded-lg p-4 mb-8">
+<label class="flex items-center gap-x-3 cursor-pointer group">
+<input class="checkbox-custom h-5 w-5 rounded border-primary/30 border-2 bg-transparent text-primary focus:ring-primary focus:ring-offset-0 transition-all cursor-pointer" type="checkbox"/>
+<span class="text-slate-800 dark:text-slate-200 text-sm font-medium select-none group-hover:text-primary transition-colors">Hide from all followers</span>
+</label>
+</div>
+<!-- Action Buttons -->
+<div class="flex flex-col gap-3">
+<button class="flex h-12 w-full items-center justify-center rounded-lg bg-primary text-white text-base font-bold tracking-wide shadow-lg shadow-primary/20 hover:bg-primary/90 active:scale-[0.98] transition-all">
+<span>Archive Project</span>
+</button>
+<button class="flex h-12 w-full items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-base font-bold tracking-wide hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-[0.98] transition-all">
+<span>Cancel</span>
+</button>
+</div>
+</div>
+<!-- Decorative Element -->
+<div class="h-1.5 w-full bg-gradient-to-r from-primary/20 via-primary to-primary/20"></div>
+</div>
+<!-- Background Pattern Decoration -->
+<div class="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+<div class="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] rounded-full bg-primary/5 blur-3xl"></div>
+<div class="absolute -bottom-[10%] -right-[10%] w-[40%] h-[40%] rounded-full bg-primary/5 blur-3xl"></div>
+</div>
+</body></html>

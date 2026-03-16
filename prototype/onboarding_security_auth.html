@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>MUST StarTrack Registration - Stage 3</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="relative flex h-auto min-h-screen w-full flex-col max-w-[480px] mx-auto bg-background-light dark:bg-background-dark overflow-x-hidden">
+<!-- TopAppBar -->
+<div class="flex items-center p-4 pb-2 justify-between">
+<div class="text-slate-900 dark:text-slate-100 flex size-12 shrink-0 items-center cursor-pointer">
+<span class="material-symbols-outlined">arrow_back</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center pr-12">Security &amp; Authentication</h2>
+</div>
+<!-- Progress Indicator -->
+<div class="flex flex-col gap-3 p-4">
+<div class="flex gap-6 justify-between">
+<p class="text-slate-700 dark:text-slate-300 text-base font-medium leading-normal">Step 3 of 3</p>
+<p class="text-primary text-sm font-bold leading-normal">100%</p>
+</div>
+<div class="rounded-full bg-primary/10 h-2 w-full overflow-hidden">
+<div class="h-full rounded-full bg-primary" style="width: 100%;"></div>
+</div>
+</div>
+<!-- Step Dots -->
+<div class="flex w-full flex-row items-center justify-center gap-3 py-2">
+<div class="h-2 w-2 rounded-full bg-primary/20"></div>
+<div class="h-2 w-2 rounded-full bg-primary/20"></div>
+<div class="h-2 w-8 rounded-full bg-primary"></div>
+</div>
+<div class="px-4 pt-6 pb-2">
+<h3 class="text-slate-900 dark:text-slate-100 tracking-tight text-2xl font-bold leading-tight">Secure Your Account</h3>
+<p class="text-slate-500 dark:text-slate-400 text-sm mt-1">Set a strong password for your MUST StarTrack account.</p>
+</div>
+<!-- Registration Form -->
+<div class="flex flex-col gap-5 p-4">
+<!-- Password Field -->
+<label class="flex flex-col w-full">
+<p class="text-slate-900 dark:text-slate-100 text-base font-medium leading-normal pb-2">Password</p>
+<div class="flex w-full items-stretch rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 focus-within:ring-2 focus-within:ring-primary/50 transition-all">
+<input class="flex w-full min-w-0 flex-1 border-none bg-transparent h-14 placeholder:text-slate-400 p-4 text-base font-normal leading-normal focus:ring-0" placeholder="Enter your password" type="password"/>
+<div class="text-slate-400 flex items-center justify-center pr-4 cursor-pointer">
+<span class="material-symbols-outlined">visibility</span>
+</div>
+</div>
+<!-- Strength Indicator -->
+<div class="mt-2 flex flex-col gap-1">
+<div class="flex gap-1 h-1 w-full">
+<div class="flex-1 bg-green-500 rounded-full"></div>
+<div class="flex-1 bg-green-500 rounded-full"></div>
+<div class="flex-1 bg-green-500 rounded-full"></div>
+<div class="flex-1 bg-green-500 rounded-full"></div>
+</div>
+<p class="text-[10px] text-green-600 dark:text-green-400 font-medium uppercase tracking-wider">Strong Password</p>
+</div>
+</label>
+<!-- Confirm Password Field -->
+<label class="flex flex-col w-full">
+<p class="text-slate-900 dark:text-slate-100 text-base font-medium leading-normal pb-2">Confirm Password</p>
+<div class="flex w-full items-stretch rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 focus-within:ring-2 focus-within:ring-primary/50 transition-all">
+<input class="flex w-full min-w-0 flex-1 border-none bg-transparent h-14 placeholder:text-slate-400 p-4 text-base font-normal leading-normal focus:ring-0" placeholder="Re-enter your password" type="password"/>
+<div class="text-slate-400 flex items-center justify-center pr-4 cursor-pointer">
+<span class="material-symbols-outlined">visibility</span>
+</div>
+</div>
+</label>
+<!-- Terms of Service Checkbox -->
+<div class="flex items-start gap-3 pt-2">
+<input class="mt-1 h-5 w-5 rounded border-slate-300 dark:border-slate-700 text-primary focus:ring-primary bg-white dark:bg-slate-900" id="terms" type="checkbox"/>
+<label class="text-sm text-slate-600 dark:text-slate-400 leading-tight" for="terms">
+                    I agree to the <a class="text-primary font-medium hover:underline" href="#">Terms of Service</a> and <a class="text-primary font-medium hover:underline" href="#">Privacy Policy</a>
+</label>
+</div>
+<!-- Verification Text -->
+<div class="flex items-center gap-2 px-1 py-2">
+<span class="material-symbols-outlined text-primary text-sm">info</span>
+<p class="text-xs text-slate-500 dark:text-slate-400 leading-normal italic">
+                    A verification link will be sent to your institutional email.
+                </p>
+</div>
+<!-- Action Buttons -->
+<div class="flex flex-col gap-3 mt-4">
+<button class="flex w-full items-center justify-center rounded-xl bg-primary h-14 px-4 text-white text-base font-bold tracking-wide hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20">
+                    Complete Registration
+                </button>
+<div class="relative flex items-center py-4">
+<div class="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
+<span class="flex-shrink mx-4 text-xs text-slate-400 uppercase tracking-widest font-semibold">Or</span>
+<div class="flex-grow border-t border-slate-200 dark:border-slate-800"></div>
+</div>
+<button class="flex w-full items-center justify-center gap-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 h-14 px-4 text-slate-700 dark:text-slate-200 text-base font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+<svg class="h-5 w-5" viewbox="0 0 24 24">
+<path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"></path>
+<path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"></path>
+<path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"></path>
+<path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"></path>
+</svg>
+                    Sign up with Google
+                </button>
+</div>
+</div>
+<!-- Bottom Spacing -->
+<div class="h-10"></div>
+</div>
+</body></html>

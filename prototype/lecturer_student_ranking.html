@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Student Discovery - MUST StarTrack</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Lexend', sans-serif;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 antialiased">
+<div class="relative flex min-h-screen w-full flex-col max-w-md mx-auto bg-white dark:bg-background-dark shadow-xl overflow-hidden">
+<header class="flex items-center bg-white dark:bg-background-dark p-4 pb-2 justify-between sticky top-0 z-10 border-b border-slate-100 dark:border-slate-800">
+<div class="text-primary flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
+<span class="material-symbols-outlined">arrow_back</span>
+</div>
+<div class="flex-1 text-center">
+<h2 class="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-tight">Student Discovery</h2>
+<p class="text-[10px] text-primary font-semibold uppercase tracking-widest">StarTrack AI Ranker</p>
+</div>
+<div class="flex w-10 items-center justify-end">
+<button class="flex items-center justify-center rounded-full size-10 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+</div>
+</header>
+<div class="px-4 py-4 space-y-4">
+<div class="relative">
+<label class="flex flex-col w-full group">
+<div class="flex w-full items-stretch rounded-xl h-12 bg-slate-100 dark:bg-slate-800 border border-transparent focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition-all">
+<div class="text-slate-400 flex items-center justify-center pl-4">
+<span class="material-symbols-outlined">search</span>
+</div>
+<input class="w-full bg-transparent border-none focus:ring-0 text-slate-900 dark:text-white placeholder:text-slate-400 text-sm px-3" placeholder="Search by skill (e.g. Flutter, AI, Data Science)" value=""/>
+</div>
+</label>
+</div>
+<div class="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-primary text-white px-4 text-xs font-medium shadow-sm">
+<span>Overall Score</span>
+<span class="material-symbols-outlined text-sm">keyboard_arrow_down</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 text-xs font-medium text-slate-600 dark:text-slate-300">
+<span>Specific Skill</span>
+<span class="material-symbols-outlined text-sm">expand_more</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 text-xs font-medium text-slate-600 dark:text-slate-300">
+<span>Projects</span>
+<span class="material-symbols-outlined text-sm">expand_more</span>
+</button>
+</div>
+</div>
+<div class="px-4 py-2 flex items-center justify-between">
+<h3 class="text-slate-900 dark:text-white text-sm font-bold flex items-center gap-2">
+                Top Talent <span class="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold">AI RANKED</span>
+</h3>
+<span class="text-xs text-slate-500 font-medium">124 matches found</span>
+</div>
+<main class="flex-1 px-4 space-y-4 pb-24">
+<!-- Student Card 1 -->
+<div class="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+<div class="flex items-start gap-4">
+<div class="relative">
+<img alt="Student profile" class="size-16 rounded-lg object-cover" data-alt="Portrait of a female university student smiling" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB1f-eA32PNyVc9x7sT-VmClAnKL7mvpmWM8dUFGgnUbC86bE4z1XOVh6qj-jVXIScEHqvuqkkWHJEy0GvVcxI98qrGGfUbCLzn0qtDRfc_gYeOlh4XkAJ_XJrJKBS977bEXfTFRNbdkMiVlHFh2rNzdFDMVAxG4g8eFeUn2L9ZC69bPLq2tEdy65pC_iuYXcbeuVe9w2CC0WPE5n5sFUy1AVX2D7Bs6rfQBGeiJfe1204Zx28qWOL5czAwQ80DwlZZev1SMLrBUQ"/>
+<div class="absolute -top-2 -left-2 bg-yellow-400 text-slate-900 text-[10px] font-black rounded px-1.5 py-0.5 border-2 border-white">#1</div>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start">
+<div>
+<h4 class="font-bold text-slate-900 dark:text-white">Sarah Al-Mansour</h4>
+<p class="text-xs text-slate-500 dark:text-slate-400">B.Eng Computer Science • Year 4</p>
+</div>
+<div class="flex flex-col items-end">
+<span class="text-primary font-bold text-lg">98</span>
+<span class="text-[10px] text-slate-400 uppercase font-bold">Star Score</span>
+</div>
+</div>
+<div class="mt-3 flex flex-wrap gap-1.5">
+<span class="bg-primary/5 text-primary text-[10px] font-semibold px-2 py-1 rounded">Flutter Expert</span>
+<span class="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-semibold px-2 py-1 rounded">UI/UX Design</span>
+<span class="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-semibold px-2 py-1 rounded">Firebase</span>
+</div>
+</div>
+</div>
+<div class="mt-4 flex gap-2">
+<button class="flex-1 bg-primary text-white text-xs font-bold py-2.5 rounded-lg">Invite to Project</button>
+<button class="px-4 border border-primary text-primary text-xs font-bold py-2.5 rounded-lg">Portfolio</button>
+</div>
+</div>
+<!-- Student Card 2 -->
+<div class="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl p-4 shadow-sm">
+<div class="flex items-start gap-4">
+<div class="relative">
+<img alt="Student profile" class="size-16 rounded-lg object-cover" data-alt="Portrait of a male computer science student" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAtdqpY36Eh1CCrsHQukjwuEFz9R8Tf3mtEyW5lUbImt0-FSrYcvwxToodb9myPX7fzduG-i842OQ0gZ0NOyxUUIAdq9Xqh2feGOUllDC6GH0YUDZ-454pjgY3saAXm0ZiHecW0SkvVxx5KGQFsTZM0z1-9f2Gma06D8fNbs-EkY63jvg7REyetplrZ4qJkOxhdz7WYi-GqZdfltOLcPRpzixBpxd6OC32vEOZ4sG719Yg8fqcyndnZx0e8QG4L9bsbu-4aOobZBQ"/>
+<div class="absolute -top-2 -left-2 bg-slate-300 text-slate-900 text-[10px] font-black rounded px-1.5 py-0.5 border-2 border-white">#2</div>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start">
+<div>
+<h4 class="font-bold text-slate-900 dark:text-white">Chen Wei Liang</h4>
+<p class="text-xs text-slate-500 dark:text-slate-400">B.Sc Data Science • Year 3</p>
+</div>
+<div class="flex flex-col items-end">
+<span class="text-primary font-bold text-lg">94</span>
+<span class="text-[10px] text-slate-400 uppercase font-bold">Star Score</span>
+</div>
+</div>
+<div class="mt-3 flex flex-wrap gap-1.5">
+<span class="bg-primary/5 text-primary text-[10px] font-semibold px-2 py-1 rounded">Python (Advanced)</span>
+<span class="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-semibold px-2 py-1 rounded">TensorFlow</span>
+<span class="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-semibold px-2 py-1 rounded">R Stats</span>
+</div>
+</div>
+</div>
+<div class="mt-4 flex gap-2">
+<button class="flex-1 bg-primary text-white text-xs font-bold py-2.5 rounded-lg">Invite to Project</button>
+<button class="px-4 border border-primary text-primary text-xs font-bold py-2.5 rounded-lg">Portfolio</button>
+</div>
+</div>
+<!-- Student Card 3 -->
+<div class="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl p-4 shadow-sm opacity-90">
+<div class="flex items-start gap-4">
+<div class="relative">
+<img alt="Student profile" class="size-16 rounded-lg object-cover" data-alt="Female student in academic setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAtPhwyYkFBXCc_w-_HVBofu_x78rN0aswhDXUJV5C4vDNjqoGlTeghY-APxYpwMcoS_eT1lYhMnJotMAuT5LkDun_VORhZwgSMGBIeJwyXJEM4hCdZXPnn1Gqv0Ay9SWDFAROPAJ4PkFyPc5T9y4CoxQvfr3FQ33ohuRMRzg5nGsIX1Aj73Bh0oqv10aIgn_M0u3SbJjMUCyTztN7wYV-ryC0aMNZEHdpjp6YTxmrjK0l9_5WnGYJhbtbW2mNwFJOOoQPuPEkwEQ"/>
+<div class="absolute -top-2 -left-2 bg-orange-300 text-slate-900 text-[10px] font-black rounded px-1.5 py-0.5 border-2 border-white">#3</div>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start">
+<div>
+<h4 class="font-bold text-slate-900 dark:text-white">Maya Jenkins</h4>
+<p class="text-xs text-slate-500 dark:text-slate-400">B.IT Cybersecurity • Year 3</p>
+</div>
+<div class="flex flex-col items-end">
+<span class="text-primary font-bold text-lg">91</span>
+<span class="text-[10px] text-slate-400 uppercase font-bold">Star Score</span>
+</div>
+</div>
+<div class="mt-3 flex flex-wrap gap-1.5">
+<span class="bg-primary/5 text-primary text-[10px] font-semibold px-2 py-1 rounded">Ethical Hacking</span>
+<span class="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-semibold px-2 py-1 rounded">Networking</span>
+<span class="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-semibold px-2 py-1 rounded">Linux</span>
+</div>
+</div>
+</div>
+<div class="mt-4 flex gap-2">
+<button class="flex-1 bg-primary text-white text-xs font-bold py-2.5 rounded-lg">Invite to Project</button>
+<button class="px-4 border border-primary text-primary text-xs font-bold py-2.5 rounded-lg">Portfolio</button>
+</div>
+</div>
+</main>
+<nav class="fixed bottom-0 max-w-md w-full bg-white dark:bg-background-dark border-t border-slate-100 dark:border-slate-800 flex justify-around items-center py-2 px-4 z-20">
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-[10px] font-medium">Dashboard</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">explore</span>
+<span class="text-[10px] font-bold">Discover</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">rocket_launch</span>
+<span class="text-[10px] font-medium">Projects</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">account_circle</span>
+<span class="text-[10px] font-medium">Profile</span>
+</a>
+</nav>
+</div>
+</body></html>

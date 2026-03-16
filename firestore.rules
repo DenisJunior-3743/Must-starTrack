@@ -1,0 +1,157 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+
+    function isMustUser() {
+      return request.auth != null
+        && (request.auth.token.email.matches('.*@must\\.ac\\.ug')
+         || request.auth.token.email.matches('.*@mbarara\\.ac\\.ug'));
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    function userRole() {
+      return get(/databases/$(database)/documents/users/$(uid())).data.role;
+    }
+
+    function isAdmin() {
+      return isMustUser() && (userRole() == 'admin' || userRole() == 'super_admin');
+    }
+
+    function isSuperAdmin() {
+      return isMustUser() && userRole() == 'super_admin';
+    }
+
+
+    // USERS
+    match /users/{userId} {
+
+      allow read: if isMustUser();
+
+      allow create: if isMustUser()
+        && userId == uid()
+        && request.resource.data.role in ['student', 'lecturer'];
+
+      allow update: if isMustUser()
+        && (userId == uid() || isAdmin());
+
+      allow delete: if isAdmin();
+
+      match /tokens/{tokenId} {
+        allow read, write: if isMustUser() && userId == uid();
+      }
+    }
+
+
+    // POSTS
+    match /posts/{postId} {
+
+      allow read: if isMustUser()
+        && resource.data.is_archived == false;
+
+      allow create: if isMustUser()
+        && request.resource.data.author_id == uid();
+
+      allow update: if isMustUser()
+        && (resource.data.author_id == uid() || isAdmin());
+
+      allow delete: if isAdmin();
+
+
+      match /likes/{likerId} {
+        allow read: if isMustUser();
+        allow write: if isMustUser() && likerId == uid();
+      }
+    }
+
+
+    // CONVERSATIONS
+    match /conversations/{convoId} {
+
+      allow read: if isMustUser()
+        && (resource.data.user_id == uid()
+         || resource.data.peer_id == uid());
+
+      allow create: if isMustUser()
+        && request.resource.data.user_id == uid();
+
+      allow update: if isMustUser()
+        && (resource.data.user_id == uid()
+         || resource.data.peer_id == uid());
+
+      allow delete: if isMustUser()
+        && resource.data.user_id == uid();
+
+
+      match /messages/{msgId} {
+
+        allow read: if isMustUser()
+          && (
+            get(/databases/$(database)/documents/conversations/$(convoId)).data.user_id == uid()
+            || get(/databases/$(database)/documents/conversations/$(convoId)).data.peer_id == uid()
+          );
+
+        allow create: if isMustUser()
+          && request.resource.data.sender_id == uid();
+
+        allow delete: if isAdmin();
+      }
+    }
+
+
+    // NOTIFICATIONS
+    match /notifications/{notifId} {
+
+      allow read: if isMustUser() && resource.data.user_id == uid();
+
+      allow update: if isMustUser()
+        && resource.data.user_id == uid()
+        && request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['is_read', 'extra']);
+
+      allow delete: if isMustUser() && resource.data.user_id == uid();
+    }
+
+
+    // FOLLOWS
+    match /follows/{followId} {
+
+      allow read: if isMustUser();
+
+      allow create: if isMustUser()
+        && request.resource.data.follower_id == uid();
+
+      allow delete: if isMustUser()
+        && resource.data.follower_id == uid();
+    }
+
+
+    // AUDIT LOG
+    match /audit_log/{logId} {
+
+      allow read: if isSuperAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+
+    // SKILLS
+    match /skills/{skillId} {
+
+      allow read: if isMustUser();
+      allow write: if isAdmin();
+    }
+
+
+    // DEFAULT DENY
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+  }
+}

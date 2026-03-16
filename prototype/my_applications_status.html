@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>My Applications - MUST StarTrack</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100">
+<div class="relative flex min-h-screen w-full flex-col overflow-x-hidden">
+<!-- Header -->
+<header class="sticky top-0 z-50 flex items-center bg-white/80 dark:bg-background-dark/80 backdrop-blur-md p-4 justify-between border-b border-slate-200 dark:border-slate-800">
+<div class="flex size-10 shrink-0 items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer text-slate-900 dark:text-slate-100">
+<span class="material-symbols-outlined">arrow_back</span>
+</div>
+<h2 class="text-lg font-bold leading-tight tracking-tight flex-1 text-center">My Applications</h2>
+<div class="flex size-10 items-center justify-end">
+<button class="flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 p-2">
+<span class="material-symbols-outlined">search</span>
+</button>
+</div>
+</header>
+<!-- Tabs Navigation -->
+<nav class="bg-white dark:bg-background-dark border-b border-slate-200 dark:border-slate-800 sticky top-[73px] z-40">
+<div class="flex px-4 gap-6 overflow-x-auto no-scrollbar">
+<a class="flex flex-col items-center justify-center border-b-2 border-primary text-primary pb-3 pt-4 shrink-0" href="#">
+<p class="text-sm font-bold">All</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-2 border-transparent text-slate-500 dark:text-slate-400 pb-3 pt-4 shrink-0" href="#">
+<p class="text-sm font-semibold">Pending</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-2 border-transparent text-slate-500 dark:text-slate-400 pb-3 pt-4 shrink-0" href="#">
+<p class="text-sm font-semibold">In Review</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-2 border-transparent text-slate-500 dark:text-slate-400 pb-3 pt-4 shrink-0" href="#">
+<p class="text-sm font-semibold">Accepted</p>
+</a>
+</div>
+</nav>
+<!-- Main Content: Application List -->
+<main class="flex-1 p-4 space-y-4 max-w-3xl mx-auto w-full">
+<!-- Application Card 1 (Pending) -->
+<div class="group bg-white dark:bg-slate-900 rounded-xl overflow-hidden shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row">
+<div class="h-32 md:h-auto md:w-48 bg-cover bg-center shrink-0" data-alt="Modern university computer lab with students working" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDsEKzI3tetyJ0iDGam2PR_hkqxWh3k_RlYeGa64eOMHqau1NX_JcqsmqU-8fPvH7YtVkIxa94bm6yBfEBkWl9Vx4pGkITREhhThNWUbgqpLV4gaUuSN-6TY7mhM8Bt3G3hnXCuqIo2BEC-j1-p70BynIi8_n6hsWIJrtvsr00QfPlpAQ59KEqAi7icBt-sYhNXYTIpNdyZQ9fYSC5znwwgjA-YyAtBsj0Ga2Ffq3aVX0BDUhxsClD7_IGC-sbli4hPj3tQSzwD7Q')">
+</div>
+<div class="p-4 flex flex-col flex-1 justify-between">
+<div>
+<div class="flex justify-between items-start mb-1">
+<span class="text-xs font-medium text-slate-500 dark:text-slate-400">Submitted: Oct 12, 2023</span>
+<span class="inline-flex items-center rounded-full bg-amber-100 dark:bg-amber-900/30 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+<span class="mr-1 h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+                                Pending
+                            </span>
+</div>
+<h3 class="text-lg font-bold text-slate-900 dark:text-slate-100">AI Research Assistant</h3>
+<p class="text-sm text-slate-600 dark:text-slate-400 mt-1">Dept. of Computer Science • Dr. Sarah Chen</p>
+</div>
+<div class="mt-4 flex items-center justify-between">
+<div class="flex -space-x-2">
+<div class="w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 bg-slate-200 flex items-center justify-center overflow-hidden">
+<span class="material-symbols-outlined text-sm">person</span>
+</div>
+</div>
+<button class="bg-primary text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors">
+                            View Details
+                        </button>
+</div>
+</div>
+</div>
+<!-- Application Card 2 (In Review) -->
+<div class="group bg-white dark:bg-slate-900 rounded-xl overflow-hidden shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row">
+<div class="h-32 md:h-auto md:w-48 bg-cover bg-center shrink-0" data-alt="Sustainable energy wind turbines in a field" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCUo8kGRl3_XEDzi83mX8J0LbHtervyGIakYbBPYAesPFdvBDMHETdgnJjEvfP3da7SCvZX5PyKonJv6tCAj0rfNtGcK6fmtcIrIpDsEf-_OksN29BF2QEvNuE1zLv7qI56wFa7yKeUDAOG7xQPd5fa-rmG0Ek9SOhGq8jFugraJe8g-N0D93R19jrEhQ91aBv7hVaYJCMhjQ-A_6iUW1n6DtN5wB9BB-HrCuh8sihwG_kr9Kk6KvSkWGW9ELlvUkMs-9F1TokenA')">
+</div>
+<div class="p-4 flex flex-col flex-1 justify-between">
+<div>
+<div class="flex justify-between items-start mb-1">
+<span class="text-xs font-medium text-slate-500 dark:text-slate-400">Submitted: Sep 28, 2023</span>
+<span class="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-900/30 px-2.5 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-400">
+<span class="mr-1 h-1.5 w-1.5 rounded-full bg-blue-500"></span>
+                                In Review
+                            </span>
+</div>
+<h3 class="text-lg font-bold text-slate-900 dark:text-slate-100">Sustainable Energy Project</h3>
+<p class="text-sm text-slate-600 dark:text-slate-400 mt-1">Faculty of Engineering • Prof. James Wilson</p>
+</div>
+<div class="mt-4 flex items-center justify-between">
+<div class="flex items-center text-xs text-slate-500 dark:text-slate-400">
+<span class="material-symbols-outlined text-sm mr-1">history</span>
+                            Updated 2 days ago
+                        </div>
+<button class="bg-primary text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors">
+                            View Details
+                        </button>
+</div>
+</div>
+</div>
+<!-- Application Card 3 (Accepted) -->
+<div class="group bg-white dark:bg-slate-900 rounded-xl overflow-hidden shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row">
+<div class="h-32 md:h-auto md:w-48 bg-cover bg-center shrink-0" data-alt="Laboratory equipment and microscope" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBJXSxMR3GVaKNqWofJDmZliAW1dMfhdqQO5dxAlbctkUFSFgB9uFN2xnr5z5CccJoAvrPYWfFK2zV6fA1_nHZf139PcVwmFrT1DvS8f9D-uJTh9zqBuj51GCE0lpcW7lrT-1RG0FER_UDWom5XGmsuUhehxARhKBBmQM7qqdwzYt8NMN7gkmJCfT3JcJG1xReR7fKAoZzpeiY2mSZLkr9BJi79v82skKjwWbH3BCTMajBPisxeci45cxVVAEGyQVHCpUXZVhJfTg')">
+</div>
+<div class="p-4 flex flex-col flex-1 justify-between">
+<div>
+<div class="flex justify-between items-start mb-1">
+<span class="text-xs font-medium text-slate-500 dark:text-slate-400">Submitted: Aug 15, 2023</span>
+<span class="inline-flex items-center rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+<span class="mr-1 h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                                Accepted
+                            </span>
+</div>
+<h3 class="text-lg font-bold text-slate-900 dark:text-slate-100">Genetic Sequencing Lab</h3>
+<p class="text-sm text-slate-600 dark:text-slate-400 mt-1">Biosciences • Dr. Maria Garcia</p>
+</div>
+<div class="mt-4 flex items-center justify-between">
+<p class="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Onboarding starts Oct 30</p>
+<button class="bg-primary text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors">
+                            View Details
+                        </button>
+</div>
+</div>
+</div>
+<!-- Application Card 4 (Declined) -->
+<div class="group bg-white dark:bg-slate-900 rounded-xl overflow-hidden shadow-sm border border-slate-200 dark:border-slate-800 opacity-75 grayscale-[0.5] flex flex-col md:flex-row">
+<div class="h-32 md:h-auto md:w-48 bg-cover bg-center shrink-0" data-alt="Business meeting around a table" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuC39Rm3suxu5PIfviwVvkq2s6gY-ggOSpc1CJuTTdE6r-dWpSU-ZQAPNeI1N0bSSmT6-ASmGoR6oWtadFPdbpKFWOBHwlbsRFSnT6KGjlm54JzyHSF3yYEf3lxNdB0V0mb_Zj538ePmhAobVm6iO58XLlapL-s7ckxVV-E2ZXQ577zP_2GNwndwdoN6DP3vsgQ_LrcZy3DBnuEBcrH9dsCNJU5Py7wr0QPgQctmRioMpFTsJVevgkC1shzmEG-w4Mn_HZzEcsaobA')">
+</div>
+<div class="p-4 flex flex-col flex-1 justify-between">
+<div>
+<div class="flex justify-between items-start mb-1">
+<span class="text-xs font-medium text-slate-500 dark:text-slate-400">Submitted: Aug 01, 2023</span>
+<span class="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-xs font-medium text-slate-700 dark:text-slate-400">
+<span class="mr-1 h-1.5 w-1.5 rounded-full bg-slate-400"></span>
+                                Declined
+                            </span>
+</div>
+<h3 class="text-lg font-bold text-slate-900 dark:text-slate-100">Digital Marketing Intern</h3>
+<p class="text-sm text-slate-600 dark:text-slate-400 mt-1">Business School • Prof. Mark Stevens</p>
+</div>
+<div class="mt-4 flex items-center justify-between">
+<span class="text-xs text-slate-500 dark:text-slate-500 italic">Position filled</span>
+<button class="bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">
+                            View Feedback
+                        </button>
+</div>
+</div>
+</div>
+</main>
+<!-- Spacer for Bottom Nav -->
+<div class="h-24"></div>
+<!-- Bottom Navigation Bar -->
+<div class="fixed bottom-0 left-0 right-0 z-50 bg-white/95 dark:bg-background-dark/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800">
+<div class="max-w-3xl mx-auto flex items-center justify-around px-2 py-3">
+<a class="flex flex-col items-center gap-1 text-slate-500 dark:text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="text-[10px] font-medium">Home</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-500 dark:text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">explore</span>
+<span class="text-[10px] font-medium">Projects</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined fill-1">description</span>
+<span class="text-[10px] font-bold">Applications</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-500 dark:text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">account_circle</span>
+<span class="text-[10px] font-medium">Profile</span>
+</a>
+</div>
+</div>
+</div>
+<style>
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .fill-1 {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+</body></html>

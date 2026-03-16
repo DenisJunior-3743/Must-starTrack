@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Notification icon tint colour — matches AppColors.primary -->
+    <color name="notification_color">#1152D4</color>
+</resources>

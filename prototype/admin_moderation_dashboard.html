@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>StarTrack Moderation Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Lexend', sans-serif;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col font-display">
+<!-- Header -->
+<header class="sticky top-0 z-50 bg-background-light dark:bg-background-dark border-b border-slate-200 dark:border-slate-800 px-4 py-3">
+<div class="flex items-center justify-between max-w-xl mx-auto">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary">shield_person</span>
+<h1 class="text-lg font-bold tracking-tight">Moderation Dashboard</h1>
+</div>
+<button class="relative p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 flex h-2 w-2 rounded-full bg-red-500"></span>
+</button>
+</div>
+</header>
+<main class="flex-1 overflow-y-auto pb-32">
+<div class="max-w-xl mx-auto px-4">
+<!-- Summary Section -->
+<section class="mt-6">
+<h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-4">Summary Overview</h2>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+<div class="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col gap-1 shadow-sm">
+<span class="material-symbols-outlined text-amber-500 text-3xl">pending_actions</span>
+<p class="text-2xl font-bold mt-2">24</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Pending Reviews</p>
+</div>
+<div class="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col gap-1 shadow-sm">
+<span class="material-symbols-outlined text-red-500 text-3xl">flag</span>
+<p class="text-2xl font-bold mt-2">18</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Flagged Posts</p>
+</div>
+<div class="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col gap-1 shadow-sm">
+<span class="material-symbols-outlined text-primary text-3xl">person_alert</span>
+<p class="text-2xl font-bold mt-2">7</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Reported Users</p>
+</div>
+</div>
+</section>
+<!-- Flagged Content Section -->
+<section class="mt-8">
+<div class="flex items-center justify-between mb-4">
+<h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Flagged Content</h2>
+<span class="text-xs font-medium bg-primary/10 text-primary px-2 py-1 rounded-full">12 New</span>
+</div>
+<div class="flex flex-col gap-3">
+<!-- List Item 1 -->
+<div class="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-3">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="font-bold text-base">"Campus Party Tonight! No ID..."</h3>
+<p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Reported by: @john_doe_99</p>
+</div>
+<span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">High Risk</span>
+</div>
+<div class="flex items-center gap-2 text-sm text-red-600 dark:text-red-400 font-medium">
+<span class="material-symbols-outlined text-sm">warning</span>
+<span>Inappropriate Content</span>
+</div>
+<div class="flex gap-2 mt-1">
+<button class="flex-1 bg-primary text-white text-sm font-semibold py-2 rounded-lg transition-opacity hover:opacity-90">Review</button>
+<button class="px-3 border border-slate-200 dark:border-slate-700 rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-slate-500">more_horiz</span>
+</button>
+</div>
+</div>
+<!-- List Item 2 -->
+<div class="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-3">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="font-bold text-base">"Buy cheap exam papers here..."</h3>
+<p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Reported by: @academic_safety</p>
+</div>
+<span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">Medium</span>
+</div>
+<div class="flex items-center gap-2 text-sm text-red-600 dark:text-red-400 font-medium">
+<span class="material-symbols-outlined text-sm">error</span>
+<span>Suspicious Activity</span>
+</div>
+<div class="flex gap-2 mt-1">
+<button class="flex-1 bg-primary text-white text-sm font-semibold py-2 rounded-lg transition-opacity hover:opacity-90">Review</button>
+<button class="px-3 border border-slate-200 dark:border-slate-700 rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-slate-500">more_horiz</span>
+</button>
+</div>
+</div>
+<!-- List Item 3 -->
+<div class="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-3">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="font-bold text-base">"StarTrack is slow today"</h3>
+<p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Reported by: @auto_mod</p>
+</div>
+<span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">Low</span>
+</div>
+<div class="flex items-center gap-2 text-sm text-red-600 dark:text-red-400 font-medium">
+<span class="material-symbols-outlined text-sm">block</span>
+<span>Spam / Repeated Post</span>
+</div>
+<div class="flex gap-2 mt-1">
+<button class="flex-1 bg-primary text-white text-sm font-semibold py-2 rounded-lg transition-opacity hover:opacity-90">Review</button>
+<button class="px-3 border border-slate-200 dark:border-slate-700 rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-slate-500">more_horiz</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- Action Bar (Selected Items) -->
+<div class="fixed bottom-[84px] left-0 right-0 px-4 pb-4">
+<div class="max-w-xl mx-auto bg-slate-900 dark:bg-slate-800 text-white rounded-2xl shadow-2xl p-4 border border-white/10">
+<div class="flex items-center justify-between mb-4 px-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">check_circle</span>
+<span class="text-sm font-medium">1 item selected</span>
+</div>
+<button class="text-xs font-bold text-slate-400 hover:text-white uppercase">Deselect</button>
+</div>
+<div class="grid grid-cols-3 gap-2">
+<button class="flex flex-col items-center justify-center gap-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 py-2 rounded-xl transition-colors">
+<span class="material-symbols-outlined">check_circle</span>
+<span class="text-[10px] font-bold uppercase">Approve</span>
+</button>
+<button class="flex flex-col items-center justify-center gap-1 bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 py-2 rounded-xl transition-colors">
+<span class="material-symbols-outlined">delete</span>
+<span class="text-[10px] font-bold uppercase">Reject</span>
+</button>
+<button class="flex flex-col items-center justify-center gap-1 bg-slate-600/20 hover:bg-slate-600/30 text-slate-300 border border-slate-500/30 py-2 rounded-xl transition-colors">
+<span class="material-symbols-outlined">person_off</span>
+<span class="text-[10px] font-bold uppercase">Ban User</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-4 pb-6 pt-2">
+<div class="flex justify-around items-center max-w-xl mx-auto">
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-[10px] font-medium tracking-wide">Overview</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">playlist_add_check</span>
+<span class="text-[10px] font-medium tracking-wide">Queue</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="text-[10px] font-medium tracking-wide">Users</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">history</span>
+<span class="text-[10px] font-medium tracking-wide">Logs</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-[10px] font-medium tracking-wide">Settings</span>
+</a>
+</div>
+</nav>
+</body></html>

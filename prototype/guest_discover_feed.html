@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>MUST StarTrack - Discover</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Lexend', sans-serif;
+        }
+        .scroll-hide::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100">
+<div class="relative flex min-h-screen w-full flex-col max-w-md mx-auto bg-background-light dark:bg-background-dark shadow-xl">
+<!-- Header -->
+<header class="sticky top-0 z-20 flex items-center bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md p-4 justify-between border-b border-slate-200 dark:border-slate-800">
+<div class="flex items-center gap-2">
+<div class="text-primary flex size-8 shrink-0 items-center justify-center">
+<span class="material-symbols-outlined text-3xl">rocket_launch</span>
+</div>
+<h1 class="text-slate-900 dark:text-white text-lg font-bold tracking-tight">StarTrack</h1>
+</div>
+<button class="bg-primary text-white px-4 py-1.5 rounded-full text-sm font-semibold hover:bg-primary/90 transition-colors">
+                Join Now
+            </button>
+</header>
+<!-- Search & Filter Area -->
+<div class="px-4 pt-4 pb-2 space-y-3">
+<label class="flex flex-col w-full">
+<div class="flex w-full items-stretch rounded-xl h-12 bg-slate-200/50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+<div class="flex items-center justify-center pl-4 text-slate-500">
+<span class="material-symbols-outlined">search</span>
+</div>
+<input class="w-full bg-transparent border-none focus:ring-0 text-slate-900 dark:text-white placeholder:text-slate-500 text-sm" placeholder="Search academic projects..." type="text"/>
+</div>
+</label>
+<!-- Categories -->
+<div class="flex overflow-x-auto gap-3 pb-2 scroll-hide">
+<button class="whitespace-nowrap px-4 py-1.5 rounded-full bg-primary text-white text-sm font-medium">All Projects</button>
+<button class="whitespace-nowrap px-4 py-1.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-sm font-medium">Computing</button>
+<button class="whitespace-nowrap px-4 py-1.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-sm font-medium">Engineering</button>
+<button class="whitespace-nowrap px-4 py-1.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-sm font-medium">Business</button>
+</div>
+</div>
+<!-- Feed Content -->
+<main class="flex-1 px-4 py-2 space-y-6 pb-24">
+<!-- Project Card 1 -->
+<div class="bg-white dark:bg-slate-900 rounded-xl overflow-hidden shadow-sm border border-slate-200 dark:border-slate-800">
+<div class="relative w-full aspect-video bg-slate-100 dark:bg-slate-800">
+<img class="w-full h-full object-cover" data-alt="Futuristic AI neural network visualization" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAR01u61V1zXIYcbDmBCfqvBYR08UDT-jz46tNL73r7fGTKEfnfUpntYHct1e9IC3A2PNditXnnT3OrNBcFlzMqQZEs9cnP9eU6kC0wiiRIKy3-vyeB8IT9806jybIuPHqYuLsXtHzexpox_m1IIQUl9nq9Owwl9P4K4LFuUz2FegY2LO_yXb4eOF3GEnbJMCc73nxwzcgJ4z6VvSFUVdq-er_3pNh8lYsTQ5TqhY28dOb-mnPNOMMurGcuFiGQ4P9VoCtQiFS-Lg"/>
+<div class="absolute top-3 right-3 bg-black/60 backdrop-blur-md px-2 py-1 rounded text-[10px] text-white font-bold uppercase tracking-wider">
+                        Computing
+                    </div>
+</div>
+<div class="p-4 space-y-3">
+<div>
+<h3 class="text-slate-900 dark:text-white font-bold text-lg leading-tight">AI-Driven Traffic Management</h3>
+<p class="text-slate-500 dark:text-slate-400 text-sm mt-1">By Alex Johnson • Final Year Project</p>
+</div>
+<p class="text-slate-600 dark:text-slate-300 text-sm line-clamp-2">
+                        An innovative approach to urban traffic flow using deep neural networks to optimize signal timings in real-time.
+                    </p>
+<div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+<div class="flex gap-4">
+<div class="flex items-center gap-1 text-slate-400 cursor-not-allowed">
+<span class="material-symbols-outlined text-xl">favorite</span>
+<span class="text-xs">24</span>
+</div>
+<div class="flex items-center gap-1 text-slate-400 cursor-not-allowed">
+<span class="material-symbols-outlined text-xl">chat_bubble</span>
+<span class="text-xs">12</span>
+</div>
+</div>
+<button class="text-primary text-sm font-semibold flex items-center gap-1">
+                            Login to view <span class="material-symbols-outlined text-sm">lock</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Project Card 2 -->
+<div class="bg-white dark:bg-slate-900 rounded-xl overflow-hidden shadow-sm border border-slate-200 dark:border-slate-800 opacity-90">
+<div class="relative w-full aspect-video bg-slate-100 dark:bg-slate-800">
+<img class="w-full h-full object-cover" data-alt="Mechanical engineering robotic arm prototype" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCEzdXbyWznXyfX8WP6Y8Gl3qtY4L03e2k7G_DxHC9jQjd9i8QWgFjTUokCl1ugg3PXJVOn3R49zMHdCp16ykrSbEjAG6iFBNF2TzFsB1Mkb-WA281tAAgR-jVdYQo56O2zyX7dkZikGlg4LDwofvHM-kTG4XKJNai1Y15NGh8H5N3x05BjSHP05am4gW4mCyeRWuSGTRR9K8FD-ZsMSPIeu0MNyoraTIgVHu4IbIaOD6cMA2tJrEnbU_XqgnagHd4faRvkYUY_2A"/>
+<div class="absolute top-3 right-3 bg-black/60 backdrop-blur-md px-2 py-1 rounded text-[10px] text-white font-bold uppercase tracking-wider">
+                        Engineering
+                    </div>
+</div>
+<div class="p-4 space-y-3">
+<div>
+<h3 class="text-slate-900 dark:text-white font-bold text-lg leading-tight">Low-Cost Prosthetic Arm</h3>
+<p class="text-slate-500 dark:text-slate-400 text-sm mt-1">By Sarah Chen • Engineering Dept.</p>
+</div>
+<p class="text-slate-600 dark:text-slate-300 text-sm line-clamp-2">
+                        Development of a 3D-printed prosthetic arm with haptic feedback sensors for improved patient control.
+                    </p>
+<div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+<div class="flex gap-4">
+<div class="flex items-center gap-1 text-slate-400 cursor-not-allowed">
+<span class="material-symbols-outlined text-xl">favorite</span>
+<span class="text-xs">156</span>
+</div>
+<div class="flex items-center gap-1 text-slate-400 cursor-not-allowed">
+<span class="material-symbols-outlined text-xl">chat_bubble</span>
+<span class="text-xs">48</span>
+</div>
+</div>
+<button class="text-primary text-sm font-semibold flex items-center gap-1">
+                            Login to view <span class="material-symbols-outlined text-sm">lock</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Project Card 3 -->
+<div class="bg-white dark:bg-slate-900 rounded-xl overflow-hidden shadow-sm border border-slate-200 dark:border-slate-800">
+<div class="relative w-full aspect-video bg-slate-100 dark:bg-slate-800">
+<img class="w-full h-full object-cover" data-alt="Business analytics dashboard visualization" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDq3mBje6FCarCNwAwO6B1Cj1Y-ubHp1Tir9J8qM15ci_B_ofDZfbtDMIf1PGQVqPpwCxaKv1x8e9Ji28bzdFQMfz8hFZp1tyFObFROQHARgWKtpsH0QkBYoMh4GxHCdp28GRc3gUmdaqfcXlim7syf6phUpaGAxQEl_-9J__Kr36hUvi9RE4XsrCpA3xaoRDQf9nLbRsrbacnWDX9Nv_tqySBmw5NkdPo_eKs589kfVxEcI6JlyWdDak68wn2PGLw722XERe_Vag"/>
+<div class="absolute top-3 right-3 bg-black/60 backdrop-blur-md px-2 py-1 rounded text-[10px] text-white font-bold uppercase tracking-wider">
+                        Business
+                    </div>
+</div>
+<div class="p-4 space-y-3">
+<div>
+<h3 class="text-slate-900 dark:text-white font-bold text-lg leading-tight">SME Digital Transformation</h3>
+<p class="text-slate-500 dark:text-slate-400 text-sm mt-1">By Michael Ross • Faculty of Business</p>
+</div>
+<div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+<div class="flex gap-4">
+<div class="flex items-center gap-1 text-slate-400 cursor-not-allowed">
+<span class="material-symbols-outlined text-xl">favorite</span>
+<span class="text-xs">89</span>
+</div>
+<div class="flex items-center gap-1 text-slate-400 cursor-not-allowed">
+<span class="material-symbols-outlined text-xl">chat_bubble</span>
+<span class="text-xs">14</span>
+</div>
+</div>
+<button class="text-primary text-sm font-semibold flex items-center gap-1">
+                            Login to view <span class="material-symbols-outlined text-sm">lock</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation -->
+<nav class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 px-6 py-3 flex justify-between items-center z-30">
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="text-[10px] font-medium">Home</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined font-bold">explore</span>
+<span class="text-[10px] font-bold">Discover</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<div class="relative">
+<span class="material-symbols-outlined">person</span>
+<span class="absolute -top-1 -right-1 flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+</span>
+</div>
+<span class="text-[10px] font-medium">Login</span>
+</a>
+</nav>
+</div>
+</body></html>

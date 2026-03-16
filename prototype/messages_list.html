@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>StarTrack Messaging</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Lexend', sans-serif;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-filled {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display">
+<div class="relative flex min-h-screen w-full flex-col max-w-md mx-auto bg-white dark:bg-background-dark shadow-xl overflow-x-hidden">
+<!-- Header -->
+<header class="sticky top-0 z-10 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 py-4">
+<div class="flex items-center justify-between mb-4">
+<div class="flex items-center gap-3">
+<div class="size-10 rounded-full bg-primary flex items-center justify-center text-white">
+<span class="material-symbols-outlined">star</span>
+</div>
+<h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white">StarTrack</h1>
+</div>
+<div class="flex gap-2">
+<button class="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-slate-600 dark:text-slate-400">edit_square</span>
+</button>
+<button class="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-slate-600 dark:text-slate-400">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Search Bar -->
+<div class="relative">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-slate-400 text-sm">search</span>
+</div>
+<input class="block w-full pl-10 pr-3 py-2.5 border-none bg-slate-100 dark:bg-slate-800 rounded-xl leading-5 placeholder-slate-500 focus:ring-2 focus:ring-primary focus:bg-white dark:focus:bg-slate-700 sm:text-sm transition-all" placeholder="Search students or lecturers..." type="text"/>
+</div>
+</header>
+<!-- Category Tabs -->
+<div class="flex px-4 pt-4 pb-2 gap-2 overflow-x-auto no-scrollbar">
+<button class="px-4 py-1.5 rounded-full bg-primary text-white text-sm font-medium">All</button>
+<button class="px-4 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">Lecturers</button>
+<button class="px-4 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">Students</button>
+<button class="px-4 py-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">Groups</button>
+</div>
+<!-- Chat List -->
+<main class="flex-1 overflow-y-auto">
+<!-- Chat Item: Unread -->
+<div class="flex items-center gap-4 px-4 py-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors border-b border-slate-50 dark:border-slate-800/50">
+<div class="relative">
+<div class="size-14 rounded-full bg-slate-200 overflow-hidden border-2 border-primary/20">
+<img alt="" class="w-full h-full object-cover" data-alt="Portrait of a female professor smiling" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBQTe_b_kxYc4yVP-qiUPN7qYkMsGZ073jc4jhDb9IjtR7jyrjd4qmIm0aCzfUEkQIJ3N4I99cQWP0Lp08v6P8NA8YDrJe-vpdHD03i61s6l1j9owZY2qANrfPCWKpBdTEHofIZ8EvUlMyaSQ3m4soX_g_wFJssjZ-DnbgLsuDqmpIhYFDlT7deuf4uih5OE2d01JQhb4FTQiZGsrqezldrkpa_1qglAB1zbO1n3cGLBLKoouHYtJVx55ewNss_eL_4HjhxpHZZDg"/>
+</div>
+<div class="absolute bottom-0 right-0 size-3.5 bg-green-500 border-2 border-white dark:border-background-dark rounded-full"></div>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex justify-between items-baseline mb-0.5">
+<h3 class="text-sm font-bold text-slate-900 dark:text-white truncate">Dr. Sarah Wilson</h3>
+<span class="text-[11px] font-semibold text-primary">10:24 AM</span>
+</div>
+<div class="flex justify-between items-center">
+<p class="text-sm text-slate-900 dark:text-slate-200 font-medium truncate pr-4">The lecture notes for the next session are...</p>
+<span class="flex-shrink-0 bg-primary text-white text-[10px] font-bold size-5 rounded-full flex items-center justify-center">2</span>
+</div>
+</div>
+</div>
+<!-- Chat Item: Read -->
+<div class="flex items-center gap-4 px-4 py-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors border-b border-slate-50 dark:border-slate-800/50">
+<div class="relative">
+<div class="size-14 rounded-full bg-slate-200 overflow-hidden">
+<img alt="" class="w-full h-full object-cover" data-alt="Portrait of a young male student" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAow5EzVLoibQYQqA_yDp3IXqI4Wzo10kia9qHenbkdusPYazvMSXvQCrpvR-9STJ6K19pG1GkGLVv2wRTN5GoezjejTDwg1xctghjtvznsTbIntMxUxNxOEUHv8_rZmD5hPLZXdiuZeGUCYS-G-dH_vEh9LF6wnibK9UfMahKtM_JfT0ojYFMwp2O8Euwy3anHvFLQFfRKK7lNHACVd39kdsqwP8i4BBo8YTQuMbzDLoY9S16JVeBA340_Fos_frLiJPfgiKT17w"/>
+</div>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex justify-between items-baseline mb-0.5">
+<h3 class="text-sm font-semibold text-slate-900 dark:text-white truncate">James Chen (Student)</h3>
+<span class="text-[11px] text-slate-400">9:45 AM</span>
+</div>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-slate-400 text-xs">done_all</span>
+<p class="text-sm text-slate-500 dark:text-slate-400 truncate">Thanks for the clarification on the assignment!</p>
+</div>
+</div>
+</div>
+<!-- Group Chat -->
+<div class="flex items-center gap-4 px-4 py-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors border-b border-slate-50 dark:border-slate-800/50">
+<div class="size-14 rounded-full bg-primary/10 flex items-center justify-center text-primary relative overflow-hidden">
+<span class="material-symbols-outlined text-2xl">groups</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex justify-between items-baseline mb-0.5">
+<h3 class="text-sm font-bold text-slate-900 dark:text-white truncate">CS101 - Algorithm Design</h3>
+<span class="text-[11px] font-semibold text-primary">Yesterday</span>
+</div>
+<div class="flex justify-between items-center">
+<p class="text-sm text-slate-900 dark:text-slate-200 font-medium truncate pr-4"><span class="text-primary font-semibold">David:</span> Does anyone have the textbook PDF?</p>
+<span class="flex-shrink-0 bg-primary text-white text-[10px] font-bold size-5 rounded-full flex items-center justify-center">14</span>
+</div>
+</div>
+</div>
+<!-- Chat Item -->
+<div class="flex items-center gap-4 px-4 py-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors border-b border-slate-50 dark:border-slate-800/50">
+<div class="relative">
+<div class="size-14 rounded-full bg-slate-200 overflow-hidden">
+<img alt="" class="w-full h-full object-cover" data-alt="Portrait of a smiling female lecturer" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBrh34AD_9jvzLgebb0WYtGaK-jdp2f5soqYmIRE4zvoC9PrGblJjqhXQZmfg6j4B04_CBNtZxP5hnf3mCgZrYUO3Hm9Jd_gnOi3E7CBp_bBJR-0K8XNQtp5qFUeKgZGOo8s0ktH1SPRSVu-_VL-yNjz-qOKR2VpZf9Amdj18rRNrWKjdVcByT2wqItnYuVG1XtpCTEU4Tgddh4RJBuaxytMwLndXHJ-EJT6cZh-cNl7xTF_spB8doVsoGL5IawybF5OEUwqe4TQg"/>
+</div>
+<div class="absolute bottom-0 right-0 size-3.5 bg-slate-300 border-2 border-white dark:border-background-dark rounded-full"></div>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex justify-between items-baseline mb-0.5">
+<h3 class="text-sm font-semibold text-slate-900 dark:text-white truncate">Prof. Elena Rodriguez</h3>
+<span class="text-[11px] text-slate-400">Tuesday</span>
+</div>
+<div class="flex items-center gap-1">
+<p class="text-sm text-slate-500 dark:text-slate-400 truncate">I've reviewed your project proposal. Good work.</p>
+</div>
+</div>
+</div>
+<!-- Chat Item -->
+<div class="flex items-center gap-4 px-4 py-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors border-b border-slate-50 dark:border-slate-800/50">
+<div class="relative">
+<div class="size-14 rounded-full bg-slate-200 overflow-hidden">
+<img alt="" class="w-full h-full object-cover" data-alt="Portrait of a young male university student" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC6niwgk6g3ICJVgHrfJaiPYYIMQGqHusBnFkBw6GTAOYaW4cQ5jVEpQ4HzuOS1JYosKs-LA2gJg4eaApd_YC9qWGihzQr797PLiXViK_6kxw7L4dx2Qgq2V_7VlEdG_n0jUEYZ_VeZ_NGwPJFzmJX91mqVQxuoDS-JO2dkrgJGKDSMAycD2O4U0T0FTJ3sR_BkFd1f-Ulpk4NlEGxcs69AEqrSChkXl2PEhF2wMAcS5E7MTNMirDCRWWdilIIbhzxtqTmIAtAp1A"/>
+</div>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex justify-between items-baseline mb-0.5">
+<h3 class="text-sm font-semibold text-slate-900 dark:text-white truncate">Marcus T.</h3>
+<span class="text-[11px] text-slate-400">Monday</span>
+</div>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-slate-400 text-xs">done_all</span>
+<p class="text-sm text-slate-500 dark:text-slate-400 truncate">Are we meeting at the library later today?</p>
+</div>
+</div>
+</div>
+<!-- Chat Item -->
+<div class="flex items-center gap-4 px-4 py-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors border-b border-slate-50 dark:border-slate-800/50">
+<div class="relative">
+<div class="size-14 rounded-full bg-primary/5 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">school</span>
+</div>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex justify-between items-baseline mb-0.5">
+<h3 class="text-sm font-semibold text-slate-900 dark:text-white truncate">Career Services Office</h3>
+<span class="text-[11px] text-slate-400">Oct 12</span>
+</div>
+<div class="flex items-center gap-1">
+<p class="text-sm text-slate-500 dark:text-slate-400 truncate">New internship opportunities available in IT sector.</p>
+</div>
+</div>
+</div>
+</main>
+<!-- Floating Action Button -->
+<button class="absolute bottom-24 right-6 size-14 bg-primary text-white rounded-2xl shadow-lg shadow-primary/40 flex items-center justify-center hover:scale-105 transition-transform active:scale-95">
+<span class="material-symbols-outlined text-2xl">chat</span>
+</button>
+<!-- Bottom Navigation Bar -->
+<nav class="sticky bottom-0 bg-white dark:bg-background-dark border-t border-slate-200 dark:border-slate-800 px-4 pt-3 pb-6 flex justify-between items-center">
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="text-[10px] font-medium">Home</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined material-symbols-filled">chat</span>
+<span class="text-[10px] font-bold">Messages</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">book</span>
+<span class="text-[10px] font-medium">Courses</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">event</span>
+<span class="text-[10px] font-medium">Schedule</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="text-[10px] font-medium">Profile</span>
+</a>
+</nav>
+</div>
+</body></html>

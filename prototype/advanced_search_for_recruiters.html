@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>MUST StarTrack - Recruiter Search</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Lexend', sans-serif;
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="relative flex h-auto min-h-screen w-full max-w-md mx-auto flex-col bg-background-light dark:bg-background-dark shadow-2xl overflow-x-hidden">
+<header class="sticky top-0 z-50 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-primary/10">
+<div class="flex items-center p-4 justify-between">
+<div class="text-primary flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
+<span class="material-symbols-outlined">arrow_back</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-tight flex-1 text-center">Talent Discovery</h2>
+<div class="flex w-10 items-center justify-end">
+<button class="flex items-center justify-center rounded-full h-10 w-10 bg-primary/10 text-primary">
+<span class="material-symbols-outlined">tune</span>
+</button>
+</div>
+</div>
+<div class="px-4 pb-4">
+<label class="flex flex-col w-full">
+<div class="flex w-full items-stretch rounded-xl h-12 bg-white dark:bg-slate-800 shadow-sm border border-primary/5">
+<div class="text-primary flex items-center justify-center pl-4">
+<span class="material-symbols-outlined">search</span>
+</div>
+<input class="form-input flex w-full border-none bg-transparent focus:ring-0 h-full placeholder:text-slate-400 px-4 text-base font-normal" placeholder="Search name or skill keyword..." value=""/>
+</div>
+</label>
+</div>
+</header>
+<main class="flex-1">
+<div class="px-4 py-2">
+<h3 class="text-slate-900 dark:text-slate-100 text-sm font-semibold uppercase tracking-wider mb-3">Quick Filters</h3>
+<div class="flex gap-2 overflow-x-auto hide-scrollbar pb-2">
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-primary text-white px-4 shadow-md shadow-primary/20">
+<span class="text-xs font-medium">Final Year</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-white dark:bg-slate-800 border border-primary/10 px-4">
+<span class="text-xs font-medium">Computing</span>
+<span class="material-symbols-outlined text-sm">expand_more</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-white dark:bg-slate-800 border border-primary/10 px-4">
+<span class="text-xs font-medium">Star Score 80+</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-white dark:bg-slate-800 border border-primary/10 px-4">
+<span class="text-xs font-medium">Expert</span>
+<span class="material-symbols-outlined text-sm">expand_more</span>
+</button>
+</div>
+</div>
+<div class="px-4 py-4 space-y-4">
+<div class="flex items-center justify-between">
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-bold">Recommended Talent</h3>
+<span class="text-xs font-medium text-primary">248 Results</span>
+</div>
+<div class="space-y-4">
+<div class="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-primary/5 relative overflow-hidden">
+<div class="absolute top-0 right-0">
+<div class="bg-primary/10 text-primary text-[10px] font-bold px-3 py-1 rounded-bl-xl flex items-center gap-1">
+<span class="material-symbols-outlined !text-[14px]">star</span>
+                                98.4 SCORE
+                            </div>
+</div>
+<div class="flex gap-4">
+<div class="relative">
+<img class="w-16 h-16 rounded-lg object-cover bg-slate-100" data-alt="Professional headshot of a male student" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAYCcqSTtY5cWya25XMMY0p2ZuGtv6I02OEvz0TrggIPiivitndWr5CdPLazZLDtPb8oOkwBpRDGWdzM_lwHbnpYon430tuJIz5l-WMElMXV5s7BBCqfyhwEixeHYWy6wQLldCB4cnDNF5_gVeFEDuknowXytI_zrCb_ThytWvWhSdQT-t3LeBPb8V6n6omfnNaAUCPim6u2G-iFNiTwHSgNJYb2Ki2dioa5pxlkO1C9JC3lzfrwl8Odhak7c6VK3fExrpWEwSMeg"/>
+<div class="absolute -bottom-1 -right-1 bg-green-500 w-4 h-4 rounded-full border-2 border-white dark:border-slate-800"></div>
+</div>
+<div class="flex-1">
+<h4 class="text-slate-900 dark:text-slate-100 font-bold text-base">Ariff Rahman</h4>
+<p class="text-xs text-slate-500 dark:text-slate-400">B.Comp Science (AI Specialization)</p>
+<div class="flex items-center gap-1 mt-1">
+<span class="material-symbols-outlined text-primary !text-[14px]">verified</span>
+<span class="text-[10px] font-bold text-primary uppercase">Top 5% Faculty of Computing</span>
+</div>
+</div>
+</div>
+<div class="flex flex-wrap gap-2 mt-4">
+<span class="px-2 py-1 bg-primary/5 text-primary rounded text-[10px] font-semibold border border-primary/10">Python (Expert)</span>
+<span class="px-2 py-1 bg-primary/5 text-primary rounded text-[10px] font-semibold border border-primary/10">TensorFlow</span>
+<span class="px-2 py-1 bg-primary/5 text-primary rounded text-[10px] font-semibold border border-primary/10">Data Visualization</span>
+</div>
+<div class="mt-4 flex gap-2">
+<button class="flex-1 bg-primary text-white py-2 rounded-lg text-xs font-bold shadow-md shadow-primary/20">View Portfolio</button>
+<button class="w-10 flex items-center justify-center bg-slate-100 dark:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined">bookmark_add</span>
+</button>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-primary/5 relative overflow-hidden">
+<div class="absolute top-0 right-0">
+<div class="bg-primary/10 text-primary text-[10px] font-bold px-3 py-1 rounded-bl-xl flex items-center gap-1">
+<span class="material-symbols-outlined !text-[14px]">star</span>
+                                94.1 SCORE
+                            </div>
+</div>
+<div class="flex gap-4">
+<img class="w-16 h-16 rounded-lg object-cover bg-slate-100" data-alt="Professional headshot of a female student" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBb9QE49_ctau_YYkg5cWcbQ03LjtIXGt2r9pRM-BHCD3rtBYwxSDzVCqh0ml4aU_enAOZI40SGgK5Juwb7vGyF8PEgFdeOmyB-5p348gQHwEphbwNs62-dyGNjQj7sAP3G4hxa1Wc6uihxOzVRfT899ExgM8MK2ypdUBgwKlOdx5Vl5FvatTrOixptC45deVETKCfbYbC3RmR94IhcqQrCq0zKELHy47XrJ7efkz0XPkHGnpNKxlFPrw3TLEWyfVpLurgZ16oY3w"/>
+<div class="flex-1">
+<h4 class="text-slate-900 dark:text-slate-100 font-bold text-base">Sarah Lim</h4>
+<p class="text-xs text-slate-500 dark:text-slate-400">Master of Information Systems</p>
+<div class="flex items-center gap-1 mt-1">
+<span class="material-symbols-outlined text-primary !text-[14px]">military_tech</span>
+<span class="text-[10px] font-bold text-primary uppercase">Dean's List 2023</span>
+</div>
+</div>
+</div>
+<div class="flex flex-wrap gap-2 mt-4">
+<span class="px-2 py-1 bg-primary/5 text-primary rounded text-[10px] font-semibold border border-primary/10">Project Management</span>
+<span class="px-2 py-1 bg-primary/5 text-primary rounded text-[10px] font-semibold border border-primary/10">Agile</span>
+<span class="px-2 py-1 bg-primary/5 text-primary rounded text-[10px] font-semibold border border-primary/10">UI/UX</span>
+</div>
+<div class="mt-4 flex gap-2">
+<button class="flex-1 bg-primary text-white py-2 rounded-lg text-xs font-bold shadow-md shadow-primary/20">View Portfolio</button>
+<button class="w-10 flex items-center justify-center bg-slate-100 dark:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined">bookmark_add</span>
+</button>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm border border-primary/5 relative overflow-hidden opacity-90">
+<div class="absolute top-0 right-0">
+<div class="bg-primary/10 text-primary text-[10px] font-bold px-3 py-1 rounded-bl-xl flex items-center gap-1">
+<span class="material-symbols-outlined !text-[14px]">star</span>
+                                89.8 SCORE
+                            </div>
+</div>
+<div class="flex gap-4">
+<img class="w-16 h-16 rounded-lg object-cover bg-slate-100" data-alt="Professional headshot of a male graduate" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCdc77JUkiklvqAWRvYPsgY8fOrtY1Y3oDOHr4-A6obC0WeYonmsJoNt7gf2gjTQrdD5E6CeSflUbGVCmhcU_8Mz9pFYJnZpEdlJptJEZFgP-RJwcwUE9xL8zEdYTaycT_tXSuDX1O_GFbUsmY08zelO8MiqFmPw5Z2LK9FWYelxDvYh7lSaxvJfjD9Q48274xnh9mgX2yX0-czuQBPLdVPyyWhEk26eqazgEz_KGE0tCJXAfMDUXiANjwV6zMmohfo2vf3r1br_w"/>
+<div class="flex-1">
+<h4 class="text-slate-900 dark:text-slate-100 font-bold text-base">Kenji Wong</h4>
+<p class="text-xs text-slate-500 dark:text-slate-400">Alumni - B. Engineering (Mechanical)</p>
+<div class="flex items-center gap-1 mt-1">
+<span class="material-symbols-outlined text-primary !text-[14px]">work</span>
+<span class="text-[10px] font-bold text-primary uppercase">12 Completed Projects</span>
+</div>
+</div>
+</div>
+<div class="flex flex-wrap gap-2 mt-4">
+<span class="px-2 py-1 bg-primary/5 text-primary rounded text-[10px] font-semibold border border-primary/10">AutoCAD</span>
+<span class="px-2 py-1 bg-primary/5 text-primary rounded text-[10px] font-semibold border border-primary/10">SolidWorks</span>
+</div>
+<div class="mt-4 flex gap-2">
+<button class="flex-1 bg-primary text-white py-2 rounded-lg text-xs font-bold shadow-md shadow-primary/20">View Portfolio</button>
+<button class="w-10 flex items-center justify-center bg-slate-100 dark:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined">bookmark_add</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<div class="h-24"></div>
+</main>
+<nav class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white dark:bg-slate-900 border-t border-primary/10 px-4 pb-6 pt-2 z-50">
+<div class="flex gap-2">
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">home</span>
+<p class="text-[10px] font-medium">Home</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary" href="#">
+<div class="relative">
+<span class="material-symbols-outlined">search</span>
+<div class="absolute -top-1 -right-1 w-1.5 h-1.5 bg-primary rounded-full"></div>
+</div>
+<p class="text-[10px] font-bold">Discover</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<p class="text-[10px] font-medium">Stats</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400" href="#">
+<div class="relative">
+<span class="material-symbols-outlined">inventory_2</span>
+<div class="absolute -top-1 -right-2 bg-primary text-white text-[8px] font-bold px-1 rounded-full">5</div>
+</div>
+<p class="text-[10px] font-medium">Shortlist</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">account_circle</span>
+<p class="text-[10px] font-medium">Profile</p>
+</a>
+</div>
+</nav>
+</div>
+</body></html>

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>User Management - MUST StarTrack</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Lexend', sans-serif;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100">
+<div class="relative flex min-h-screen w-full flex-col overflow-x-hidden">
+<!-- Header -->
+<header class="sticky top-0 z-10 flex items-center bg-white/80 dark:bg-background-dark/80 backdrop-blur-md px-4 py-4 border-b border-slate-200 dark:border-slate-800 justify-between">
+<div class="flex items-center gap-3">
+<div class="text-primary flex size-10 items-center justify-center rounded-lg bg-primary/10">
+<span class="material-symbols-outlined">arrow_back</span>
+</div>
+<h1 class="text-xl font-bold tracking-tight">User Management</h1>
+</div>
+<div class="flex items-center gap-2">
+<button class="flex size-10 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<div class="size-10 rounded-full bg-primary flex items-center justify-center text-white font-bold">
+                    AD
+                </div>
+</div>
+</header>
+<!-- Search and Filters -->
+<main class="flex-1 pb-24">
+<div class="px-4 py-4 space-y-4">
+<div class="flex gap-2">
+<label class="flex flex-col flex-1 h-12">
+<div class="flex w-full flex-1 items-stretch rounded-xl h-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+<div class="text-slate-400 flex items-center justify-center pl-4">
+<span class="material-symbols-outlined">search</span>
+</div>
+<input class="w-full flex-1 border-none bg-transparent focus:ring-0 px-3 text-sm font-normal placeholder:text-slate-400" placeholder="Search by name, ID or email" value=""/>
+</div>
+</label>
+<button class="flex size-12 items-center justify-center rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm text-primary">
+<span class="material-symbols-outlined">tune</span>
+</button>
+</div>
+<!-- Quick Filter Pills -->
+<div class="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-primary px-5 text-white shadow-md shadow-primary/20">
+<span class="text-sm font-medium">All</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-5 text-slate-600 dark:text-slate-300">
+<span class="text-sm font-medium">Students</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-5 text-slate-600 dark:text-slate-300">
+<span class="text-sm font-medium">Lecturers</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-x-2 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-5 text-slate-600 dark:text-slate-300">
+<span class="text-sm font-medium">Admins</span>
+</button>
+</div>
+</div>
+<!-- Stats Overview -->
+<div class="grid grid-cols-3 gap-3 px-4 mb-6">
+<div class="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+<p class="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Total</p>
+<p class="text-lg font-bold text-primary">1,284</p>
+</div>
+<div class="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+<p class="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Active</p>
+<p class="text-lg font-bold text-emerald-500">1,150</p>
+</div>
+<div class="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+<p class="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Flagged</p>
+<p class="text-lg font-bold text-amber-500">12</p>
+</div>
+</div>
+<!-- User List -->
+<div class="px-4 space-y-3">
+<h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest px-1">User Directory</h3>
+<!-- User Card 1 -->
+<div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-4">
+<div class="flex items-start justify-between">
+<div class="flex gap-3">
+<div class="size-12 rounded-lg bg-slate-100 dark:bg-slate-700 overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Profile photo of a male student" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBOCPvquFeBo7aewi9tQZtPwMKQlM_SI0pUDrP_pCHmT3Jk0gN7QS7vxHHxGjBLJL4ef_hxOojV2h0IPbLObATkz9QVRHgxEBEfvdp6hOXkwjN9Uki6D8dY7Mo1caAKXropwP2KmZw0VJeEIL6Cy9clk__JhCIQ86s_rkNhSKzINgJ9wIWYqCAC9UCMowaASeoDxgr4elCpHPEoV2yYhUAY_uv5yb5BLtchRfA_lKpAh1XSOA78jmBMdJtwKj3w38rVpx0FiTodZg"/>
+</div>
+<div>
+<h4 class="font-bold text-slate-900 dark:text-slate-100">Jonathan Chen</h4>
+<p class="text-xs text-slate-500">ID: MUST-2023-8821</p>
+<div class="mt-1 flex gap-2">
+<span class="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold uppercase">Student</span>
+<span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 text-[10px] font-bold uppercase tracking-tight">Faculty of Science</span>
+</div>
+</div>
+</div>
+<span class="flex h-6 items-center rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                            ACTIVE
+                        </span>
+</div>
+<div class="flex gap-2">
+<button class="flex-1 bg-primary text-white text-xs font-bold py-2.5 rounded-lg">Manage</button>
+<button class="size-10 flex items-center justify-center bg-slate-100 dark:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined text-lg">more_horiz</span>
+</button>
+</div>
+</div>
+<!-- User Card 2 -->
+<div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-4">
+<div class="flex items-start justify-between">
+<div class="flex gap-3">
+<div class="size-12 rounded-lg bg-slate-100 dark:bg-slate-700 overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Profile photo of a female lecturer" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBXsSbMjVe4Z53b_0vl4esoTpsmEA8oj2Yh0L4JudF2qXB96pITx1htG9YUvWxNY0x24IIhiMjleX_nffejdbI9VeViDi1jwi6JApmS141SwU5g9eSx-2kwlqWHEkeNmD5W6pgOHZM4AmLSFT2JZwf4pyw-PteYnvtdloGGsGlGHXL01EzNVgfM6EZFwKszDusrg3TiRTxO3GMGAuVqToDeTt0zZ63EhUonHg8X-Dyg71HHoDyyrVUvfP6KzsEQUHONIVbGo8kFQw"/>
+</div>
+<div>
+<h4 class="font-bold text-slate-900 dark:text-slate-100">Dr. Sarah Williams</h4>
+<p class="text-xs text-slate-500">ID: MUST-LEC-4402</p>
+<div class="mt-1 flex gap-2">
+<span class="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-600 text-[10px] font-bold uppercase">Lecturer</span>
+<span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 text-[10px] font-bold uppercase tracking-tight">Engineering</span>
+</div>
+</div>
+</div>
+<span class="flex h-6 items-center rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                            ACTIVE
+                        </span>
+</div>
+<div class="flex gap-2">
+<button class="flex-1 bg-primary text-white text-xs font-bold py-2.5 rounded-lg">Manage</button>
+<button class="size-10 flex items-center justify-center bg-slate-100 dark:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined text-lg">more_horiz</span>
+</button>
+</div>
+</div>
+<!-- User Card 3 -->
+<div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-4">
+<div class="flex items-start justify-between">
+<div class="flex gap-3">
+<div class="size-12 rounded-lg bg-slate-100 dark:bg-slate-700 overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Profile photo of a male student" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDp7gZPWJYF05i9KufS6tgZkqgAm4vowSpFYgkwOot7jhbRyzrjKDr-wVnxBDFQ302bQeI52r8qhaazcKJAKdO2yrt0j2qQMSR7xWiPBM1ftClPns6U5hegAWoXM0dw63vWVeh2Jyyl-FK2l8H94Rh1zQGJhesOGghLRw9HHQcP-42n072yPhYaNrSVF31hFxMlnkcWLNluanSXcxhZGU0CZwMkRSSwrIaF_Wo_9-PUIE6wSij0MX8Dd2yT2gFSrmSC0qRfN44P9g"/>
+</div>
+<div>
+<h4 class="font-bold text-slate-900 dark:text-slate-100">Marcus Thorne</h4>
+<p class="text-xs text-slate-500">ID: MUST-2024-1102</p>
+<div class="mt-1 flex gap-2">
+<span class="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold uppercase">Student</span>
+<span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 text-[10px] font-bold uppercase tracking-tight">Business Admin</span>
+</div>
+</div>
+</div>
+<span class="flex h-6 items-center rounded-full bg-amber-100 dark:bg-amber-900/30 px-2.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                            PENDING
+                        </span>
+</div>
+<div class="flex gap-2">
+<button class="flex-1 bg-primary text-white text-xs font-bold py-2.5 rounded-lg">Approve Account</button>
+<button class="size-10 flex items-center justify-center bg-slate-100 dark:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined text-lg">more_horiz</span>
+</button>
+</div>
+</div>
+<!-- User Card 4 -->
+<div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col gap-4 opacity-75">
+<div class="flex items-start justify-between">
+<div class="flex gap-3">
+<div class="size-12 rounded-lg bg-slate-100 dark:bg-slate-700 overflow-hidden grayscale">
+<img class="w-full h-full object-cover" data-alt="Profile photo of a female student" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB1PReovDFBKWVYNwj8MmGwrQA3lTW0TYD38Sd8PMVh_chaNvNpI8DEHJP2wjV4juB8g8DYzJRLf_WV9eD7-MZg8qgrZilbv8pU0wwhwT7TgU4X-qEBjGnDE2cvEgnrztruCafCGbJ5ynxmVSJ8IzG-4eIKnw_0EK4-aGHyAhZ7cVbOm6_uadlFamAFVDbIS_h2--5hE_hl_m78gTVb0HjtZdGI_wfn7mwdb4_mCuy1rr1M-V-2onN2jrVTGZ3G20Mbm58t8yQGYA"/>
+</div>
+<div>
+<h4 class="font-bold text-slate-900 dark:text-slate-100">Elena Petrov</h4>
+<p class="text-xs text-slate-500">ID: MUST-2022-9931</p>
+<div class="mt-1 flex gap-2">
+<span class="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold uppercase">Student</span>
+<span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 text-[10px] font-bold uppercase tracking-tight">Arts &amp; Design</span>
+</div>
+</div>
+</div>
+<span class="flex h-6 items-center rounded-full bg-rose-100 dark:bg-rose-900/30 px-2.5 text-[10px] font-bold text-rose-600 dark:text-rose-400">
+                            SUSPENDED
+                        </span>
+</div>
+<div class="flex gap-2">
+<button class="flex-1 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold py-2.5 rounded-lg">View Violations</button>
+<button class="size-10 flex items-center justify-center bg-slate-100 dark:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined text-lg">restore_from_trash</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 right-0 z-20 flex bg-white/95 dark:bg-background-dark/95 backdrop-blur-sm border-t border-slate-200 dark:border-slate-800 px-4 pb-6 pt-2">
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<p class="text-[10px] font-medium leading-normal tracking-tight">Dashboard</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">group</span>
+<p class="text-[10px] font-bold leading-normal tracking-tight">Users</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">gavel</span>
+<p class="text-[10px] font-medium leading-normal tracking-tight">Moderation</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">settings</span>
+<p class="text-[10px] font-medium leading-normal tracking-tight">Settings</p>
+</a>
+</nav>
+<!-- Floating Action Button -->
+<button class="fixed bottom-28 right-6 size-14 bg-primary text-white rounded-full shadow-lg shadow-primary/40 flex items-center justify-center z-10">
+<span class="material-symbols-outlined text-3xl">person_add</span>
+</button>
+</div>
+</body></html>

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sync Status &amp; Settings - StarTrack</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen pb-24">
+<!-- Top Navigation Bar -->
+<div class="sticky top-0 z-50 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+<div class="flex items-center p-4 justify-between max-w-lg mx-auto">
+<div class="flex items-center gap-3">
+<button class="flex size-10 items-center justify-center rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-slate-700 dark:text-slate-300">arrow_back</span>
+</button>
+<h1 class="text-lg font-bold tracking-tight">Sync Settings</h1>
+</div>
+<button class="flex size-10 items-center justify-center rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-slate-700 dark:text-slate-300">help_outline</span>
+</button>
+</div>
+</div>
+<main class="max-w-lg mx-auto px-4 pt-6 space-y-6">
+<!-- Main Status Card -->
+<section class="bg-white dark:bg-slate-900 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden relative">
+<div class="absolute top-0 right-0 p-4 opacity-10">
+<span class="material-symbols-outlined text-7xl text-primary">cloud_done</span>
+</div>
+<div class="relative z-10">
+<p class="text-sm font-medium text-primary uppercase tracking-wider mb-1">System Status</p>
+<h2 class="text-2xl font-bold mb-2">Fully Synchronized</h2>
+<div class="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-sm">
+<span class="material-symbols-outlined text-sm">schedule</span>
+<span>Last synced: Oct 24, 2023 at 10:45 AM</span>
+</div>
+<div class="mt-6 flex gap-3">
+<button class="flex-1 bg-primary text-white py-3 rounded-lg font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined text-xl">sync</span>
+                        Sync Now
+                    </button>
+</div>
+</div>
+</section>
+<!-- Storage Management -->
+<section class="space-y-3">
+<h3 class="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-1">Storage Usage</h3>
+<div class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800">
+<div class="flex justify-between items-end mb-3">
+<div>
+<p class="text-xs text-slate-500 mb-1">SQLite Vault Space</p>
+<p class="text-xl font-bold text-primary">124.5 MB <span class="text-sm font-normal text-slate-400">/ 500 MB</span></p>
+</div>
+<button class="text-primary text-sm font-semibold hover:underline">Clear Cache</button>
+</div>
+<div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5">
+<div class="bg-primary h-2.5 rounded-full" style="width: 25%"></div>
+</div>
+</div>
+</section>
+<!-- Data Categories Breakdown -->
+<section class="space-y-3">
+<h3 class="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-1">Data Categories</h3>
+<div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800">
+<div class="p-4 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">chat_bubble</span>
+</div>
+<div>
+<p class="font-semibold">Messages</p>
+<p class="text-xs text-slate-500">2,410 items synced</p>
+</div>
+</div>
+<span class="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-600 dark:text-slate-300">Up to date</span>
+</div>
+<div class="p-4 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">article</span>
+</div>
+<div>
+<p class="font-semibold">Project Posts</p>
+<p class="text-xs text-slate-500">85 items synced</p>
+</div>
+</div>
+<div class="flex items-center gap-1 text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded">
+<span class="material-symbols-outlined text-xs">pending</span>
+<span class="text-xs font-bold">3 pending</span>
+</div>
+</div>
+<div class="p-4 flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">thumb_up</span>
+</div>
+<div>
+<p class="font-semibold">Interactions</p>
+<p class="text-xs text-slate-500">Likes, Shares &amp; Comments</p>
+</div>
+</div>
+<span class="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-600 dark:text-slate-300">Up to date</span>
+</div>
+</div>
+</section>
+<!-- Offline Settings -->
+<section class="space-y-3">
+<h3 class="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-1">Offline Preferences</h3>
+<div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800">
+<label class="flex items-center justify-between p-4 cursor-pointer">
+<div class="flex-1">
+<p class="font-semibold">Auto-sync on Wi-Fi only</p>
+<p class="text-xs text-slate-500">Saves mobile data usage</p>
+</div>
+<div class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
+</div>
+</label>
+<div class="p-4 flex items-center justify-between cursor-pointer group">
+<div>
+<p class="font-semibold group-hover:text-primary transition-colors">Cache size management</p>
+<p class="text-xs text-slate-500">Limit disk usage to 500MB</p>
+</div>
+<span class="material-symbols-outlined text-slate-400">chevron_right</span>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-6 pb-6 pt-3 z-50">
+<div class="max-w-lg mx-auto flex justify-between items-center">
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="text-[10px] font-medium">Home</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">rocket_launch</span>
+<span class="text-[10px] font-medium">Projects</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-primary relative" href="#">
+<span class="material-symbols-outlined font-bold">sync</span>
+<span class="text-[10px] font-bold">Sync</span>
+<div class="absolute -top-1 -right-1 size-2 bg-primary rounded-full"></div>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">account_circle</span>
+<span class="text-[10px] font-medium">Profile</span>
+</a>
+</div>
+</nav>
+</body></html>

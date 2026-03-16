@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<title>StarTrack - Create New Project</title>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 antialiased">
+<div class="relative flex h-auto min-h-screen w-full flex-col bg-background-light dark:bg-background-dark overflow-x-hidden pb-24">
+<!-- Top Navigation Bar -->
+<div class="sticky top-0 z-50 flex items-center bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md p-4 pb-2 justify-between border-b border-slate-200 dark:border-slate-800">
+<div class="text-slate-900 dark:text-slate-100 flex size-12 shrink-0 items-center justify-start cursor-pointer">
+<span class="material-symbols-outlined">close</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-tight flex-1 text-center">New Project</h2>
+<div class="flex w-12 items-center justify-end">
+<p class="text-primary text-sm font-bold leading-normal tracking-wide shrink-0">Drafts</p>
+</div>
+</div>
+<main class="flex flex-col w-full max-w-lg mx-auto">
+<!-- Section: Project Info -->
+<div class="px-4 pt-6 pb-2">
+<h3 class="text-slate-900 dark:text-slate-100 text-sm font-semibold uppercase tracking-wider">Project Details</h3>
+</div>
+<!-- Project Title -->
+<div class="flex flex-col gap-1 px-4 py-3">
+<label class="flex flex-col w-full">
+<p class="text-slate-700 dark:text-slate-300 text-sm font-medium pb-2">Project Title</p>
+<input class="form-input flex w-full rounded-lg text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 focus:border-primary focus:ring-1 focus:ring-primary h-14 placeholder:text-slate-400 dark:placeholder:text-slate-600 px-4 text-base" placeholder="Enter a catchy name for your project" type="text"/>
+</label>
+</div>
+<!-- Description -->
+<div class="flex flex-col gap-1 px-4 py-3">
+<label class="flex flex-col w-full">
+<p class="text-slate-700 dark:text-slate-300 text-sm font-medium pb-2">Description</p>
+<textarea class="form-input flex w-full rounded-lg text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 focus:border-primary focus:ring-1 focus:ring-primary min-h-[120px] placeholder:text-slate-400 dark:placeholder:text-slate-600 p-4 text-base resize-none" placeholder="What are you building? Explain the goals and impact..."></textarea>
+</label>
+</div>
+<!-- Category & Faculty Grid -->
+<div class="grid grid-cols-2 gap-4 px-4 py-3">
+<label class="flex flex-col">
+<p class="text-slate-700 dark:text-slate-300 text-sm font-medium pb-2">Category</p>
+<div class="relative">
+<select class="form-select w-full rounded-lg text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 focus:border-primary focus:ring-1 focus:ring-primary h-12 px-4 text-sm appearance-none">
+<option>Innovation</option>
+<option>Research</option>
+<option>Software</option>
+<option>Design</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-3 text-slate-400 pointer-events-none text-xl">expand_more</span>
+</div>
+</label>
+<label class="flex flex-col">
+<p class="text-slate-700 dark:text-slate-300 text-sm font-medium pb-2">Faculty</p>
+<div class="relative">
+<select class="form-select w-full rounded-lg text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 focus:border-primary focus:ring-1 focus:ring-primary h-12 px-4 text-sm appearance-none">
+<option>Engineering</option>
+<option>Science</option>
+<option>Arts</option>
+<option>Business</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-3 text-slate-400 pointer-events-none text-xl">expand_more</span>
+</div>
+</label>
+</div>
+<!-- Tags -->
+<div class="flex flex-col gap-1 px-4 py-3">
+<p class="text-slate-700 dark:text-slate-300 text-sm font-medium pb-2">Tags</p>
+<div class="flex flex-wrap gap-2 mb-2">
+<span class="bg-primary/10 text-primary text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1">
+                        #AI <span class="material-symbols-outlined text-xs">close</span>
+</span>
+<span class="bg-primary/10 text-primary text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1">
+                        #Sustainability <span class="material-symbols-outlined text-xs">close</span>
+</span>
+</div>
+<input class="form-input flex w-full rounded-lg text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 focus:border-primary focus:ring-1 focus:ring-primary h-12 placeholder:text-slate-400 dark:placeholder:text-slate-600 px-4 text-sm" placeholder="Add tags (e.g. #startup, #web3)" type="text"/>
+</div>
+<!-- Media Upload Section -->
+<div class="px-4 pt-6 pb-2">
+<h3 class="text-slate-900 dark:text-slate-100 text-sm font-semibold uppercase tracking-wider">Project Media</h3>
+</div>
+<div class="px-4 py-3">
+<div class="border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl p-8 flex flex-col items-center justify-center text-center bg-white dark:bg-slate-900/50">
+<span class="material-symbols-outlined text-primary text-4xl mb-2">cloud_upload</span>
+<p class="text-slate-900 dark:text-slate-100 font-medium">Upload Photos or Videos</p>
+<p class="text-slate-500 text-xs mt-1">Maximum file size: 50MB</p>
+</div>
+</div>
+<!-- Upload Previews / Compression Indicators -->
+<div class="flex flex-col gap-3 px-4 py-2">
+<div class="flex items-center gap-3 bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
+<div class="w-12 h-12 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden shrink-0">
+<img class="w-full h-full object-cover" data-alt="Screenshot of coding interface software project" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCTgJVfgwYfeH3ah6PF1aRVJAint_H01DW4pxO4vcQuo6V-L_SHsJwByPdqYl44JTlJyeNL6b-k_iZ2iaHG6RrrewJ3kY36Ytvu40nfnHID0NsyPHq5OTHokvv9ieiDtvuL9RbqPc_t6wtvf3XnXQFfEXQnfMMPNMyRZuA-nBfmNuLyKZNkosqtHmdJR0yeBPUFKfffBKBwjbdhXVozYYPECyGlKg7skDjSotr5LBYNjs7ExL1W_Lqyp9t9vILGZgk1S9iy6zYULg"/>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex justify-between items-center mb-1">
+<p class="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">project-preview.png</p>
+<span class="text-[10px] text-emerald-500 font-bold uppercase">Optimized</span>
+</div>
+<div class="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[100%]"></div>
+</div>
+</div>
+<span class="material-symbols-outlined text-slate-400 text-xl cursor-pointer">delete</span>
+</div>
+<div class="flex items-center gap-3 bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800">
+<div class="w-12 h-12 rounded bg-slate-200 dark:bg-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
+<span class="material-symbols-outlined text-slate-400">videocam</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex justify-between items-center mb-1">
+<p class="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">demo-pitch.mp4</p>
+<span class="text-[10px] text-amber-500 font-bold uppercase italic">Compressing (85%)</span>
+</div>
+<div class="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+<div class="bg-amber-500 h-full w-[85%]"></div>
+</div>
+</div>
+<span class="material-symbols-outlined text-slate-400 text-xl cursor-pointer">close</span>
+</div>
+</div>
+<!-- Visibility Settings -->
+<div class="px-4 pt-6 pb-2">
+<h3 class="text-slate-900 dark:text-slate-100 text-sm font-semibold uppercase tracking-wider">Privacy &amp; Visibility</h3>
+</div>
+<div class="px-4 py-2 space-y-4">
+<label class="flex items-center justify-between p-4 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 cursor-pointer">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary">public</span>
+<div>
+<p class="text-sm font-semibold">Public</p>
+<p class="text-xs text-slate-500">Visible to everyone in StarTrack</p>
+</div>
+</div>
+<input checked="" class="form-radio text-primary focus:ring-primary w-5 h-5" name="visibility" type="radio"/>
+</label>
+<label class="flex items-center justify-between p-4 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 cursor-pointer">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-500">group</span>
+<div>
+<p class="text-sm font-semibold">Followers Only</p>
+<p class="text-xs text-slate-500">Only people following you can view</p>
+</div>
+</div>
+<input class="form-radio text-primary focus:ring-primary w-5 h-5" name="visibility" type="radio"/>
+</label>
+<label class="flex items-center justify-between p-4 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 cursor-pointer">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-500">handshake</span>
+<div>
+<p class="text-sm font-semibold">Collaborators Only</p>
+<p class="text-xs text-slate-500">Invite-only project dashboard</p>
+</div>
+</div>
+<input class="form-radio text-primary focus:ring-primary w-5 h-5" name="visibility" type="radio"/>
+</label>
+</div>
+</main>
+<!-- Fixed Bottom Action Button -->
+<div class="fixed bottom-0 left-0 right-0 p-4 bg-background-light/95 dark:bg-background-dark/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 z-50">
+<div class="max-w-lg mx-auto flex gap-4">
+<button class="flex-1 bg-primary text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/20 flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors">
+                    Publish Project
+                    <span class="material-symbols-outlined text-lg">rocket_launch</span>
+</button>
+</div>
+</div>
+</div>
+</body></html>

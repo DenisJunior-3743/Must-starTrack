@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Lexend', sans-serif;
+        }
+        .message-shadow {
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100">
+<div class="flex flex-col h-screen max-w-2xl mx-auto bg-white dark:bg-slate-900 shadow-xl overflow-hidden relative">
+<!-- Header Section -->
+<header class="flex items-center justify-between p-4 border-b border-primary/10 bg-white dark:bg-slate-900 sticky top-0 z-10">
+<div class="flex items-center gap-3">
+<button class="p-2 -ml-2 rounded-full hover:bg-primary/10 transition-colors">
+<span class="material-symbols-outlined text-primary">arrow_back</span>
+</button>
+<div class="relative">
+<div class="size-10 rounded-full bg-cover bg-center border border-primary/20" data-alt="Professional headshot of Dr. Jane Smith" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDOycsM6GwIrSAyDSarLrMdmT4S-gxzN1rvLHMB5BkmErFP0srMki4msAf-L2mc2OY94O7QTdZn9igNgfoWDgKFlQr0_GfeYJteSS5J8eSHMz54wsD45jcMnFbu61NVAYSXYfTwH4sFdIKFLKHJiY2DeKWCiXuhBdVQIMyIQi38fuz9AnV-BLXk6UhpWVWO0a6ONtB7_Q7dbTH_MiyNO3YHBztVZWUEeqnXkTEQHaLq8HSbJtNN3ACOxKNguJz3wbKrJkqgUoIujw');">
+</div>
+<div class="absolute bottom-0 right-0 size-3 bg-green-500 border-2 border-white dark:border-slate-900 rounded-full"></div>
+</div>
+<div>
+<h1 class="font-bold text-slate-900 dark:text-slate-100 leading-tight">Dr. Jane Smith</h1>
+<p class="text-xs text-primary font-medium">Online</p>
+</div>
+</div>
+<div class="flex items-center gap-1">
+<button class="p-2 rounded-full hover:bg-primary/10 text-primary transition-colors">
+<span class="material-symbols-outlined">videocam</span>
+</button>
+<button class="p-2 rounded-full hover:bg-primary/10 text-primary transition-colors">
+<span class="material-symbols-outlined">call</span>
+</button>
+<button class="p-2 rounded-full hover:bg-primary/10 text-primary transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</header>
+<!-- Chat Area -->
+<main class="flex-1 overflow-y-auto p-4 space-y-6 bg-background-light/50 dark:bg-background-dark/30">
+<!-- Date Divider -->
+<div class="flex justify-center my-4">
+<span class="px-3 py-1 bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider rounded-full">Today</span>
+</div>
+<!-- Received Message -->
+<div class="flex items-end gap-2 max-w-[85%]">
+<div class="size-8 shrink-0 rounded-full bg-cover bg-center" data-alt="Small avatar of Dr. Jane Smith" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuD0zaBSE-FlLavF02CfZqdYwzL7T6B65ijSNP8qOJpcwX0dUHrmgRbGpTh6MxtmbAfcyKSeqlkBWmjR_ESNGe5ZLv5cHFLjSSCxWgwqBlQJvx3GDzMR1V5L4FS8Fg8DGotozaAFAauW5de4KqerxSdCM_7KN8mhrnLQbGiY_1cFuZf2KsSj0uUgMFCFiON9Di2o9uIyPoQfCkn56_FuLYswKE5zxxPuBvXRB380OTIMnbTvPVOGSa8YLzEMNh0REZfJvcP1_F3vBQ');">
+</div>
+<div class="flex flex-col gap-1">
+<div class="bg-white dark:bg-slate-800 p-3 rounded-xl rounded-bl-none message-shadow">
+<p class="text-sm leading-relaxed">Hello! Have you had a chance to look at the latest project requirements for the StarTrack module?</p>
+</div>
+<span class="text-[10px] text-slate-400 font-medium">09:41 AM</span>
+</div>
+</div>
+<!-- Sent Message -->
+<div class="flex flex-col items-end gap-1 ml-auto max-w-[85%]">
+<div class="bg-primary p-3 rounded-xl rounded-br-none message-shadow text-white">
+<p class="text-sm leading-relaxed">Hi Dr. Smith, yes I just finished reviewing them. The timelines for the orbital tracking phase look feasible.</p>
+</div>
+<div class="flex items-center gap-1">
+<span class="text-[10px] text-slate-400 font-medium">09:43 AM</span>
+<span class="material-symbols-outlined text-primary text-[14px] leading-none">done_all</span>
+</div>
+</div>
+<!-- Received Message -->
+<div class="flex items-end gap-2 max-w-[85%]">
+<div class="size-8 shrink-0 rounded-full bg-cover bg-center" data-alt="Small avatar of Dr. Jane Smith" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAkBuzKjm8ekAZrkTCjiMBViLieG8kN5lEeiNX1eCBT5xJRwoWx-mPCnIxVnJrOTjSf-wjbRlDL2703k6zZLecOVx2Vob_oJDDrX-ibkBxgDfbNH3wqk9QGlDrUl5vCtSLrbEB8uvl94G3txbtnXk63F79vF-UPuIiv-I_n8erKOXqJWiRZC7DDnehprYGuzjV1nCkOKXW7rrUKAOWyDiQsPOv8iSPAp20m47Kaa6lBN0a7IPh3JAR8XP8gr8Dxe8m9BYjfZRE9og');">
+</div>
+<div class="flex flex-col gap-1">
+<div class="bg-white dark:bg-slate-800 p-3 rounded-xl rounded-bl-none message-shadow">
+<p class="text-sm leading-relaxed">Great. Can you share the initial draft of the star tracking module? I'd like to present it to the board tomorrow.</p>
+</div>
+<span class="text-[10px] text-slate-400 font-medium">09:44 AM</span>
+</div>
+</div>
+<!-- File Attachment Sent -->
+<div class="flex flex-col items-end gap-1 ml-auto max-w-[85%]">
+<div class="bg-primary p-3 rounded-xl rounded-br-none message-shadow text-white flex items-center gap-3">
+<div class="bg-white/20 p-2 rounded-lg">
+<span class="material-symbols-outlined">description</span>
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-sm font-semibold truncate">StarTrack_Draft_v1.pdf</p>
+<p class="text-[10px] opacity-80 uppercase font-bold">4.2 MB • PDF</p>
+</div>
+</div>
+<div class="flex items-center gap-1">
+<span class="text-[10px] text-slate-400 font-medium">09:46 AM</span>
+<span class="material-symbols-outlined text-primary text-[14px] leading-none">done_all</span>
+</div>
+</div>
+<!-- Sent Message -->
+<div class="flex flex-col items-end gap-1 ml-auto max-w-[85%]">
+<div class="bg-primary p-3 rounded-xl rounded-br-none message-shadow text-white">
+<p class="text-sm leading-relaxed">Attached the latest draft. Let me know if you need any modifications before the meeting.</p>
+</div>
+<div class="flex items-center gap-1">
+<span class="text-[10px] text-slate-400 font-medium">09:46 AM</span>
+<span class="material-symbols-outlined text-primary text-[14px] leading-none">done_all</span>
+</div>
+</div>
+</main>
+<!-- Input Section -->
+<footer class="p-4 bg-white dark:bg-slate-900 border-t border-primary/10">
+<div class="flex items-center gap-2">
+<button class="size-10 flex items-center justify-center rounded-full text-slate-400 hover:text-primary transition-colors hover:bg-primary/5">
+<span class="material-symbols-outlined">add_circle</span>
+</button>
+<div class="flex-1 relative flex items-center">
+<input class="w-full bg-background-light dark:bg-slate-800 border-none rounded-full py-3 px-5 pr-12 text-sm focus:ring-2 focus:ring-primary transition-all text-slate-900 dark:text-slate-100 placeholder-slate-400" placeholder="Type a message..." type="text"/>
+<button class="absolute right-2 size-8 flex items-center justify-center rounded-full text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">attach_file</span>
+</button>
+</div>
+<button class="size-10 flex items-center justify-center rounded-full bg-primary text-white shadow-lg shadow-primary/30 hover:scale-105 active:scale-95 transition-all">
+<span class="material-symbols-outlined">send</span>
+</button>
+</div>
+<!-- Contextual Toolbar (Optional) -->
+<div class="flex gap-4 mt-3 px-2">
+<button class="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-tighter hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-sm">link</span> Share Project
+                </button>
+<button class="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-tighter hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-sm">schedule</span> Schedule
+                </button>
+</div>
+</footer>
+</div>
+</body></html>

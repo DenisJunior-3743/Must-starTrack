@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Shortlisted Talent - MUST StarTrack</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Lexend', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .filled-icon { font-variation-settings: 'FILL' 1; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="max-w-md mx-auto bg-white dark:bg-slate-900 min-h-screen flex flex-col shadow-xl">
+<!-- Header Section -->
+<header class="sticky top-0 z-10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+<div class="flex items-center justify-between p-4">
+<button class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+<span class="material-symbols-outlined text-slate-600 dark:text-slate-400">arrow_back</span>
+</button>
+<h1 class="text-xl font-bold text-slate-900 dark:text-white">Shortlisted Talent</h1>
+<button class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+<span class="material-symbols-outlined text-slate-600 dark:text-slate-400">tune</span>
+</button>
+</div>
+<!-- Quick Filters -->
+<div class="flex gap-2 px-4 pb-4 overflow-x-auto no-scrollbar">
+<button class="flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-primary text-white px-4 text-sm font-medium">
+                    All Candidates
+                </button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-4 text-sm font-medium border border-slate-200 dark:border-slate-700">
+                    Available
+                    <span class="material-symbols-outlined text-sm">expand_more</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-4 text-sm font-medium border border-slate-200 dark:border-slate-700">
+                    High Match
+                    <span class="material-symbols-outlined text-sm">expand_more</span>
+</button>
+</div>
+</header>
+<!-- Main Content -->
+<main class="flex-1 overflow-y-auto p-4 space-y-4">
+<!-- Student Card 1 -->
+<div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+<div class="p-4">
+<div class="flex items-start justify-between mb-3">
+<div class="flex gap-3">
+<div class="relative">
+<img alt="Alex Johnson" class="w-16 h-16 rounded-lg object-cover border-2 border-primary/10" data-alt="Professional portrait of a male student" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAjW0xAp050zY3NAbJlIp8rrn5-ftZRl-zQ1l9s-sgvuzl5L5Gab1wopqxhsF_ZsrHAbZ8FsmaRym02V6ghfieHIuxi2G17PA3Cgmuw_T8_prJHPlmuDu8cBw1c218_j-Hik91B7PrQVKrwNZ6C5CLl-yCTXcAk0fx2v9Usa1NuA7DFPMGCpR5n_wUBLf4xdrgKp9hS7341t0ZMbtJyPww7Wb3SV608VIaF0TMdDaZvuLhRhw3sccCZKXpXe1czkaG4bWVp4G704w"/>
+<span class="absolute -bottom-1 -right-1 bg-green-500 w-4 h-4 rounded-full border-2 border-white dark:border-slate-800"></span>
+</div>
+<div>
+<h3 class="text-lg font-bold text-slate-900 dark:text-white leading-tight">Alex Johnson</h3>
+<p class="text-xs text-slate-500 dark:text-slate-400 font-medium mb-1">B.Sc. Software Engineering</p>
+<div class="flex items-center gap-1.5 bg-primary/10 text-primary px-2 py-0.5 rounded text-xs font-bold w-fit">
+<span class="material-symbols-outlined text-xs filled-icon">star</span>
+                                    94.1% Match
+                                </div>
+</div>
+</div>
+<button class="text-slate-400 hover:text-red-500 transition-colors">
+<span class="material-symbols-outlined">delete_outline</span>
+</button>
+</div>
+<div class="flex flex-wrap gap-1.5 mb-4">
+<span class="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wider">Flutter</span>
+<span class="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wider">AI</span>
+<span class="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wider">Python</span>
+</div>
+<div class="flex gap-2">
+<button class="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white py-2 rounded-lg text-sm font-semibold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
+                            View Profile
+                        </button>
+<button class="flex-[1.5] bg-primary text-white py-2 rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors">
+                            Invite to Project
+                        </button>
+</div>
+</div>
+<div class="px-4 py-2 bg-green-50 dark:bg-green-900/20 border-t border-slate-100 dark:border-slate-700">
+<p class="text-[10px] font-bold text-green-600 dark:text-green-400 uppercase tracking-widest flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                        Available for Immediate Start
+                    </p>
+</div>
+</div>
+<!-- Student Card 2 -->
+<div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+<div class="p-4">
+<div class="flex items-start justify-between mb-3">
+<div class="flex gap-3">
+<div class="relative">
+<img alt="Sarah Williams" class="w-16 h-16 rounded-lg object-cover border-2 border-primary/10" data-alt="Professional portrait of a female student" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCtoKYdsenT8Qyvs4bcr74V5BQ2RS966LX_R__ug6nJF7icM1CTSzvm2E9QgmsLqkd3BIVgJ7kvvWX-vx069EolNyMQ52YFN__dPnBUhbBGv24YZ3EUl1U_rbQQ39pDlrzBgr8619-qke69IQdnGInrs99Ad2KAv1Z4YoR2GuLxrFUgRN5k3HQqIXcZ46OSYhepTI20sgDxYYyKMkIO4QRVC5RkdIWeJyFB_6T_hFXeoV6QfK_lUpjvIh2Rq5WTmZNMB0Q11M3ULA"/>
+<span class="absolute -bottom-1 -right-1 bg-amber-500 w-4 h-4 rounded-full border-2 border-white dark:border-slate-800"></span>
+</div>
+<div>
+<h3 class="text-lg font-bold text-slate-900 dark:text-white leading-tight">Sarah Williams</h3>
+<p class="text-xs text-slate-500 dark:text-slate-400 font-medium mb-1">M.Sc. Data Science</p>
+<div class="flex items-center gap-1.5 bg-primary/10 text-primary px-2 py-0.5 rounded text-xs font-bold w-fit">
+<span class="material-symbols-outlined text-xs filled-icon">star</span>
+                                    89.5% Match
+                                </div>
+</div>
+</div>
+<button class="text-slate-400 hover:text-red-500 transition-colors">
+<span class="material-symbols-outlined">delete_outline</span>
+</button>
+</div>
+<div class="flex flex-wrap gap-1.5 mb-4">
+<span class="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wider">TensorFlow</span>
+<span class="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wider">R</span>
+<span class="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wider">SQL</span>
+</div>
+<div class="flex gap-2">
+<button class="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white py-2 rounded-lg text-sm font-semibold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
+                            View Profile
+                        </button>
+<button class="flex-[1.5] bg-primary text-white py-2 rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors">
+                            Invite to Project
+                        </button>
+</div>
+</div>
+<div class="px-4 py-2 bg-amber-50 dark:bg-amber-900/20 border-t border-slate-100 dark:border-slate-700">
+<p class="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-widest flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                        In Interview Stage
+                    </p>
+</div>
+</div>
+<!-- Student Card 3 -->
+<div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+<div class="p-4">
+<div class="flex items-start justify-between mb-3">
+<div class="flex gap-3">
+<div class="relative">
+<img alt="Michael Chen" class="w-16 h-16 rounded-lg object-cover border-2 border-primary/10" data-alt="Professional portrait of a male student" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWVJWjxFq-YUOKKmbCaOxQTIiypkZF3GWG9RDI0ZSI1aEcmM_AV12N-jljXKKmqaPjF4KaMfiFtuGcIqDRFlNByzMTiuk5KJpbxoS0vU-hSJvYjyDNAmjriUgg5DOMYlgHvIpwC2qW-VsMmGZz5hk7YrfCtE2Xp2ISc60xY7YHpaUbh1LHKFVpVkdDEgJXy7aIHxy_4Y7pMUJYf0amagyQH9jxsAtGEqTqpS7Uy8Re02BfypJQNug6YGhQMZc99YdL4W9Ib7h_vA"/>
+<span class="absolute -bottom-1 -right-1 bg-green-500 w-4 h-4 rounded-full border-2 border-white dark:border-slate-800"></span>
+</div>
+<div>
+<h3 class="text-lg font-bold text-slate-900 dark:text-white leading-tight">Michael Chen</h3>
+<p class="text-xs text-slate-500 dark:text-slate-400 font-medium mb-1">B.Sc. Cyber Security</p>
+<div class="flex items-center gap-1.5 bg-primary/10 text-primary px-2 py-0.5 rounded text-xs font-bold w-fit">
+<span class="material-symbols-outlined text-xs filled-icon">star</span>
+                                    82.0% Match
+                                </div>
+</div>
+</div>
+<button class="text-slate-400 hover:text-red-500 transition-colors">
+<span class="material-symbols-outlined">delete_outline</span>
+</button>
+</div>
+<div class="flex flex-wrap gap-1.5 mb-4">
+<span class="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wider">Network Sec</span>
+<span class="bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wider">Linux</span>
+</div>
+<div class="flex gap-2">
+<button class="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white py-2 rounded-lg text-sm font-semibold hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
+                            View Profile
+                        </button>
+<button class="flex-[1.5] bg-primary text-white py-2 rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors">
+                            Invite to Project
+                        </button>
+</div>
+</div>
+<div class="px-4 py-2 bg-green-50 dark:bg-green-900/20 border-t border-slate-100 dark:border-slate-700">
+<p class="text-[10px] font-bold text-green-600 dark:text-green-400 uppercase tracking-widest flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                        Available for Freelance
+                    </p>
+</div>
+</div>
+<!-- Empty State Context Label -->
+<div class="py-8 text-center">
+<p class="text-sm text-slate-400 dark:text-slate-500">Showing 3 of 3 shortlisted talent</p>
+<button class="mt-4 text-primary font-bold text-sm flex items-center justify-center gap-1 mx-auto hover:underline">
+<span class="material-symbols-outlined text-sm">search</span>
+                    Discover more talent
+                </button>
+</div>
+</main>
+<!-- Bottom Navigation -->
+<nav class="sticky bottom-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex justify-around items-center py-2 px-4 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+<a class="flex flex-col items-center gap-0.5 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">search</span>
+<span class="text-[10px] font-medium">Search</span>
+</a>
+<a class="flex flex-col items-center gap-0.5 text-primary" href="#">
+<span class="material-symbols-outlined filled-icon">star</span>
+<span class="text-[10px] font-medium">Shortlist</span>
+</a>
+<a class="flex flex-col items-center gap-0.5 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">work_outline</span>
+<span class="text-[10px] font-medium">Projects</span>
+</a>
+<a class="flex flex-col items-center gap-0.5 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">person_outline</span>
+<span class="text-[10px] font-medium">Profile</span>
+</a>
+</nav>
+</div>
+</body></html>

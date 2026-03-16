@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>MUST StarTrack - Student Registration Stage 2</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 antialiased">
+<div class="relative flex min-h-screen w-full flex-col max-w-md mx-auto bg-background-light dark:bg-background-dark shadow-xl">
+<!-- Top App Bar -->
+<div class="sticky top-0 z-10 flex items-center bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md p-4 pb-2 justify-between">
+<button class="text-primary hover:bg-primary/10 p-2 rounded-full transition-colors duration-200">
+<span class="material-symbols-outlined text-2xl">arrow_back</span>
+</button>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-tight flex-1 text-center pr-10">University Information</h2>
+</div>
+<!-- Progress Stepper -->
+<div class="flex flex-col gap-3 p-4 bg-white dark:bg-slate-900/50 mx-4 mt-2 rounded-xl border border-slate-200 dark:border-slate-800">
+<div class="flex w-full flex-row items-center justify-center gap-3 py-1">
+<div class="h-2 w-2 rounded-full bg-primary/30"></div>
+<div class="h-2 w-8 rounded-full bg-primary"></div>
+<div class="h-2 w-2 rounded-full bg-primary/30"></div>
+</div>
+<div class="flex gap-6 justify-between items-center">
+<p class="text-slate-900 dark:text-slate-100 text-sm font-semibold uppercase tracking-wider">Step 2 of 3</p>
+<p class="text-primary text-xs font-bold bg-primary/10 px-2 py-1 rounded">66% Complete</p>
+</div>
+<div class="rounded-full bg-slate-200 dark:bg-slate-800 h-1.5 overflow-hidden">
+<div class="h-full rounded-full bg-primary transition-all duration-500" style="width: 66.6%;"></div>
+</div>
+</div>
+<!-- Form Content -->
+<form class="flex flex-col gap-5 p-4 pb-32">
+<!-- Registration Number -->
+<div class="flex flex-col gap-1.5">
+<label class="text-slate-900 dark:text-slate-100 text-sm font-semibold px-1">Registration Number</label>
+<div class="relative">
+<input class="form-input flex w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary h-14 px-4 text-base transition-all" placeholder="2023/BCS/001/PS" type="text"/>
+</div>
+<p class="text-slate-500 dark:text-slate-400 text-xs px-1 leading-relaxed">
+<span class="text-primary font-medium">Format:</span> YYYY/Faculty Code/Number/Entry Type (e.g. 2023/BCS/001/PS). Ensure accurate capitalization.
+                </p>
+</div>
+<!-- Admission Year Dropdown -->
+<div class="flex flex-col gap-1.5">
+<label class="text-slate-900 dark:text-slate-100 text-sm font-semibold px-1">Admission Year</label>
+<div class="relative group">
+<select class="form-select w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary h-14 px-4 appearance-none">
+<option disabled="" selected="" value="">Select Year</option>
+<option>2024</option>
+<option>2023</option>
+<option>2022</option>
+<option>2021</option>
+<option>2020</option>
+</select>
+</div>
+</div>
+<!-- Faculty Dropdown -->
+<div class="flex flex-col gap-1.5">
+<label class="text-slate-900 dark:text-slate-100 text-sm font-semibold px-1">Faculty</label>
+<div class="relative group">
+<select class="form-select w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary h-14 px-4 appearance-none">
+<option disabled="" selected="" value="">Select Faculty</option>
+<option>Computing and Informatics</option>
+<option>Applied Sciences and Technology</option>
+<option>Medicine</option>
+<option>Business and Management Sciences</option>
+<option>Science</option>
+<option>Interdisciplinary Studies</option>
+</select>
+</div>
+</div>
+<!-- Program & Course Name -->
+<div class="flex flex-col gap-5">
+<div class="flex flex-col gap-1.5">
+<label class="text-slate-900 dark:text-slate-100 text-sm font-semibold px-1">Program Name</label>
+<input class="form-input w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary h-14 px-4 text-base" placeholder="e.g. Bachelor of Computer Science" type="text"/>
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="text-slate-900 dark:text-slate-100 text-sm font-semibold px-1">Course Name</label>
+<input class="form-input w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary h-14 px-4 text-base" placeholder="e.g. BCS" type="text"/>
+</div>
+</div>
+<!-- Year of Study Dropdown -->
+<div class="flex flex-col gap-1.5">
+<label class="text-slate-900 dark:text-slate-100 text-sm font-semibold px-1">Current Year of Study</label>
+<div class="relative group">
+<select class="form-select w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary h-14 px-4 appearance-none">
+<option disabled="" selected="" value="">Select Year</option>
+<option>Year 1</option>
+<option>Year 2</option>
+<option>Year 3</option>
+<option>Year 4</option>
+<option>Year 5</option>
+</select>
+</div>
+</div>
+<!-- Institutional Student Email -->
+<div class="flex flex-col gap-1.5">
+<label class="text-slate-900 dark:text-slate-100 text-sm font-semibold px-1 flex items-center gap-2">
+                    Institutional Email
+                    <span class="material-symbols-outlined text-primary text-sm">verified</span>
+</label>
+<div class="relative">
+<input class="form-input flex w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary h-14 px-4 text-base" placeholder="username@std.must.ac.ug" type="email"/>
+</div>
+<p class="text-slate-500 dark:text-slate-400 text-xs px-1 leading-relaxed">
+                    Use your official MUST student email ending in <span class="text-primary font-medium">@std.must.ac.ug</span>. Verification will be sent to this address.
+                </p>
+</div>
+<!-- Error Micro-copy (Hidden by default) -->
+<div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 p-3 rounded-lg flex gap-3 items-start mt-2">
+<span class="material-symbols-outlined text-red-500 text-lg mt-0.5">info</span>
+<p class="text-red-700 dark:text-red-400 text-xs leading-relaxed">
+                    Please ensure all university details match your official admission letter to avoid delays in profile verification.
+                </p>
+</div>
+</form>
+<!-- Footer Actions -->
+<div class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-background-light/95 dark:bg-background-dark/95 border-t border-slate-200 dark:border-slate-800 p-4 flex gap-4 backdrop-blur-sm">
+<button class="flex-1 bg-primary/10 hover:bg-primary/20 text-primary font-bold h-14 rounded-xl transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined">arrow_back</span>
+                Back
+            </button>
+<button class="flex-[2] bg-primary hover:bg-primary/90 text-white font-bold h-14 rounded-xl shadow-lg shadow-primary/25 transition-all flex items-center justify-center gap-2">
+                Next Step
+                <span class="material-symbols-outlined">arrow_forward</span>
+</button>
+</div>
+</div>
+</body></html>

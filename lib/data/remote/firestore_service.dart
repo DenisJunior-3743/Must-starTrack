@@ -1,0 +1,324 @@
+// lib/data/remote/firestore_service.dart
+//
+// MUST StarTrack — Firestore Service (Phase 5)
+//
+// Central gateway for ALL Firestore operations.
+// No other file imports cloud_firestore directly — only this service.
+// This isolates the Firebase dependency behind a thin abstraction,
+// making it trivial to swap out or mock in tests.
+//
+// Collections structure:
+//   users/{uid}
+//     profiles/{uid}          (sub-collection for extended profile)
+//   posts/{postId}
+//   conversations/{convoId}
+//     messages/{messageId}   (sub-collection)
+//   notifications/{notifId}
+//   skills (public collection for trending skill aggregation)
+//   follows/{followerId}_{followingId}
+//   sync_audit/{docId}        (admin audit log)
+//
+// Panel defence:
+//   "Firestore is our source of truth for multi-device sync.
+//    SQLite is the local read cache. Every mutation writes to
+//    SQLite first (optimistic), then to Firestore. If Firestore
+//    is unreachable, the SyncQueueDao retries with exponential
+//    backoff. This means the app works fully offline — users on
+//    3G in Mbarara still get a great experience."
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/user_model.dart';
+import '../models/post_model.dart';
+import '../local/dao/message_dao.dart';
+import '../local/dao/notification_dao.dart';
+
+class FirestoreService {
+  final FirebaseFirestore _db;
+
+  FirestoreService({FirebaseFirestore? firestore})
+      : _db = firestore ?? FirebaseFirestore.instance;
+
+  // ── Collection references ─────────────────────────────────────────────────
+
+  CollectionReference<Map<String, dynamic>> get _users =>
+      _db.collection('users');
+  CollectionReference<Map<String, dynamic>> get _posts =>
+      _db.collection('posts');
+  CollectionReference<Map<String, dynamic>> get _conversations =>
+      _db.collection('conversations');
+  CollectionReference<Map<String, dynamic>> get _notifications =>
+      _db.collection('notifications');
+  CollectionReference<Map<String, dynamic>> get _follows =>
+      _db.collection('follows');
+
+  // ── User operations ───────────────────────────────────────────────────────
+
+  /// Creates or overwrites a user document (used on registration + profile update).
+  Future<void> setUser(UserModel user) async {
+    await _users.doc(user.id).set(user.toJson(), SetOptions(merge: true));
+  }
+
+  /// Fetches a single user. Returns null if not found.
+  Future<UserModel?> getUser(String userId) async {
+    final doc = await _users.doc(userId).get();
+    if (!doc.exists || doc.data() == null) return null;
+    return UserModel.fromJson({'id': doc.id, ...doc.data()!});
+  }
+
+  /// Streams profile changes for real-time profile screen updates (Phase 6).
+  Stream<UserModel?> watchUser(String userId) {
+    return _users.doc(userId).snapshots().map((snap) {
+      if (!snap.exists || snap.data() == null) return null;
+      return UserModel.fromJson({'id': snap.id, ...snap.data()!});
+    });
+  }
+
+  // ── Post operations ───────────────────────────────────────────────────────
+
+  /// Writes a post document (create or update).
+  Future<void> setPost(PostModel post) async {
+    await _posts.doc(post.id).set(post.toMap(), SetOptions(merge: true));
+  }
+
+  /// Archives a post (sets is_archived = true server-side).
+  Future<void> archivePost(String postId) async {
+    await _posts.doc(postId).update({
+      'is_archived': true,
+      'updated_at': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Deletes a post document.
+  Future<void> deletePost(String postId) async {
+    await _posts.doc(postId).delete();
+  }
+
+  /// Toggles a like on a post using Firestore transaction
+  /// (prevents race conditions when multiple users like simultaneously).
+  Future<void> toggleLike({
+    required String postId,
+    required String userId,
+    required bool isLiking,
+  }) async {
+    final postRef = _posts.doc(postId);
+    final likeRef = _posts.doc(postId)
+        .collection('likes').doc(userId);
+
+    await _db.runTransaction((txn) async {
+      if (isLiking) {
+        txn.set(likeRef, {
+          'user_id': userId,
+          'created_at': FieldValue.serverTimestamp(),
+        });
+        txn.update(postRef, {
+          'like_count': FieldValue.increment(1),
+        });
+      } else {
+        txn.delete(likeRef);
+        txn.update(postRef, {
+          'like_count': FieldValue.increment(-1),
+        });
+      }
+    });
+  }
+
+  /// Paginated feed query — returns [pageSize] posts before [lastDoc].
+  Future<List<PostModel>> getFeedPage({
+    int pageSize = 20,
+    DocumentSnapshot? lastDoc,
+    String? facultyFilter,
+    String? categoryFilter,
+  }) async {
+    Query<Map<String, dynamic>> query = _posts
+        .where('is_archived', isEqualTo: false)
+        .orderBy('created_at', descending: true)
+        .limit(pageSize);
+
+    if (facultyFilter != null) {
+      query = query.where('faculty', isEqualTo: facultyFilter);
+    }
+    if (categoryFilter != null) {
+      query = query.where('category', isEqualTo: categoryFilter);
+    }
+    if (lastDoc != null) {
+      query = query.startAfterDocument(lastDoc);
+    }
+
+    final snapshot = await query.get();
+    return snapshot.docs.map((d) =>
+        PostModel.fromJson({'id': d.id, ...d.data()})).toList();
+  }
+
+  // ── Messaging operations ──────────────────────────────────────────────────
+
+  /// Writes a message to Firestore.
+  /// Atomic update of conversation's last_message_at via transaction.
+  Future<void> sendMessage(MessageModel message) async {
+    final convoRef = _conversations.doc(message.conversationId);
+    final msgRef = convoRef
+        .collection('messages').doc(message.id);
+
+    await _db.runTransaction((txn) async {
+      txn.set(msgRef, {
+        'id': message.id,
+        'sender_id': message.senderId,
+        'content': message.content,
+        'message_type': message.messageType,
+        'file_url': message.fileUrl,
+        'file_name': message.fileName,
+        'file_size': message.fileSize,
+        'created_at': FieldValue.serverTimestamp(),
+        'is_read': false,
+      });
+
+      txn.set(convoRef, {
+        'last_message': message.content.length > 80
+            ? '${message.content.substring(0, 80)}…'
+            : message.content,
+        'last_message_at': FieldValue.serverTimestamp(),
+        'updated_at': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    });
+  }
+
+  /// Streams new messages in real-time for the chat screen.
+  Stream<List<MessageModel>> watchMessages(String conversationId) {
+    return _conversations
+        .doc(conversationId)
+        .collection('messages')
+        .orderBy('created_at', descending: false)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) {
+              final data = d.data();
+              final ts = data['created_at'] as Timestamp?;
+              return MessageModel(
+                id: d.id,
+                conversationId: conversationId,
+                senderId: data['sender_id'] as String,
+                content: data['content'] as String,
+                messageType: data['message_type'] as String? ?? 'text',
+                fileUrl: data['file_url'] as String?,
+                fileName: data['file_name'] as String?,
+                fileSize: data['file_size'] as String?,
+                createdAt: ts?.toDate() ?? DateTime.now(),
+                isRead: data['is_read'] as bool? ?? false,
+              );
+            }).toList());
+  }
+
+  // ── Notification operations ───────────────────────────────────────────────
+
+  /// Writes a notification to Firestore.
+  Future<void> sendNotification(NotificationModel notif) async {
+    await _notifications.doc(notif.id).set({
+      'user_id': notif.userId,
+      'type': notif.type,
+      'sender_id': notif.senderId,
+      'sender_name': notif.senderName,
+      'body': notif.body,
+      'detail': notif.detail,
+      'entity_id': notif.entityId,
+      'created_at': FieldValue.serverTimestamp(),
+      'is_read': false,
+      'extra': notif.extra,
+    });
+  }
+
+  /// Streams unread notification count for nav badge.
+  Stream<int> watchUnreadNotifCount(String userId) {
+    return _notifications
+        .where('user_id', isEqualTo: userId)
+        .where('is_read', isEqualTo: false)
+        .snapshots()
+        .map((s) => s.size);
+  }
+
+  // ── Follow operations ─────────────────────────────────────────────────────
+
+  Future<void> follow({
+    required String followerId,
+    required String followingId,
+  }) async {
+    final docId = '${followerId}_$followingId';
+    await _follows.doc(docId).set({
+      'follower_id': followerId,
+      'following_id': followingId,
+      'created_at': FieldValue.serverTimestamp(),
+    });
+
+    // Increment follower/following counts
+    await Future.wait([
+      _users.doc(followingId).update(
+          {'followers_count': FieldValue.increment(1)}),
+      _users.doc(followerId).update(
+          {'following_count': FieldValue.increment(1)}),
+    ]);
+  }
+
+  Future<void> unfollow({
+    required String followerId,
+    required String followingId,
+  }) async {
+    final docId = '${followerId}_$followingId';
+    await _follows.doc(docId).delete();
+
+    await Future.wait([
+      _users.doc(followingId).update(
+          {'followers_count': FieldValue.increment(-1)}),
+      _users.doc(followerId).update(
+          {'following_count': FieldValue.increment(-1)}),
+    ]);
+  }
+
+  // ── Search ────────────────────────────────────────────────────────────────
+
+  /// Full-text search via Firestore array-contains (skills field).
+  /// For production, replace with Algolia or Firebase Extensions Search.
+  Future<List<PostModel>> searchPostsBySkill(String skill) async {
+    final snapshot = await _posts
+        .where('skills', arrayContains: skill)
+        .where('is_archived', isEqualTo: false)
+        .orderBy('created_at', descending: true)
+        .limit(30)
+        .get();
+
+    return snapshot.docs
+        .map((d) => PostModel.fromJson({'id': d.id, ...d.data()}))
+        .toList();
+  }
+
+  // ── Admin operations ──────────────────────────────────────────────────────
+
+  /// Writes an audit log entry to Firestore (for admin moderation trail).
+  Future<void> logAuditEvent({
+    required String adminId,
+    required String actionType,
+    required String targetId,
+    required String targetType,
+    String? reason,
+  }) async {
+    await _db.collection('audit_log').add({
+      'admin_id': adminId,
+      'action_type': actionType,
+      'target_id': targetId,
+      'target_type': targetType,
+      'reason': reason,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Fetches platform-wide stats for super admin dashboard.
+  Future<Map<String, dynamic>> getPlatformStats() async {
+    final results = await Future.wait([
+      _users.count().get(),
+      _posts.where('is_archived', isEqualTo: false).count().get(),
+      _follows.count().get(),
+    ]);
+
+    return {
+      'total_users': results[0].count ?? 0,
+      'total_posts': results[1].count ?? 0,
+      'total_follows': results[2].count ?? 0,
+    };
+  }
+}

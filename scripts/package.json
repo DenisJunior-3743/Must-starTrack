@@ -1,0 +1,11 @@
+{
+  "name": "startrack-scripts",
+  "version": "1.0.0",
+  "description": "Admin seed scripts for MUST StarTrack",
+  "scripts": {
+    "seed": "node seed_admins.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
+}

@@ -1,0 +1,249 @@
+MUST StarTrack Mobile Application — Full Development Prompt
+You are tasked with designing and developing a mobile application called MUST StarTrack
+for Mbarara University of Science and Technology (MUST). The application will be built as a
+Flutter-based mobile platform using Dart for application logic, SQLite Vault for secure
+local storage, and Firebase Firestore for cloud storage with continuous synchronization
+between the two storage layers.
+The purpose of the application is to create a skill-centric academic networking platform that
+allows students to showcase their competencies, discover projects, collaborate across faculties,
+and connect with lecturers, staff members, and opportunities. While the application will borrow
+selected features from popular social networking platforms such as TikTok, LinkedIn,
+WhatsApp, Facebook, and Instagram, it must be specifically contextualized for an academic
+environment. The primary focus of the system is not general social networking but rather skill
+visibility, academic collaboration, project discovery, and connecting students to
+opportunities.
+The platform must enable students from different faculties and academic programs to collaborate
+on projects, share their work, and demonstrate their competencies in a structured digital
+portfolio. Lecturers and staff members must be able to discover students with relevant skills and
+recruit them for academic or development projects. The system must also incorporate AI-driven
+recommendations using Gemini APIs to assist in project discovery, collaborator matching,
+content filtering, and activity streak tracking.
+The system must support four categories of users: students, lecturers or staff, administrators,
+and super administrators, with role-based permissions and dashboards.
+Functional Requirements
+The system must first allow guest users (users who are not logged in) to interact with the
+platform in a limited way. Guests must be able to browse and view public project posts, student
+portfolios, and opportunities without creating an account. They must also be able to search for
+projects, explore the discover feed, and view limited profile information of users who have made
+their profiles public. However, guest users must not be able to interact with the system in any
+active way. They must not be able to like posts, dislike posts, comment on posts, reply to
+comments, follow users, send collaboration requests, flag posts, create posts, or send messages.
+Any attempt to perform these actions must trigger a prompt requiring the user to log in or create
+an account.
+
+Students must be able to create accounts through a three-stage registration process. The first
+stage must collect biographical data, including the student’s full name, profile picture
+(optional), gender, phone number, short biography, and a list of skills. The second stage must
+collect university information, including registration number, admission year, program name,
+course name, faculty, year of study, and student email address. The system must automatically
+validate the registration number format, which follows the structure 2020/bse/001/PS or
+2020/bse/001/GS, and validate the institutional email format such as
+2020bse001@std.must.ac.ug, ensuring that the admission year, program acronym, student
+identifier, and university domain match the expected format. The third stage must handle
+authentication by collecting the student’s password, confirming the password, and verifying the
+email address. Optional Google authentication may also be integrated.
+Lecturers and staff members must also be able to create accounts using a registration form that
+collects their full name, staff email address, department, faculty, and password. Their email
+addresses must also be validated against the university domain before the account becomes
+active.
+The system must support secure authentication through email login, password login, Google
+authentication, session persistence, and logout functionality. Once authenticated, users must
+gain access to features based on their role within the system.
+Each student must have a personal profile that functions as a digital portfolio. The profile
+must contain the student’s profile picture, biography, program information, skills, portfolio links,
+projects, and achievements. Students must be able to edit and update their profiles, update their
+skill lists, update portfolio links, upload project media, and manage the visibility of their profile
+information.
+Students must be able to create project posts that showcase their work. Each project post may
+contain multiple images, with each image limited to a maximum size of 1.5MB and
+automatically compressed to save storage and bandwidth. Projects may also include videos with
+a maximum length of two minutes, which must also be compressed to minimize data
+consumption. Alternatively, students may include YouTube links for hosting project videos
+externally. Projects may also contain external links to GitHub repositories, demo websites,
+research publications, or other relevant resources. Each project must include metadata such as
+title, description, project category, tags, faculty, program, and skills used in the project.
+Students must also be able to define the visibility settings for each post, allowing them to
+choose whether a post is public, visible only to followers, or visible only to collaborators.
+The system must include a home feed that displays project posts, collaboration opportunities,
+and academic calls. The feed must support infinite scrolling, lazy loading, and cached offline
+viewing so that users can quickly access content even on slow networks.
+
+Authenticated users must be able to interact with posts in multiple ways. They must be able to
+like posts, dislike posts, comment on posts, reply to comments, share posts, flag suspicious
+or inappropriate content, and follow the creators of posts.
+Students must also be able to send collaboration requests to other users. These requests can be
+accepted, rejected, or canceled. Once a collaboration request is accepted, both users must gain
+access to additional collaboration features, including private project visibility and messaging.
+The system must also include a messaging module that allows private communication between
+students, lecturers, and collaborators. Messaging must support chat threads, message timestamps,
+read receipts, offline message queuing, and push notifications when new messages arrive.
+Users must be able to follow and unfollow other users, and view lists of followers and
+following users.
+Lecturers and staff must be able to create opportunity posts, including research projects,
+internship opportunities, and academic collaboration opportunities. Students must be able to
+react to these opportunities, share them, and apply or express interest.
+The application must include a discover page where users can explore projects, internships, jobs,
+workshops, and academic events. The discover module must support filtering based on faculty,
+program, skill area, and category.
+The system must integrate Gemini APIs to implement recommendation algorithms that
+suggest relevant projects, recommend potential collaborators, and help lecturers identify students
+with relevant skills. The recommendation engine must combine content-based filtering (based
+on skills and project metadata) and collaborative filtering (based on user interactions and
+behavior).
+Lecturers must also have specialized tools that allow them to search for students by skill,
+discover projects, rank students according to their skills or performance, and invite suitable
+students to participate in research or development projects.
+Content moderation must also be implemented. Users must be able to flag suspicious posts or
+report inappropriate content. The system must implement automatic suspicion scoring, where
+posts with a low trust score are sent to an administrative approval queue before being made
+public.
+Administrators must have access to a management dashboard where they can review flagged
+posts, approve or reject project submissions, monitor users, and generate reports about system
+activity. Super administrators must have all administrative privileges and additional authority to
+create or remove administrators, manage platform-wide settings, and view full system analytics.
+
+The system must include a notification system that alerts users about collaboration requests,
+messages, opportunities, and endorsements. Notifications must be delivered through both in-app
+notifications and push notifications.
+The system must track user activities such as posts, collaborations, likes, and comments. Gemini
+APIs must also track activity streaks to encourage engagement.
+The system must include a search engine that allows users to search by skill, project title,
+faculty, program, or student name.
+Finally, the system must implement an offline-first architecture similar to WhatsApp. Users
+must be able to view cached posts offline, read previously downloaded messages offline, and
+queue interactions such as likes, comments, and messages when they have no internet
+connection. Once connectivity is restored, the system must automatically synchronize queued
+actions with the cloud database.
+Non-Functional Requirements
+The application must be designed to run on a wide range of devices commonly used by students.
+The minimum supported operating system must be Android 7.0 (API Level 24), and the
+application must function effectively on devices with at least 1GB of RAM. The system must
+also be optimized for 3G mobile network environments, ensuring that students with limited
+internet access can still use the application effectively. The installation size of the application
+should remain below 40MB.
+Performance must be optimized so that the home feed loads within two seconds on a 3G
+network. Cached content must load instantly, and media files must be compressed automatically.
+Lazy loading and pagination must be used to reduce memory consumption and improve
+performance on low-end devices.
+The system must follow an offline-first architecture, storing cached data in SQLite Vault and
+synchronizing with Firebase Firestore whenever network connectivity becomes available. The
+synchronization mechanism must handle network interruptions gracefully and prevent data loss.
+Security must be implemented using HTTPS communication with TLS/SSL encryption.
+Authentication must be secure, passwords must be hashed, and role-based access control must be
+enforced. The system must also comply with the Uganda Data Protection and Privacy Act
+(2019) and follow data minimization principles.
+The system must be scalable enough to support thousands of concurrent users, particularly
+during academic periods when usage is high. Reliability must also be maintained with a target
+uptime of 99 percent availability.
+
+The user interface must be intuitive, lightweight, and optimized for mobile use, ensuring a
+minimal learning curve for students. The system must minimize data consumption and support
+low-bandwidth networks.
+The system architecture must follow modular design principles to ensure maintainability and
+allow future extensions without disrupting existing functionality.
+The user interface must maintain a consistent visual theme using the colors (Mbarara University
+Theme Colors) , and must incorporate design inspirations from TikTok’s feed layout, LinkedIn’s
+professional profiles, WhatsApp’s messaging system, and Instagram’s media presentation style.
+
+Here’s a 5-stop phase plan showing what gets done in each phase, in order.
+Phase 1 — Core Foundation + Access Control
+- Lock current UI layout and navigation as-is (no structural redesign).
+- Harden app architecture: feature modules, repositories, services, sync layer contracts.
+- Finalize role model: guest, student, lecturer/staff, admin, super admin.
+- Implement route/action guards for guest restrictions (view-only behavior).
+- Define local DB schema fully (users, profiles, posts, comments, likes/dislikes, follows, collab
+requests, messages, notifications, sync queue, moderation queue).
+- Add baseline offline-first plumbing (local read-first, queued writes).
+Phase 2 — Auth + Registration + Profile Portfolio
+- Build student 3-step onboarding (bio → university details → auth).
+- Build lecturer/staff registration flow.
+- Add strict MUST validation rules:
+- Reg number format (YYYY/xxx/nnn/PS|GS)
+- Institutional email patterns (...@std.must.ac.ug, ...@must.ac.ug where appropriate)
+- Implement login/logout/session persistence.
+- Add Google login with MUST-domain restriction.
+- Build/edit profile portfolio (skills, links, achievements, visibility options).
+Phase 3 — Content + Feed + Discover + Interactions
+- Project post creation (metadata, tags, visibility: public/followers/collaborators).
+- Media handling pipeline (compress images/videos, enforce size/duration limits, support
+YouTube/external links).
+- Home feed with pagination, infinite scroll, lazy loading, offline cache.
+- Discover expansion with filters (faculty/program/skill/category).
+- Interaction system: like/dislike/comment/reply/share/follow/flag with guest prompts.
+
+- Collaboration request lifecycle (send/accept/reject/cancel).
+Phase 4 — Messaging + Notifications + Moderation + Admin
+- Private messaging threads (timestamps, read receipts, offline queue/send).
+- Notification center (in-app + push-ready architecture).
+- Opportunity posts for lecturers/staff + student apply/interest actions.
+- Content moderation flow:
+- User reports/flags
+- Suspicion scoring hooks
+- Admin approval queue
+- Admin dashboard APIs/screens (flag review, approve/reject, user monitoring, reports).
+- Super admin controls (admin management + platform settings + analytics view).
+Phase 5 — AI Recommender + Hardening + Release Readiness
+- Gemini integration for:
+- Project recommendations
+- Collaborator matching
+- Lecturer student-skill discovery/ranking assist
+- Activity streak nudges
+- Hybrid recommendation logic (content-based + collaborative signals).
+- Sync conflict resolution + retry/backoff + idempotent queued actions.
+- Performance optimization for low-end Android + 3G targets.
+- Security/compliance review (RBAC, data minimization, encryption in transit, audit logs).
+- UAT, bug bash, release checklist, staged rollout prep.
+--When We Reach Firebase Integration (Guidelines You’ll Use)
+Use this checklist at the start of Phase 2/3 backend hookup:
+1. Create Firebase project
+- In Firebase Console, create project (e.g. must-startrack).
+- Enable Analytics only if needed now (optional).
+2. Register Android app
+- Package name must match Flutter Android app ID.
+- Add SHA-1 and SHA-256 fingerprints (debug + release keystores).
+3. Add Firebase config to Flutter
+- Install FlutterFire CLI:
+- dart pub global activate flutterfire_cli
+- Run:
+- flutterfire configure
+- This generates firebase_options.dart and platform config files.
+- Keep google-services.json under android/app/.
+4. Enable authentication providers
+- Firebase Auth → enable:
+
+- Email/Password
+- Google Sign-In
+- Restrict sign-in domain in app logic (already planned) and optionally in backend rules/custom
+claims flows.
+5. Create Firestore database
+- Start in production mode.
+- Pick nearest region (latency/cost aware).
+- Create base collections (users, profiles, posts, comments, etc.).
+6. Write Firestore security rules (must do early)
+- Deny-by-default.
+- Role-based access (student, lecturer, admin, super_admin).
+- Guest read-only for public content.
+- Restrict write paths by owner ID and role.
+- Add moderation constraints (flagged/pending visibility rules).
+7. Indexes + query planning
+- Add composite indexes for feed/discover filters (faculty/program/skills/timestamp).
+- Avoid unindexed production queries.
+8. Cloud sync strategy
+- Keep SQLite as source for offline UX.
+- Queue writes locally (sync_queue) with operation types.
+- Background sync worker sends to Firestore on connectivity restore.
+- Handle retries + conflict policy (last-write-wins or field-level merge per entity).
+9. Push notifications
+- Set up FCM in Firebase.
+- Add device token registration table + refresh flow.
+10. Environment separation
+- Use separate Firebase projects: dev, staging, prod.
+- Keep config/env switching clean before pilot rollout.
+​
+​
+​
+IMPLEMENTATION OF HCI CONCEPTS AND PRINCIPLES
+Lets keep HCI in mind like constraints, visibility, usability, efficiency, effectiveness, constraints,
+conceptual models, natural mapping, affordance, and principle of universal design
+
+

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>MUST StarTrack - Notifications</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="max-w-md mx-auto bg-white dark:bg-slate-900 min-h-screen shadow-xl flex flex-col">
+<!-- Top Nav Bar -->
+<header class="sticky top-0 z-10 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+<div class="flex items-center justify-between p-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-2xl">star_rate</span>
+<h1 class="text-xl font-bold tracking-tight">Notifications</h1>
+</div>
+<button class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+<span class="material-symbols-outlined text-slate-600 dark:text-slate-400">settings</span>
+</button>
+</div>
+<!-- Categorized Tabs -->
+<div class="flex px-4 overflow-x-auto no-scrollbar">
+<button class="flex-1 py-3 px-1 text-sm font-semibold text-primary border-b-2 border-primary whitespace-nowrap">
+                    All
+                </button>
+<button class="flex-1 py-3 px-1 text-sm font-medium text-slate-500 dark:text-slate-400 border-b-2 border-transparent whitespace-nowrap">
+                    Requests
+                </button>
+<button class="flex-1 py-3 px-1 text-sm font-medium text-slate-500 dark:text-slate-400 border-b-2 border-transparent whitespace-nowrap">
+                    Opportunities
+                </button>
+<button class="flex-1 py-3 px-1 text-sm font-medium text-slate-500 dark:text-slate-400 border-b-2 border-transparent whitespace-nowrap">
+                    System
+                </button>
+</div>
+</header>
+<!-- Notification List -->
+<main class="flex-1 overflow-y-auto">
+<!-- Collaboration Request (Unread) -->
+<div class="p-4 border-b border-slate-100 dark:border-slate-800 bg-primary/5 dark:bg-primary/10">
+<div class="flex gap-4">
+<div class="relative shrink-0">
+<div class="w-12 h-12 rounded-full bg-slate-200 bg-cover bg-center" data-alt="Portrait of Marcus Chen" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBvjL2OeoLFk--E0CD_qsDOHrmMlmE0jUkODjZsELLI4ZdzZgbm-_9j5-e7z4u4Eqj3cGbKxZgVI-jLrnTtYdNeJZrRotZA9c3rNIm0VxqnYLX9F2VlMt0axlp6QZOpDAYV4rKC-hPwqmGD8FHXu_2dz5zG4M557JFJn_4t6RotfRL_llvLkHwqb4zaNuIINwH0lk-6mQYYAKOmd5kKeWOcmViM7BCIWI1THCYK6In-18Vc6JmoyKwPR7j-G9lYzc2Yld23qvsoVA')"></div>
+<div class="absolute -top-0.5 -right-0.5 w-3 h-3 bg-primary rounded-full border-2 border-white dark:border-slate-900"></div>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-1">
+<p class="text-sm leading-snug">
+<span class="font-bold">Marcus Chen</span> sent you a collaboration request for <span class="text-primary font-semibold">Neural Diagnostic Tools</span>
+</p>
+<span class="text-[10px] text-slate-400 ml-2 whitespace-nowrap">2m ago</span>
+</div>
+<div class="flex gap-2 mt-3">
+<button class="px-4 py-1.5 bg-primary text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition-colors">Accept</button>
+<button class="px-4 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg hover:bg-slate-200 transition-colors">Decline</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Message Alert -->
+<div class="p-4 border-b border-slate-100 dark:border-slate-800 bg-primary/5 dark:bg-primary/10">
+<div class="flex gap-4">
+<div class="relative shrink-0">
+<div class="w-12 h-12 rounded-full bg-slate-200 bg-cover bg-center" data-alt="Portrait of Dr. Sarah Smith" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuALiTPdTCJDb2fNs5FCmtV6N0J-7gwHT0ERZSu-cTLar1AeXrYX-6K25jY0wzT2v0w-_Xui1zyenTgrpjt365SwN_W96w2m6b4iD0Wb289RFJARP2NWAfRvTIAJtN_Dcb0yKQPeMG0tZZXuK7qLW2jEeaCwvXJMUzw2LUk-TqzN7E9xBzTzKBRoDqecvlG6snv3FjCtdogOQJBOaTkY8O0H9h1T9COvFnoODRME4kXeq0hITp5_3mGEd9-UjoI1psW-Y2v4uJ_Waw')"></div>
+<div class="absolute -top-0.5 -right-0.5 w-3 h-3 bg-primary rounded-full border-2 border-white dark:border-slate-900"></div>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start">
+<p class="text-sm leading-snug">
+<span class="font-bold">Dr. Sarah Smith</span> sent you a message: "I reviewed your abstract and have some feedback..."
+                            </p>
+<span class="text-[10px] text-slate-400 ml-2 whitespace-nowrap">15m ago</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Opportunity Alert -->
+<div class="p-4 border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+<div class="flex gap-4">
+<div class="shrink-0 w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">work</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-1">
+<p class="text-sm leading-snug">
+<span class="font-bold text-primary">New Internship:</span> Quantum Algorithms posted in your faculty.
+                            </p>
+<span class="text-[10px] text-slate-400 ml-2 whitespace-nowrap">1h ago</span>
+</div>
+<p class="text-xs text-slate-500 dark:text-slate-400">Faculty of Advanced Computing</p>
+</div>
+</div>
+</div>
+<!-- Achievement Alert -->
+<div class="p-4 border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+<div class="flex gap-4">
+<div class="shrink-0 w-12 h-12 rounded-xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
+<span class="material-symbols-outlined text-orange-500">local_fire_department</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start mb-1">
+<p class="text-sm leading-snug font-medium">
+                                You've reached a <span class="text-orange-500 font-bold">7-day streak!</span> Keep it up!
+                            </p>
+<span class="text-[10px] text-slate-400 ml-2 whitespace-nowrap">3h ago</span>
+</div>
+<p class="text-xs text-slate-500 dark:text-slate-400">Complete one more task to hit 8 days.</p>
+</div>
+</div>
+</div>
+<!-- Endorsement Alert -->
+<div class="p-4 border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+<div class="flex gap-4">
+<div class="shrink-0">
+<div class="w-12 h-12 rounded-full bg-slate-200 bg-cover bg-center" data-alt="Portrait of Alex Rivera" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuD5ryH5uueRuhrkQ_16V1dBoPXFY7QKEo0j6Hom6dhPITXbTvT8F74CzCuYGWj9v41DU3WNTaCptvdEVsecX4CSNlHg9k1ML4ESapX4HX6uZJdcVki98WsBYeEusfaJvePSuWMcTPx-NnSWfaNRPHQSRjUlDCNsrkbZyFGbVv3KhhfzD71xiIhDIA-ryxI6IOkJgi1d6ncg9cN58JFPQD9IBe_hEPDO9Do13QNxjxaOa_4yJ-jLUC5HeS6A7pKpLzlcjLe0qkPsOw')"></div>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start">
+<p class="text-sm leading-snug">
+<span class="font-bold">Alex Rivera</span> endorsed your <span class="font-semibold text-primary">Python</span> skill.
+                            </p>
+<span class="text-[10px] text-slate-400 ml-2 whitespace-nowrap">5h ago</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Older System Notification -->
+<div class="p-4 border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+<div class="flex gap-4">
+<div class="shrink-0 w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+<span class="material-symbols-outlined text-slate-500">info</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start">
+<p class="text-sm leading-snug">
+                                Your account security review is complete.
+                            </p>
+<span class="text-[10px] text-slate-400 ml-2 whitespace-nowrap">Yesterday</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Nav Bar -->
+<nav class="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-6 py-3">
+<div class="flex justify-between items-center max-w-sm mx-auto">
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="text-[10px] font-medium">Home</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">groups</span>
+<span class="text-[10px] font-medium">Network</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">notifications</span>
+<span class="text-[10px] font-bold">Alerts</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="text-[10px] font-medium">Profile</span>
+</a>
+</div>
+</nav>
+</div>
+</body></html>

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<title>Faculty Details - MUST StarTrack</title>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen pb-20">
+<header class="sticky top-0 z-50 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+<div class="flex items-center justify-between p-4">
+<button class="flex size-10 items-center justify-center rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-slate-900 dark:text-white">arrow_back</span>
+</button>
+<h1 class="text-lg font-bold flex-1 px-4 truncate">Computing &amp; Informatics</h1>
+<button class="flex size-10 items-center justify-center rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-slate-900 dark:text-white">search</span>
+</button>
+</div>
+</header>
+<main class="max-w-xl mx-auto">
+<section class="p-4 flex flex-col gap-6">
+<div class="flex gap-5 items-center">
+<div class="size-24 rounded-xl bg-primary/10 flex items-center justify-center overflow-hidden shrink-0 border border-primary/20">
+<img alt="Faculty Logo" class="w-full h-full object-cover" data-alt="Modern laptop with code on screen" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDV-W_oKu2yANl2r_tWOmYdkIrAHYLmsxLD3mBuLtTMOj79sW6WxNsJebQXVNHGuduJj-x9H9CxTYPxfO32UQFcaRfgb7ULbGsLJZzSCZUYedpssKm5Zp3Ei6akBQFwgDRwN-neS1pS3eAWFGXiYqKSQgPBsw1qbDw3N6sO85XwCLVUMBFnb6qYrfUknpBa94ETq_QmQT61t9fPv3lPjVoiq7JkQ_l8lC3g5Eh9h-G1GbA7edezeDiITgs0G3FqufB6mhnZPOD3Pw"/>
+</div>
+<div class="flex flex-col gap-1">
+<h2 class="text-2xl font-bold leading-tight">Faculty of Computing &amp; Informatics</h2>
+<p class="text-slate-600 dark:text-slate-400 text-sm">Mbarara University of Science and Technology</p>
+<div class="flex items-center gap-1 mt-1 text-primary text-sm font-medium">
+<span class="material-symbols-outlined text-sm">location_on</span>
+<span>Main Campus, Block B</span>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<p class="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider mb-1">Total Projects</p>
+<p class="text-2xl font-bold text-primary">150+</p>
+</div>
+<div class="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<p class="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-wider mb-1">Top Skills</p>
+<p class="text-sm font-bold leading-tight">AI, Mobile Dev, Data Science</p>
+</div>
+</div>
+</section>
+<nav class="sticky top-16 z-40 bg-background-light dark:bg-background-dark border-b border-slate-200 dark:border-slate-800">
+<div class="flex px-4 overflow-x-auto no-scrollbar">
+<a class="flex-1 text-center py-4 text-sm font-bold border-b-2 border-primary text-primary whitespace-nowrap" href="#">Projects</a>
+<a class="flex-1 text-center py-4 text-sm font-bold border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-primary transition-colors whitespace-nowrap" href="#">Students</a>
+<a class="flex-1 text-center py-4 text-sm font-bold border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-primary transition-colors whitespace-nowrap" href="#">Opportunities</a>
+</div>
+</nav>
+<section class="p-4 space-y-4">
+<div class="flex items-center justify-between mb-2">
+<h3 class="font-bold text-slate-900 dark:text-white">Active Projects</h3>
+<button class="text-primary text-sm font-semibold">View All</button>
+</div>
+<div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+<div class="h-32 bg-slate-200 dark:bg-slate-800 relative">
+<img alt="Project Image" class="w-full h-full object-cover opacity-80" data-alt="Modern code editor software interface" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDrEPSC23uMtbnVjWSK7mCjynaptPr8y_k58Cp_b5Zcqb9YGb7l6-Sc32lsuXqC9WD_OkwwrAz7SL3HuI3EEZsNEkkmDRGN-SGDamX4RdEZTLgl-Ot03aLYzhr3TAQQa3MEp0m6SrgMKfUXWAc4p5-Qtr1GoF8WrwyG96d1UShK28o1uOUs2v199b-r7Le5uZZjyR06eliQCsDrBfdJ8mtQmN0fYxEZWu7MG3tFRUa78nztiV8buQq654iGGBCPVPojl5y2wnTLIg"/>
+<div class="absolute top-3 right-3 bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase">Active</div>
+</div>
+<div class="p-4">
+<h4 class="font-bold text-lg mb-1">MUST HealthTrack AI</h4>
+<p class="text-slate-600 dark:text-slate-400 text-sm line-clamp-2 mb-3">Predictive analytics for student health trends using localized data models and mobile reporting.</p>
+<div class="flex flex-wrap gap-2 mb-4">
+<span class="px-2 py-1 bg-primary/10 text-primary text-[10px] font-bold rounded-lg uppercase tracking-wide">AI</span>
+<span class="px-2 py-1 bg-primary/10 text-primary text-[10px] font-bold rounded-lg uppercase tracking-wide">Mobile Dev</span>
+<span class="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px] font-bold rounded-lg uppercase tracking-wide">Python</span>
+</div>
+<div class="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-3">
+<div class="flex -space-x-2">
+<div class="size-7 rounded-full border-2 border-white dark:border-slate-900 bg-slate-300 overflow-hidden">
+<img alt="Avatar" data-alt="Portrait of a young male student" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA7wtd-OO1cXxjcRGtr8X7TMGKLBIY8QTCKhu2xyDcfKZJSKH2cPTAjOmOwGACUH_Ci2952TDW97ssnxZvk6jp1rHvyBOLtXHuQTut0hPmqA54mwmB95MhvEBz_k8rfpkIaFizFSJeUeMxHTy38d5quF5Bt6C2VCaATuSMTwciOUQKRxytfZx8FZn0UoZ_9TrD_r2MM6pY_y0bn5GVpoU_x5Ckpp2qx9htdbwAB-1pseQdGGiT50AJD6jg_kCsRxJAjQiHRyeB9cw"/>
+</div>
+<div class="size-7 rounded-full border-2 border-white dark:border-slate-900 bg-slate-300 overflow-hidden">
+<img alt="Avatar" data-alt="Portrait of a young female student" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD-gq0oEERlCgKlBc_vEEFaf7H397fyb2dbayA5HYPACtYVaDd26byFk8VWW16wmKfRlT5TcGS6CxT-hGR9B-pJM8ba5WmHMHIOozizc1T2wI-IbCKY5S1AaIEmbyr0mE2Swwi7TCZw0hPiO97EcZS-jeTb04pYIqVRRfLw6VRbZjVH_GHuv7tWG2J7U22rXK8XQHaGNMZbR7IetBQRGcklnvDXyEmRs5G6pPkddJavUoMd8HbZmacSdzKSUgf3sKAeU3397_ZusQ"/>
+</div>
+<div class="size-7 rounded-full border-2 border-white dark:border-slate-900 bg-slate-800 flex items-center justify-center text-[10px] text-white font-bold">+3</div>
+</div>
+<span class="text-xs text-slate-500 dark:text-slate-400">Updated 2 days ago</span>
+</div>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+<div class="h-32 bg-slate-200 dark:bg-slate-800 relative">
+<img alt="Project Image" class="w-full h-full object-cover opacity-80" data-alt="Person using a smartphone interface" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDDSBErBIIOO1Gzq93OEobcZ_Fb6yUxSxHrSEcIzX1Gi9-ZFw0nzVNXXjBEYGUvgKnyzOQ9VcEMFb0IylfNwt92GtDzAnI7zKHnPPCO8GT7M5qI6_jCa_4qmuHzelo0eO9t5nLMPrC1GKkRyAKRzU9LDmVCq8MLQC_djo_MWjF_bwBzMcMDFVCXsNEtXPwnxoN4FlhnBI7aKmKPXeKpmTJxl8yn45C_IrQEm9QZ8dEVwLBG-8KthmmBjIcEW1tYcai8WqPXLc_8Yw"/>
+<div class="absolute top-3 right-3 bg-primary text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase">Beta</div>
+</div>
+<div class="p-4">
+<h4 class="font-bold text-lg mb-1">Smart Campus Wallet</h4>
+<p class="text-slate-600 dark:text-slate-400 text-sm line-clamp-2 mb-3">Integrated NFC-based payment solution for cafeteria and library services within the university.</p>
+<div class="flex flex-wrap gap-2 mb-4">
+<span class="px-2 py-1 bg-primary/10 text-primary text-[10px] font-bold rounded-lg uppercase tracking-wide">FinTech</span>
+<span class="px-2 py-1 bg-primary/10 text-primary text-[10px] font-bold rounded-lg uppercase tracking-wide">Mobile Dev</span>
+<span class="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px] font-bold rounded-lg uppercase tracking-wide">Kotlin</span>
+</div>
+<div class="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-3">
+<div class="flex -space-x-2">
+<div class="size-7 rounded-full border-2 border-white dark:border-slate-900 bg-slate-300 overflow-hidden">
+<img alt="Avatar" data-alt="Portrait of a focused male developer" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBRBJN56LqFy9KfZpIvzoPNDRgGqc1fN25gpiEHcYSB1Re9nK6QVBsyetGrPMBxeWaoaJicb1FA6r9AEvs1wS6YUbI_1rIsheSRVChMq7HWpbdDN9iYzUylSsVmUs3hxhrZkxX0Ti70JDnkgb7DW5J8NV234yW7Gy4934eZsEOpDW22I46i1XLyMx0XHCfYldvZw7_edSfqszHOUG0b1Y0DzlRM9HoZtG7ulhTxQkQ0GLYnUVeLdnr97FTMxGd0eAV3xEHpe4NF8Q"/>
+</div>
+<div class="size-7 rounded-full border-2 border-white dark:border-slate-900 bg-slate-800 flex items-center justify-center text-[10px] text-white font-bold">+2</div>
+</div>
+<span class="text-xs text-slate-500 dark:text-slate-400">Updated 5 days ago</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+<nav class="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-950/90 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 px-6 py-2 z-50">
+<div class="flex items-center justify-between max-w-xl mx-auto">
+<a class="flex flex-col items-center gap-1 group" href="#">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors">home</span>
+<span class="text-[10px] font-medium text-slate-400 group-hover:text-primary">Home</span>
+</a>
+<a class="flex flex-col items-center gap-1 group" href="#">
+<span class="material-symbols-outlined text-primary">groups</span>
+<span class="text-[10px] font-bold text-primary">Faculties</span>
+</a>
+<a class="flex flex-col items-center gap-1 group" href="#">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors">rocket_launch</span>
+<span class="text-[10px] font-medium text-slate-400 group-hover:text-primary">Projects</span>
+</a>
+<a class="flex flex-col items-center gap-1 group" href="#">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors">person</span>
+<span class="text-[10px] font-medium text-slate-400 group-hover:text-primary">Profile</span>
+</a>
+</div>
+</nav>
+</body></html>

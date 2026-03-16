@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>MUST StarTrack - Mentor Discovery</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "primary": "#1152d4",
+                "background-light": "#f6f6f8",
+                "background-dark": "#101622",
+              },
+              fontFamily: {
+                "display": ["Lexend", "sans-serif"]
+              },
+              borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+            },
+          },
+        }
+      </script>
+<style>
+        body { font-family: 'Lexend', sans-serif; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+<!-- Header -->
+<header class="sticky top-0 z-50 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 py-3 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="bg-primary p-1.5 rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-white text-2xl">star</span>
+</div>
+<div>
+<h1 class="text-lg font-bold tracking-tight leading-none">StarTrack</h1>
+<p class="text-[10px] uppercase tracking-widest text-primary font-semibold">Mentor Discovery</p>
+</div>
+</div>
+<button class="size-10 flex items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+</header>
+<main class="flex-1 pb-24">
+<!-- Search & Filter Section -->
+<div class="p-4 space-y-4">
+<div class="relative group">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary transition-colors">
+<span class="material-symbols-outlined">search</span>
+</div>
+<input class="w-full bg-white dark:bg-slate-900 border-none rounded-xl py-3.5 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary/50 shadow-sm transition-all" placeholder="Search mentors by name or skill" type="text"/>
+</div>
+<!-- Categories -->
+<div class="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
+<button class="flex items-center gap-1.5 px-4 py-2 bg-primary text-white rounded-full text-sm font-medium whitespace-nowrap shadow-md shadow-primary/20">
+<span class="material-symbols-outlined text-lg">grid_view</span> All
+                </button>
+<button class="flex items-center gap-1.5 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-full text-sm font-medium whitespace-nowrap text-slate-600 dark:text-slate-400">
+<span class="material-symbols-outlined text-lg">terminal</span> Software Engineering
+                </button>
+<button class="flex items-center gap-1.5 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-full text-sm font-medium whitespace-nowrap text-slate-600 dark:text-slate-400">
+<span class="material-symbols-outlined text-lg">science</span> Research
+                </button>
+<button class="flex items-center gap-1.5 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-full text-sm font-medium whitespace-nowrap text-slate-600 dark:text-slate-400">
+<span class="material-symbols-outlined text-lg">trending_up</span> Career
+                </button>
+</div>
+</div>
+<!-- AI Matches Section -->
+<section class="px-4 py-2">
+<div class="flex items-center justify-between mb-4">
+<h2 class="text-xl font-bold flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">auto_awesome</span>
+                    AI-Powered Matches
+                </h2>
+<span class="text-xs font-semibold text-primary bg-primary/10 px-2 py-1 rounded-full">Updated Today</span>
+</div>
+<div class="space-y-4">
+<!-- Mentor Card 1 -->
+<div class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-3">
+<div class="flex flex-col items-center justify-center bg-primary/10 border border-primary/20 rounded-lg p-2 min-w-[60px]">
+<span class="text-primary font-bold text-lg leading-none">98%</span>
+<span class="text-[8px] uppercase font-bold text-primary/70">Match</span>
+</div>
+</div>
+<div class="flex items-start gap-4">
+<div class="relative">
+<img alt="Mentor Portrait" class="size-16 rounded-xl object-cover" data-alt="Professional portrait of a male mentor" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCRy643VjtrdfRxXI4D7cieYhLSYpwxsFsXhBV-q37ZJOJbZ8p8b9vDVka78QOlwqFK0hnBcnACq38l58CXzhVLKj5OqnyIRABcEqHeuOFfDLi0Pq1p_UOvrQlCNTdtaa4MghJnGweeox1ds8FhA9RcdH-zR0H9QWTUnv6D2KbVc-gtgMomFBnzZuGcN6CefGCgfzWUFW84c9VmPjhf7jEW6imfRLSlNSs3uQ5ddwr0D_29U12zjzEAwMxujgew1_nZD3B7gUwXmw"/>
+<div class="absolute -bottom-1 -right-1 size-5 bg-green-500 border-2 border-white dark:border-slate-900 rounded-full"></div>
+</div>
+<div class="flex-1 pr-14">
+<h3 class="font-bold text-lg text-slate-900 dark:text-slate-100">David Chen</h3>
+<p class="text-sm text-slate-500 dark:text-slate-400 font-medium mb-2">Senior CS Student • Research Assistant</p>
+<div class="flex flex-wrap gap-1.5 mb-3">
+<span class="text-[10px] px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-md font-medium text-slate-600 dark:text-slate-400">Machine Learning</span>
+<span class="text-[10px] px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-md font-medium text-slate-600 dark:text-slate-400">Python</span>
+<span class="text-[10px] px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-md font-medium text-slate-600 dark:text-slate-400">TensorFlow</span>
+</div>
+</div>
+</div>
+<div class="flex gap-2 mt-4 border-t border-slate-50 dark:border-slate-800 pt-4">
+<button class="flex-1 bg-primary text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors">Book Session</button>
+<button class="px-4 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 py-2.5 rounded-lg text-sm font-semibold">Chat</button>
+</div>
+</div>
+<!-- Mentor Card 2 -->
+<div class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
+<div class="absolute top-0 right-0 p-3">
+<div class="flex flex-col items-center justify-center bg-primary/10 border border-primary/20 rounded-lg p-2 min-w-[60px]">
+<span class="text-primary font-bold text-lg leading-none">92%</span>
+<span class="text-[8px] uppercase font-bold text-primary/70">Match</span>
+</div>
+</div>
+<div class="flex items-start gap-4">
+<div class="relative">
+<img alt="Mentor Portrait" class="size-16 rounded-xl object-cover" data-alt="Professional portrait of a female lecturer" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBGyzO9V1AftEUPjZ0t-RLfewZVk9XYhFSKMJIz-OIWEyfFsP6AMF_iv2RCH6-gnskhGQ65o2ctQI6bOU-SZLAa0azDfcXCveukEcbgk105FSMnro-X8zoo4wO8_Y3kxpXYQ6hZk9abYvMjxaVXlj9vgiaW5QBAgAjA8HvUsRov_sD_XzEANJSflMel-CEpIfMPDF8M9abKbpJ1Jvx99zcX_vVRQwfDOk1f02FrI1dpb6A3jA2EzVWR0ErPa62SpvETwL--WdIGcA"/>
+<div class="absolute -bottom-1 -right-1 size-5 bg-slate-300 border-2 border-white dark:border-slate-900 rounded-full"></div>
+</div>
+<div class="flex-1 pr-14">
+<h3 class="font-bold text-lg text-slate-900 dark:text-slate-100">Dr. Sarah Miller</h3>
+<p class="text-sm text-slate-500 dark:text-slate-400 font-medium mb-2">Associate Lecturer • UX Lead</p>
+<div class="flex flex-wrap gap-1.5 mb-3">
+<span class="text-[10px] px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-md font-medium text-slate-600 dark:text-slate-400">Product Design</span>
+<span class="text-[10px] px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-md font-medium text-slate-600 dark:text-slate-400">UI/UX</span>
+<span class="text-[10px] px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-md font-medium text-slate-600 dark:text-slate-400">Figma</span>
+</div>
+</div>
+</div>
+<div class="flex gap-2 mt-4 border-t border-slate-50 dark:border-slate-800 pt-4">
+<button class="flex-1 bg-primary text-white py-2.5 rounded-lg text-sm font-semibold">Book Session</button>
+<button class="px-4 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 py-2.5 rounded-lg text-sm font-semibold">Chat</button>
+</div>
+</div>
+<!-- Mentor Card 3 -->
+<div class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden opacity-90">
+<div class="absolute top-0 right-0 p-3">
+<div class="flex flex-col items-center justify-center bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 min-w-[60px]">
+<span class="text-slate-600 dark:text-slate-400 font-bold text-lg leading-none">85%</span>
+<span class="text-[8px] uppercase font-bold text-slate-400">Match</span>
+</div>
+</div>
+<div class="flex items-start gap-4">
+<div class="relative">
+<img alt="Mentor Portrait" class="size-16 rounded-xl object-cover" data-alt="Profile photo of a smiling male mentor" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA-8JALp62NTYbpRSpaI67-PiL8X-1A-bqoaZ4bjUkJuWIsdLIoBgQzdrtttg-cCh_VwbsnKjDOWxvmDedfJaoNus5fMMNbz6hl5IE2BhAwwPN6LF-FhcxDxmbsspMvNciRouXI3EaZrDjJaOJWckIbo44y-kPsQ36DPw2PfFdMnKEEXRpkenjcfsBWGUdCgW-dILq7ShWXYyINwohcMszbjs8O1RNjMv_hBfMG-U0b3TE8H1exE27VxxVf7MZNDxDmk8h4AO9rAw"/>
+<div class="absolute -bottom-1 -right-1 size-5 bg-green-500 border-2 border-white dark:border-slate-900 rounded-full"></div>
+</div>
+<div class="flex-1 pr-14">
+<h3 class="font-bold text-lg text-slate-900 dark:text-slate-100">James Wilson</h3>
+<p class="text-sm text-slate-500 dark:text-slate-400 font-medium mb-2">Cloud Architect • Alumni</p>
+<div class="flex flex-wrap gap-1.5 mb-3">
+<span class="text-[10px] px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-md font-medium text-slate-600 dark:text-slate-400">AWS</span>
+<span class="text-[10px] px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-md font-medium text-slate-600 dark:text-slate-400">DevOps</span>
+<span class="text-[10px] px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-md font-medium text-slate-600 dark:text-slate-400">Go</span>
+</div>
+</div>
+</div>
+<div class="flex gap-2 mt-4 border-t border-slate-50 dark:border-slate-800 pt-4">
+<button class="flex-1 bg-primary text-white py-2.5 rounded-lg text-sm font-semibold">Book Session</button>
+<button class="px-4 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 py-2.5 rounded-lg text-sm font-semibold">Chat</button>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 right-0 bg-white dark:bg-background-dark border-t border-slate-200 dark:border-slate-800 px-2 pb-6 pt-2 z-50">
+<div class="flex justify-around items-center max-w-lg mx-auto">
+<a class="flex flex-col items-center gap-1 group" href="#">
+<div class="text-slate-400 group-hover:text-primary transition-colors">
+<span class="material-symbols-outlined">home</span>
+</div>
+<span class="text-[10px] font-medium text-slate-500 group-hover:text-primary">Home</span>
+</a>
+<a class="flex flex-col items-center gap-1 group text-primary" href="#">
+<div class="bg-primary/10 rounded-full px-4 py-1.5 mb-[-4px]">
+<span class="material-symbols-outlined fill-1">school</span>
+</div>
+<span class="text-[10px] font-bold">Mentors</span>
+</a>
+<a class="flex flex-col items-center gap-1 group" href="#">
+<div class="text-slate-400 group-hover:text-primary transition-colors">
+<span class="material-symbols-outlined">chat_bubble</span>
+</div>
+<span class="text-[10px] font-medium text-slate-500 group-hover:text-primary">Chat</span>
+</a>
+<a class="flex flex-col items-center gap-1 group" href="#">
+<div class="text-slate-400 group-hover:text-primary transition-colors">
+<span class="material-symbols-outlined">person</span>
+</div>
+<span class="text-[10px] font-medium text-slate-500 group-hover:text-primary">Profile</span>
+</a>
+</div>
+</nav>
+</body></html>

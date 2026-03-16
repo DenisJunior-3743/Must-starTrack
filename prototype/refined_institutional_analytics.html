@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<title>Institutional Analytics | MUST StarTrack</title>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="flex flex-col min-h-screen">
+<!-- Header -->
+<header class="sticky top-0 z-50 bg-white dark:bg-slate-900 border-b border-primary/10 px-4 py-3 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="text-primary cursor-pointer">
+<span class="material-symbols-outlined text-2xl">arrow_back</span>
+</div>
+<h1 class="text-xl font-bold tracking-tight">Institutional Analytics</h1>
+</div>
+<div class="flex items-center gap-3">
+<button class="p-2 text-slate-500 hover:bg-primary/10 rounded-lg">
+<span class="material-symbols-outlined">search</span>
+</button>
+<button class="p-2 text-slate-500 hover:bg-primary/10 rounded-lg relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+</button>
+<div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="User profile avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCP4TICdMJcX7jPWwxBmslAPe-xQIJUQYNlL48k-SMz9HLGGu3gwLdkTLsJ7keeMg7CHPPhUQ8tpU5REp2KK8E7gKfqt9iEOlXoROTKclRdc0ky6lytCkE11tBp4VoUnOWdVVpSapSFMLoNgKquoneIlqNaSx1IXofWEWCvzOJO168-hnD4D07NauXzlN3WGYIzoAtEOttxc8kWenGL5z9wLBuK04PA8GuLDiKJCtIaRt8UOwABSCPPbwTgNIpXklSosLw0rC049w"/>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="flex-1 p-4 lg:p-6 space-y-6 max-w-7xl mx-auto w-full">
+<!-- Date Filter & Summary -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div>
+<h2 class="text-lg font-semibold text-primary">Overview</h2>
+<p class="text-sm text-slate-500">Real-time university-wide metrics for MUST StarTrack</p>
+</div>
+<div class="flex items-center gap-2 bg-white dark:bg-slate-800 p-1 rounded-lg border border-primary/10 shadow-sm">
+<button class="px-3 py-1.5 text-sm font-medium rounded bg-primary text-white">Last 30 Days</button>
+<button class="px-3 py-1.5 text-sm font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">Q3 2023</button>
+<button class="px-3 py-1.5 text-sm font-medium text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1">
+                        Custom <span class="material-symbols-outlined text-sm">calendar_month</span>
+</button>
+</div>
+</div>
+<!-- Summary Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+<div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-primary/10 shadow-sm">
+<div class="flex items-center justify-between mb-2">
+<span class="text-slate-500 text-sm font-medium">Total Users</span>
+<div class="bg-primary/10 p-2 rounded-lg text-primary">
+<span class="material-symbols-outlined">group</span>
+</div>
+</div>
+<div class="text-2xl font-bold">12.5k</div>
+<div class="flex items-center mt-2 text-emerald-600 text-sm font-medium">
+<span class="material-symbols-outlined text-sm mr-1">trending_up</span>
+                        +12.5% <span class="text-slate-400 ml-1 font-normal">vs last month</span>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-primary/10 shadow-sm">
+<div class="flex items-center justify-between mb-2">
+<span class="text-slate-500 text-sm font-medium">Active Collaborations</span>
+<div class="bg-primary/10 p-2 rounded-lg text-primary">
+<span class="material-symbols-outlined">hub</span>
+</div>
+</div>
+<div class="text-2xl font-bold">842</div>
+<div class="flex items-center mt-2 text-emerald-600 text-sm font-medium">
+<span class="material-symbols-outlined text-sm mr-1">trending_up</span>
+                        +5.2% <span class="text-slate-400 ml-1 font-normal">vs last month</span>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-primary/10 shadow-sm">
+<div class="flex items-center justify-between mb-2">
+<span class="text-slate-500 text-sm font-medium">Total Projects</span>
+<div class="bg-primary/10 p-2 rounded-lg text-primary">
+<span class="material-symbols-outlined">folder_special</span>
+</div>
+</div>
+<div class="text-2xl font-bold">3,102</div>
+<div class="flex items-center mt-2 text-emerald-600 text-sm font-medium">
+<span class="material-symbols-outlined text-sm mr-1">trending_up</span>
+                        +18.1% <span class="text-slate-400 ml-1 font-normal">vs last month</span>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-primary/10 shadow-sm">
+<div class="flex items-center justify-between mb-2">
+<span class="text-slate-500 text-sm font-medium">Platform Trust Score</span>
+<div class="bg-primary/10 p-2 rounded-lg text-primary">
+<span class="material-symbols-outlined">verified_user</span>
+</div>
+</div>
+<div class="text-2xl font-bold">98.2%</div>
+<div class="flex items-center mt-2 text-emerald-600 text-sm font-medium">
+<span class="material-symbols-outlined text-sm mr-1">trending_up</span>
+                        +1.0% <span class="text-slate-400 ml-1 font-normal">stability</span>
+</div>
+</div>
+</div>
+<!-- Faculty Engagement & Growth -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<!-- Faculty Engagement -->
+<div class="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl border border-primary/10 shadow-sm overflow-hidden">
+<div class="p-6 border-b border-primary/5 flex items-center justify-between">
+<div>
+<h3 class="font-bold text-lg">Faculty Engagement</h3>
+<p class="text-sm text-slate-500">Participation and project distribution per faculty</p>
+</div>
+<button class="text-primary text-sm font-semibold">View Details</button>
+</div>
+<div class="p-6 space-y-6">
+<!-- Faculty Row -->
+<div class="space-y-2">
+<div class="flex justify-between text-sm mb-1">
+<span class="font-semibold text-slate-700 dark:text-slate-200">School of Computing</span>
+<span class="text-slate-500">1,240 Projects • 89% Participation</span>
+</div>
+<div class="w-full h-3 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 89%"></div>
+</div>
+</div>
+<!-- Faculty Row -->
+<div class="space-y-2">
+<div class="flex justify-between text-sm mb-1">
+<span class="font-semibold text-slate-700 dark:text-slate-200">Engineering &amp; Tech</span>
+<span class="text-slate-500">950 Projects • 72% Participation</span>
+</div>
+<div class="w-full h-3 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="bg-primary/70 h-full rounded-full" style="width: 72%"></div>
+</div>
+</div>
+<!-- Faculty Row -->
+<div class="space-y-2">
+<div class="flex justify-between text-sm mb-1">
+<span class="font-semibold text-slate-700 dark:text-slate-200">Medicine &amp; Health Sciences</span>
+<span class="text-slate-500">412 Projects • 45% Participation</span>
+</div>
+<div class="w-full h-3 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="bg-primary/50 h-full rounded-full" style="width: 45%"></div>
+</div>
+</div>
+<!-- Faculty Row -->
+<div class="space-y-2">
+<div class="flex justify-between text-sm mb-1">
+<span class="font-semibold text-slate-700 dark:text-slate-200">Business &amp; Management</span>
+<span class="text-slate-500">504 Projects • 61% Participation</span>
+</div>
+<div class="w-full h-3 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="bg-primary/60 h-full rounded-full" style="width: 61%"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Growth Trends Mini Chart Area -->
+<div class="bg-white dark:bg-slate-800 rounded-xl border border-primary/10 shadow-sm p-6 flex flex-col">
+<h3 class="font-bold text-lg mb-1">Growth Trends</h3>
+<p class="text-sm text-slate-500 mb-6">User acquisition (12 months)</p>
+<div class="flex-1 flex items-end gap-2 h-48 mb-4">
+<div class="flex-1 bg-primary/20 rounded-t-sm h-[30%]"></div>
+<div class="flex-1 bg-primary/20 rounded-t-sm h-[40%]"></div>
+<div class="flex-1 bg-primary/20 rounded-t-sm h-[35%]"></div>
+<div class="flex-1 bg-primary/30 rounded-t-sm h-[50%]"></div>
+<div class="flex-1 bg-primary/30 rounded-t-sm h-[60%]"></div>
+<div class="flex-1 bg-primary/40 rounded-t-sm h-[55%]"></div>
+<div class="flex-1 bg-primary/50 rounded-t-sm h-[70%]"></div>
+<div class="flex-1 bg-primary/60 rounded-t-sm h-[85%]"></div>
+<div class="flex-1 bg-primary h-[100%]"></div>
+<div class="flex-1 bg-primary/90 rounded-t-sm h-[90%]"></div>
+<div class="flex-1 bg-primary/80 rounded-t-sm h-[92%]"></div>
+<div class="flex-1 bg-primary/70 rounded-t-sm h-[95%]"></div>
+</div>
+<div class="flex items-center justify-between pt-4 border-t border-primary/5">
+<div class="flex flex-col">
+<span class="text-xs text-slate-400">Collaborations</span>
+<span class="font-bold">+42%</span>
+</div>
+<div class="flex flex-col text-right">
+<span class="text-xs text-slate-400">Total Users</span>
+<span class="font-bold">12.5k</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Section: Resource and Skills -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<!-- Resource Utilization -->
+<div class="bg-white dark:bg-slate-800 rounded-xl border border-primary/10 shadow-sm p-6">
+<div class="flex items-center justify-between mb-6">
+<h3 class="font-bold text-lg">Resource Utilization</h3>
+<div class="flex items-center gap-2 px-2 py-1 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-lg text-xs font-bold">
+<span class="material-symbols-outlined text-sm">cloud_done</span>
+                            Cloud Sync: Operational
+                        </div>
+</div>
+<div class="flex items-center gap-8">
+<div class="relative w-32 h-32 shrink-0">
+<!-- Simple SVG Donut -->
+<svg class="w-full h-full transform -rotate-90">
+<circle class="text-slate-100 dark:text-slate-700" cx="64" cy="64" fill="transparent" r="54" stroke="currentColor" stroke-width="12"></circle>
+<circle class="text-primary" cx="64" cy="64" fill="transparent" r="54" stroke="currentColor" stroke-dasharray="339.29" stroke-dashoffset="118.75" stroke-width="12"></circle>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="text-xl font-bold">65%</span>
+<span class="text-[10px] text-slate-400 uppercase tracking-wider">Used</span>
+</div>
+</div>
+<div class="flex-1 space-y-4">
+<div>
+<div class="flex justify-between text-xs font-medium mb-1">
+<span>Project Media Assets</span>
+<span>4.2 TB</span>
+</div>
+<div class="w-full h-2 bg-slate-100 dark:bg-slate-700 rounded-full">
+<div class="bg-primary h-full rounded-full" style="width: 75%"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between text-xs font-medium mb-1">
+<span>Database Storage</span>
+<span>1.1 TB</span>
+</div>
+<div class="w-full h-2 bg-slate-100 dark:bg-slate-700 rounded-full">
+<div class="bg-primary/40 h-full rounded-full" style="width: 40%"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Top Skills -->
+<div class="bg-white dark:bg-slate-800 rounded-xl border border-primary/10 shadow-sm p-6">
+<h3 class="font-bold text-lg mb-4">Top Skills Institutional Wide</h3>
+<div class="flex flex-wrap gap-2">
+<span class="px-4 py-2 bg-primary text-white rounded-full text-sm font-medium">Artificial Intelligence</span>
+<span class="px-4 py-2 bg-primary/10 text-primary rounded-full text-sm font-medium">Data Analysis</span>
+<span class="px-4 py-2 bg-primary/10 text-primary rounded-full text-sm font-medium">Project Management</span>
+<span class="px-4 py-2 bg-primary/5 text-primary rounded-full text-sm font-medium">Cloud Architecture</span>
+<span class="px-4 py-2 bg-primary/10 text-primary rounded-full text-sm font-medium">Research Methodologies</span>
+<span class="px-4 py-2 bg-primary/20 text-primary rounded-full text-sm font-medium">UI/UX Design</span>
+<span class="px-4 py-2 bg-primary/5 text-primary rounded-full text-sm font-medium">Scientific Writing</span>
+<span class="px-4 py-2 bg-primary text-white/90 rounded-full text-sm font-medium">Software Development</span>
+<span class="px-4 py-2 bg-primary/10 text-primary rounded-full text-sm font-medium">Entrepreneurship</span>
+</div>
+<div class="mt-6 p-4 rounded-lg bg-background-light dark:bg-slate-700/50 border border-primary/5">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary">auto_awesome</span>
+<p class="text-xs text-slate-500 italic">AI Recommendation: Computing students are showing a 30% increase in Python-related project inquiries this semester.</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Navigation Placeholder / Margin for BottomNav -->
+<div class="h-20"></div>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-primary/10 px-6 py-2 pb-6 flex items-center justify-around z-50">
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-[10px] font-medium">Dashboard</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="text-[10px] font-medium">Analytics</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">school</span>
+<span class="text-[10px] font-medium">Faculties</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">hub</span>
+<span class="text-[10px] font-medium">Global Hub</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-[10px] font-medium">Settings</span>
+</a>
+</nav>
+</div>
+</body></html>

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Data Portability &amp; Export | MUST StarTrack</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "accent-gold": "#fbbf24",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+<!-- Header Navigation -->
+<div class="sticky top-0 z-10 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-primary/10">
+<div class="flex items-center p-4 justify-between">
+<div class="text-primary flex size-10 shrink-0 items-center justify-center rounded-full hover:bg-primary/10 cursor-pointer">
+<span class="material-symbols-outlined">arrow_back</span>
+</div>
+<h1 class="text-lg font-bold leading-tight tracking-tight flex-1 text-center pr-10">Data Portability</h1>
+</div>
+</div>
+<main class="flex-1 overflow-y-auto pb-24">
+<!-- Security Context Note -->
+<div class="m-4 p-4 bg-primary/5 border border-primary/20 rounded-xl flex gap-3">
+<span class="material-symbols-outlined text-primary">shield</span>
+<p class="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+                For your security, all export requests will be verified. A secure download link will be sent to your institutional <span class="font-semibold text-primary">@must.edu</span> email address.
+            </p>
+</div>
+<!-- Request All Data CTA -->
+<div class="px-4 py-2">
+<button class="w-full bg-primary text-white font-semibold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined">download_for_offline</span>
+                Request All My Data
+            </button>
+</div>
+<!-- Export Categories -->
+<div class="px-4 pt-6 pb-2">
+<h2 class="text-sm font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-4">Export Categories</h2>
+<div class="space-y-3">
+<!-- Academic Portfolio -->
+<div class="flex items-center gap-4 bg-white dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+<div class="flex items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0 size-12">
+<span class="material-symbols-outlined">school</span>
+</div>
+<div class="flex flex-col flex-1">
+<p class="text-base font-semibold">Academic Portfolio</p>
+<p class="text-xs text-slate-500">PDF, JSON formats</p>
+</div>
+<button class="bg-slate-100 dark:bg-slate-700 text-primary text-sm font-bold px-4 py-2 rounded-lg hover:bg-primary hover:text-white transition-colors">
+                        Export
+                    </button>
+</div>
+<!-- Project Files & Media -->
+<div class="flex items-center gap-4 bg-white dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+<div class="flex items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0 size-12">
+<span class="material-symbols-outlined">folder_zip</span>
+</div>
+<div class="flex flex-col flex-1">
+<p class="text-base font-semibold">Project Files &amp; Media</p>
+<p class="text-xs text-slate-500">Compressed ZIP archive</p>
+</div>
+<button class="bg-slate-100 dark:bg-slate-700 text-primary text-sm font-bold px-4 py-2 rounded-lg hover:bg-primary hover:text-white transition-colors">
+                        Export
+                    </button>
+</div>
+<!-- Interaction History -->
+<div class="flex items-center gap-4 bg-white dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+<div class="flex items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0 size-12">
+<span class="material-symbols-outlined">history_edu</span>
+</div>
+<div class="flex flex-col flex-1">
+<p class="text-base font-semibold">Interaction History</p>
+<p class="text-xs text-slate-500">CSV format</p>
+</div>
+<button class="bg-slate-100 dark:bg-slate-700 text-primary text-sm font-bold px-4 py-2 rounded-lg hover:bg-primary hover:text-white transition-colors">
+                        Export
+                    </button>
+</div>
+<!-- Personal Settings -->
+<div class="flex items-center gap-4 bg-white dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+<div class="flex items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0 size-12">
+<span class="material-symbols-outlined">settings_account_box</span>
+</div>
+<div class="flex flex-col flex-1">
+<p class="text-base font-semibold">Personal Settings</p>
+<p class="text-xs text-slate-500">JSON format</p>
+</div>
+<button class="bg-slate-100 dark:bg-slate-700 text-primary text-sm font-bold px-4 py-2 rounded-lg hover:bg-primary hover:text-white transition-colors">
+                        Export
+                    </button>
+</div>
+</div>
+</div>
+<!-- Export History -->
+<div class="px-4 pt-6 pb-8">
+<h2 class="text-sm font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-4">Export History</h2>
+<div class="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
+<!-- Completed Item -->
+<div class="flex items-center gap-4 p-4 border-b border-slate-100 dark:border-slate-700">
+<div class="size-10 rounded-full bg-green-500/10 text-green-600 flex items-center justify-center">
+<span class="material-symbols-outlined text-xl">check_circle</span>
+</div>
+<div class="flex-1">
+<p class="text-sm font-medium">Academic_Portfolio_2023.zip</p>
+<p class="text-xs text-slate-500">Expires in 2 days</p>
+</div>
+<span class="text-[10px] font-bold px-2 py-1 rounded bg-green-100 text-green-700 uppercase tracking-tighter">Completed</span>
+</div>
+<!-- Processing Item -->
+<div class="flex items-center gap-4 p-4 border-b border-slate-100 dark:border-slate-700">
+<div class="size-10 rounded-full bg-accent-gold/10 text-accent-gold flex items-center justify-center">
+<span class="material-symbols-outlined text-xl">sync</span>
+</div>
+<div class="flex-1">
+<p class="text-sm font-medium">Interaction_History_Full.csv</p>
+<p class="text-xs text-slate-500">Requested 10 mins ago</p>
+</div>
+<span class="text-[10px] font-bold px-2 py-1 rounded bg-accent-gold/20 text-accent-gold uppercase tracking-tighter">Processing</span>
+</div>
+<!-- Expired Item -->
+<div class="flex items-center gap-4 p-4 opacity-60">
+<div class="size-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center">
+<span class="material-symbols-outlined text-xl">timer_off</span>
+</div>
+<div class="flex-1">
+<p class="text-sm font-medium">Old_Media_Backup.zip</p>
+<p class="text-xs text-slate-500">Expired Oct 12, 2023</p>
+</div>
+<span class="text-[10px] font-bold px-2 py-1 rounded bg-slate-200 text-slate-600 uppercase tracking-tighter">Expired</span>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Bar -->
+<div class="fixed bottom-0 left-0 right-0 z-20 border-t border-primary/10 bg-background-light dark:bg-background-dark pb-6 pt-2">
+<div class="flex justify-around items-center px-4">
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">home</span>
+<p class="text-[10px] font-medium">Home</p>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">school</span>
+<p class="text-[10px] font-medium">Academic</p>
+</a>
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">settings</span>
+<p class="text-[10px] font-medium">Settings</p>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">person</span>
+<p class="text-[10px] font-medium">Profile</p>
+</a>
+</div>
+</div>
+</body></html>

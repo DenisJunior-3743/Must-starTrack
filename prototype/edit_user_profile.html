@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Edit Profile - MUST StarTrack</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 antialiased">
+<div class="relative mx-auto flex min-h-screen w-full max-w-md flex-col bg-background-light dark:bg-background-dark overflow-x-hidden border-x border-slate-200 dark:border-slate-800">
+<header class="sticky top-0 z-10 flex items-center bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md p-4 justify-between border-b border-slate-200 dark:border-slate-800">
+<div class="text-slate-900 dark:text-slate-100 flex size-10 shrink-0 items-center justify-center cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition-colors">
+<span class="material-symbols-outlined">close</span>
+</div>
+<h1 class="text-lg font-bold leading-tight tracking-tight flex-1 text-center">Edit Profile</h1>
+<button class="text-primary text-base font-bold leading-normal tracking-wide shrink-0 px-2 py-1 hover:bg-primary/10 rounded-lg transition-colors">Save</button>
+</header>
+<main class="flex-1 overflow-y-auto">
+<div class="flex flex-col items-center py-8 gap-4">
+<div class="relative">
+<div class="bg-slate-200 dark:bg-slate-700 bg-center bg-no-repeat aspect-square bg-cover rounded-full h-32 w-32 border-4 border-white dark:border-slate-900 shadow-sm" data-alt="User profile picture of a young male student" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCVvBMcY7TdPi6o-LD6LaiBpzzrbBKXHNZNS8qj4d4o9FgyUrSVawRLWQ2VhOHQHtdL4VKHg2xUGSkL4KIIFf4sIB9-PabK7SXWOs0lcvvl_yWbbgVBtgLggxKjATRI9e0H75FzZDuEH1IPo5WLBjP0T8wVoGHXG3XVoBu_iQ_7C2sPwT_8PXPaFgdO-dp4c-gUsgu43tdXWrks9n4iOfn1e5Hf8uhpBD3fizvU9UUlzhV4w1anq8E8bOLMrTh3n5I66rBW2v6Qxw");'></div>
+<button class="absolute bottom-0 right-0 p-2 bg-primary text-white rounded-full shadow-lg border-2 border-white dark:border-slate-900 flex items-center justify-center">
+<span class="material-symbols-outlined text-sm">edit</span>
+</button>
+</div>
+<div class="text-center">
+<p class="text-slate-900 dark:text-slate-100 text-lg font-semibold">Alex Johnson</p>
+<p class="text-slate-500 dark:text-slate-400 text-sm">Computer Science Sophomore</p>
+</div>
+</div>
+<section class="px-4 py-4 space-y-6">
+<div>
+<h2 class="text-sm font-bold uppercase tracking-widest text-primary mb-4">Basic Information</h2>
+<div class="space-y-4">
+<label class="flex flex-col gap-2">
+<span class="text-sm font-medium text-slate-700 dark:text-slate-300">Full Name</span>
+<input class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="Your full name" type="text" value="Alex Johnson"/>
+</label>
+<label class="flex flex-col gap-2">
+<span class="text-sm font-medium text-slate-700 dark:text-slate-300">Biography</span>
+<textarea class="w-full min-h-32 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all resize-none" placeholder="Tell us about yourself...">Passionate developer focused on building intuitive user experiences. Currently exploring machine learning and web accessibility.</textarea>
+</label>
+</div>
+</div>
+<div>
+<h2 class="text-sm font-bold uppercase tracking-widest text-primary mb-4">Academic Details</h2>
+<div class="grid grid-cols-2 gap-4">
+<label class="flex flex-col gap-2 col-span-2">
+<span class="text-sm font-medium text-slate-700 dark:text-slate-300">Faculty</span>
+<select class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all">
+<option>Engineering &amp; Information Technology</option>
+<option>Business &amp; Law</option>
+<option>Health Sciences</option>
+</select>
+</label>
+<label class="flex flex-col gap-2">
+<span class="text-sm font-medium text-slate-700 dark:text-slate-300">Program</span>
+<input class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" type="text" value="Computer Science"/>
+</label>
+<label class="flex flex-col gap-2">
+<span class="text-sm font-medium text-slate-700 dark:text-slate-300">Year of Study</span>
+<input class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" type="text" value="Year 2"/>
+</label>
+</div>
+</div>
+<div>
+<h2 class="text-sm font-bold uppercase tracking-widest text-primary mb-4">Skills</h2>
+<div class="flex flex-wrap gap-2 mb-3">
+<span class="inline-flex items-center gap-1 bg-primary/10 text-primary px-3 py-1.5 rounded-full text-xs font-semibold">
+                            Python <span class="material-symbols-outlined text-xs cursor-pointer">close</span>
+</span>
+<span class="inline-flex items-center gap-1 bg-primary/10 text-primary px-3 py-1.5 rounded-full text-xs font-semibold">
+                            UI/UX <span class="material-symbols-outlined text-xs cursor-pointer">close</span>
+</span>
+<span class="inline-flex items-center gap-1 bg-primary/10 text-primary px-3 py-1.5 rounded-full text-xs font-semibold">
+                            React <span class="material-symbols-outlined text-xs cursor-pointer">close</span>
+</span>
+<button class="inline-flex items-center gap-1 border border-dashed border-slate-300 dark:border-slate-600 text-slate-500 px-3 py-1.5 rounded-full text-xs font-semibold hover:border-primary hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-xs">add</span> Add Skill
+                        </button>
+</div>
+</div>
+<div>
+<h2 class="text-sm font-bold uppercase tracking-widest text-primary mb-4">Portfolio &amp; Social</h2>
+<div class="space-y-4">
+<div class="relative">
+<span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400">link</span>
+<input class="w-full pl-12 pr-4 py-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none" placeholder="GitHub Profile URL" type="url"/>
+</div>
+<div class="relative">
+<span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400">link</span>
+<input class="w-full pl-12 pr-4 py-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none" placeholder="LinkedIn Profile URL" type="url"/>
+</div>
+<div class="relative">
+<span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400">public</span>
+<input class="w-full pl-12 pr-4 py-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none" placeholder="Personal Website" type="url"/>
+</div>
+</div>
+</div>
+</section>
+<footer class="p-4 pt-8 space-y-3">
+<button class="w-full bg-primary text-white font-bold py-4 rounded-xl shadow-md hover:bg-primary/90 transition-all active:scale-[0.98]">
+                    Save Changes
+                </button>
+<button class="w-full bg-transparent text-slate-500 font-semibold py-4 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
+                    Cancel
+                </button>
+<div class="h-8"></div>
+</footer>
+</main>
+</div>
+</body></html>

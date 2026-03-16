@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<title>StarTrack Student Portfolio</title>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100">
+<div class="relative flex min-h-screen w-full flex-col max-w-md mx-auto bg-background-light dark:bg-background-dark shadow-xl overflow-x-hidden">
+<!-- Header Navigation -->
+<div class="flex items-center bg-background-light dark:bg-background-dark p-4 pb-2 justify-between sticky top-0 z-10 border-b border-slate-200 dark:border-slate-800">
+<div class="text-slate-900 dark:text-slate-100 flex size-10 shrink-0 items-center cursor-pointer">
+<span class="material-symbols-outlined">arrow_back</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-tight flex-1 text-center">StarTrack Profile</h2>
+<div class="flex w-10 items-center justify-end">
+<button class="flex cursor-pointer items-center justify-center text-slate-900 dark:text-slate-100">
+<span class="material-symbols-outlined">share</span>
+</button>
+</div>
+</div>
+<!-- Profile Section -->
+<div class="flex p-6 flex-col items-center">
+<div class="flex flex-col items-center gap-4">
+<div class="relative">
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full min-h-32 w-32 border-4 border-white dark:border-slate-800 shadow-lg" data-alt="Professional headshot of a smiling male student" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuASDKkVeSLzsNuvdDAd0g_pI4q3ieULQW8VDY2I46Y6hhdcUUWbvUGEN_Mlfkw70ncChWJSK9w83-wqP-kw98_eLj1ruPCofQyYWcQGu9zQ6qCUtZ-lTakF1IrL95jbs8OTWzvAuT5aqQ9VXHF1dtzAGulpwibZPWLjMevYeZTA_sA4UTwklIT28E3xKepYdOs48_z8PUuRHYFL4g5zvUfzFCADtlIsZbpDrYKE-gMcWIDptzuoq-xR0K41XI_pvnHiy9AcWe6Ypw");'>
+</div>
+<div class="absolute bottom-1 right-1 bg-primary text-white p-1 rounded-full border-2 border-white dark:border-slate-800">
+<span class="material-symbols-outlined text-sm">verified</span>
+</div>
+</div>
+<div class="flex flex-col items-center justify-center">
+<p class="text-slate-900 dark:text-slate-100 text-2xl font-bold leading-tight tracking-tight text-center">Alex Rivera</p>
+<p class="text-primary font-medium text-sm text-center mt-1">ST-2024-0892</p>
+<p class="text-slate-600 dark:text-slate-400 text-sm font-normal leading-normal text-center mt-1 max-w-[280px]">
+                        Faculty of Computer Science &amp; Engineering
+                    </p>
+</div>
+</div>
+<div class="flex gap-3 mt-6 w-full">
+<button class="flex-1 min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-wide shadow-md">
+<span>Edit Profile</span>
+</button>
+<button class="flex w-10 cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-100">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+</div>
+<!-- Portfolio Links -->
+<div class="flex px-4 py-2 gap-4 border-y border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+<a class="flex flex-1 items-center justify-center gap-2 py-2" href="#">
+<span class="material-symbols-outlined text-slate-700 dark:text-slate-300">code</span>
+<span class="text-xs font-semibold uppercase tracking-wider text-slate-500">GitHub</span>
+</a>
+<div class="w-px h-6 self-center bg-slate-300 dark:bg-slate-700"></div>
+<a class="flex flex-1 items-center justify-center gap-2 py-2" href="#">
+<span class="material-symbols-outlined text-slate-700 dark:text-slate-300">link</span>
+<span class="text-xs font-semibold uppercase tracking-wider text-slate-500">LinkedIn</span>
+</a>
+</div>
+<!-- Skills Section -->
+<div class="px-4 pt-6">
+<div class="flex items-center justify-between pb-3">
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-tight">Skills &amp; Expertise</h3>
+<span class="material-symbols-outlined text-primary text-xl">psychology</span>
+</div>
+<div class="flex gap-2 flex-wrap">
+<div class="flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-primary/10 dark:bg-primary/20 px-3">
+<p class="text-primary text-xs font-semibold">React Native</p>
+</div>
+<div class="flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-primary/10 dark:bg-primary/20 px-3">
+<p class="text-primary text-xs font-semibold">UI/UX Design</p>
+</div>
+<div class="flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-primary/10 dark:bg-primary/20 px-3">
+<p class="text-primary text-xs font-semibold">TypeScript</p>
+</div>
+<div class="flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-primary/10 dark:bg-primary/20 px-3">
+<p class="text-primary text-xs font-semibold">Node.js</p>
+</div>
+<div class="flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-primary/10 dark:bg-primary/20 px-3">
+<p class="text-primary text-xs font-semibold">AWS Cloud</p>
+</div>
+<div class="flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-primary/10 dark:bg-primary/20 px-3">
+<p class="text-primary text-xs font-semibold">Agile</p>
+</div>
+</div>
+</div>
+<!-- Projects Grid Section -->
+<div class="px-4 pt-8 pb-20">
+<div class="flex items-center justify-between pb-4">
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-tight">Featured Projects</h3>
+<span class="text-primary text-sm font-bold">View All</span>
+</div>
+<div class="grid grid-cols-3 gap-1">
+<div class="aspect-square bg-slate-200 dark:bg-slate-800 rounded-sm overflow-hidden relative group">
+<div class="absolute inset-0 bg-cover bg-center" data-alt="Data visualization dashboard interface" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuA8AsmxXIogaW2sWopicJG6TYGoTwvqJ5JFD-Ob9bTEJxqK0KIK3aRJoCJvzc6qn__a8ECZh0qFO-7IqbgmBHv_8wrs6MTqsSeT7bwFyxudsZNH25j6s-_f0-HE3dvY6OXR6RRmz0umvMj3KRw-PIFeZFZaV5PTFbiQelyR0Lsu7PxY6qFs8LM5Ol_BC8ITE7gQnUmNOVCSUz00tJjX5XllHOVNsxz5OUehWJVzL4LKGhifBKw_j5Ccf01jZdb7oYpISNyT5Ro8og");'></div>
+<div class="absolute inset-0 bg-primary/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+<span class="material-symbols-outlined text-white">visibility</span>
+</div>
+</div>
+<div class="aspect-square bg-slate-200 dark:bg-slate-800 rounded-sm overflow-hidden relative group">
+<div class="absolute inset-0 bg-cover bg-center" data-alt="Mobile application UI design mockup" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuChWXO4lNDIJu5xckzreIXMOF7DafhlIw0PgWd6B3IXC5L0dIhvrjDoYzsISHM0YsAsFJdkm5Qy0FK_AEHVL17FxaBYXNC5B1pxdDGaDzHJCddi85y6HYsA1TOjC0d10WAvgLIarjyZocWRXTIUZqEQq6y6ok_D7rbOnfSeRJiO6oaPSJ2v0_Z3VdYMDp-nzfQdEvUAY9lzTfjJalmw6fgrDcJ8lAbNYfOc-ncRhVxZs_Vcza3OEm5eVCECKZpNwLJnfwktK22XzA");'></div>
+<div class="absolute inset-0 bg-primary/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+<span class="material-symbols-outlined text-white">visibility</span>
+</div>
+</div>
+<div class="aspect-square bg-slate-200 dark:bg-slate-800 rounded-sm overflow-hidden relative group">
+<div class="absolute inset-0 bg-cover bg-center" data-alt="Coding workspace with laptop and screens" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuD-n_2fMGfATIebmXUeLUbudDRnAFLpWuHfB7LAPce-ytvMdDppPhkeYOXYouV8A5SAVoPhLsLBpGHeS3h55dXLVfbLz-DFMNY_4AWRJSwhhmXRwQAbefYTXu2-SUA8LUizSNC_IMqlnT1Y8tx9_ytbNJjOM3kPqd-Hg34ZXnzQoqcVPOo5VJgoV1vO2R-6jee04oBQtXchlQWZxbIyhAG-PeRxEwT8X4hxaSjaKrqR0pau2xuI0mwKs4-v1jmECUTDhFnqTmsXsA");'></div>
+<div class="absolute inset-0 bg-primary/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+<span class="material-symbols-outlined text-white">visibility</span>
+</div>
+</div>
+<div class="aspect-square bg-slate-200 dark:bg-slate-800 rounded-sm overflow-hidden relative group">
+<div class="absolute inset-0 bg-cover bg-center" data-alt="JavaScript code on a dark editor" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCCSVicRF8UgUdmPWoW-A924eOJwH6AW9HaNNLOv2uy1K4Inor0dp3eQtGXyi-lU1MecM3SuT9GSxzPFUF1p4Um7HUEqVuOqpFKURs23_90D3Pwrm6uMou8kD49RnyKnnVWnwSwOcLTKNyI-wMXmpkpRjE7Gt8svNRUxSvJWw7F3hKW7kctryOCTqfb-4ujaihmC95mbZ7c7Dysmz2dZIxLxMR3ONSOVhGNkxLpuPuScUqgkZjtTCJ3abVg2404_eRl10Tqid1CXA");'></div>
+<div class="absolute inset-0 bg-primary/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+<span class="material-symbols-outlined text-white">visibility</span>
+</div>
+</div>
+<div class="aspect-square bg-slate-200 dark:bg-slate-800 rounded-sm overflow-hidden relative group">
+<div class="absolute inset-0 bg-cover bg-center" data-alt="Cloud computing network infrastructure diagram" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBAvPwSR4a0bY3gyNhoDRoDBOqajQnZ4WtSSU_oEG-a0LkxaC3FtQcCePRg50z0i_4r-mLdbEywguggqEfCS-RKXvKImgbWWgf-9ms_bO3A3bu4AglkxDBXvVECVEbJ4q56eNWuY-iyzz1RY6bDJ3_bRSpTs9nNHUi1ziid09WLE7x9oTJJthvLclruviz90-uAAVqd8X8zyuZoqu5W8M4x1ZgGqJjLAT-FDmsY5Gjbxge872MLCjd_kdWLeOEegX5uOE5jOKw1Ng");'></div>
+<div class="absolute inset-0 bg-primary/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+<span class="material-symbols-outlined text-white">visibility</span>
+</div>
+</div>
+<div class="aspect-square bg-slate-200 dark:bg-slate-800 rounded-sm overflow-hidden relative group">
+<div class="absolute inset-0 bg-cover bg-center" data-alt="Agile scrum board with sticky notes" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBWTg8Kwhd-S-XT-FfvCSDw-gC87daZy62fhvw85pSZrfyPFj03NJQZI5MgtMgAvV44n0o_Rz059dmwYhRjeAJPWgPt65jw0ENOAStYV_1-2u0Y_R10ptzRvoY449Z5tkZPK78VbUnI7dHTb81Y09GrHegr7hJizXmFTh0dQ3123a0OrLcz6wq1DTAsA-bMKo3oSUq9ZkKA25I684BqrarTmuwz8pMuNGZHjgPRorR4lCABpYR6WlO-BYA9UN-ay1nYVpLaSDmINw");'></div>
+<div class="absolute inset-0 bg-primary/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+<span class="material-symbols-outlined text-white">visibility</span>
+</div>
+</div>
+<div class="aspect-square bg-slate-200 dark:bg-slate-800 rounded-sm overflow-hidden relative group">
+<div class="absolute inset-0 bg-cover bg-center" data-alt="Web design interface layout" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBip8YUNjmQPNaQfutNjf3kTuDTvUbPd65y-DeyDtuupyrS23xYUwrpSdxSRkDlmqSKHg5iMtn1CNAGaGeAIVxcpvONPWUN21oRHGhZXVPQiujrnr0x7glPgS_1KW7S7_gxg5piZy9P2kWlv2EsN7YeWCpfNkEwYxyEV64ja7DfARPqm8NgEQE_oLAvzSQtUDMZXafktrAnf4aaZGsI2POIBfvuWxYS8NTCpumgsinMVoVFayD96hoXzBf1ahsLsQE4S5tSv2uKzg");'></div>
+<div class="absolute inset-0 bg-primary/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+<span class="material-symbols-outlined text-white">visibility</span>
+</div>
+</div>
+<div class="aspect-square bg-slate-200 dark:bg-slate-800 rounded-sm overflow-hidden relative group">
+<div class="absolute inset-0 bg-cover bg-center" data-alt="Machine learning concept graphic" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCuNjIXqJ0ISY9UbxCMJiBsd0PQwSlI-ca7jFarkPNT7izuBZpO-NgR0IOdtgjhvOuYLDxQRj55abjfRIE_2aOWP4Xt1J7BLX9Ymc9bgbFU3eWRlGBm8TCjdCmcXOZErPgu0UwmH7R4FFFC_7oJHfF8kRY4RWJLVjyouHNseR-pYnMSg4UKVcGonItW1Ab_CRJ9RBmb2pPIczpsWyNFV_hLvIOS6O9t27A-lePR8cwSq8lgd9PntC94HjS6QsDcjYlzxSs_l1EQzA");'></div>
+<div class="absolute inset-0 bg-primary/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+<span class="material-symbols-outlined text-white">visibility</span>
+</div>
+</div>
+<div class="aspect-square bg-slate-200 dark:bg-slate-800 rounded-sm overflow-hidden relative group">
+<div class="absolute inset-0 bg-cover bg-center" data-alt="Developers collaborating at a desk" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBRpomkeD3aV_qAnnvrDC_OZt0TRAsEUxG3OoIHmENQRFVwnkLCDM-XwSDx2-PCs3TFIwoCW-WO-oL1DFeJlDgKt2b3YlNM16EXsJUoK8Dww9wECjyDcNud7QTVZv39M7H_a8jQZFc_qoSUasRbO8bdK0OI6h3a9Pp9-kXvSfHkPZaytzAA57nk_PWWp9Jl2bmLQGl4Dkw05D4Smwng32_yZ9KmNxaLE-WbU2cm0gWnFzYjkdHoMGYufK67plfUSHk9R685dyUQLw");'></div>
+<div class="absolute inset-0 bg-primary/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+<span class="material-symbols-outlined text-white">visibility</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Navigation Bar -->
+<div class="fixed bottom-0 left-0 right-0 max-w-md mx-auto border-t border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-background-dark/90 backdrop-blur-md px-4 pb-4 pt-2 flex gap-2">
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">home</span>
+<p class="text-[10px] font-medium leading-normal tracking-wide">Home</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">group</span>
+<p class="text-[10px] font-medium leading-normal tracking-wide">Network</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">account_circle</span>
+<p class="text-[10px] font-bold leading-normal tracking-wide">Portfolio</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">work</span>
+<p class="text-[10px] font-medium leading-normal tracking-wide">Jobs</p>
+</a>
+</div>
+</div>
+</body></html>

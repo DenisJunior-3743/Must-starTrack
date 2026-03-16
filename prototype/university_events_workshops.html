@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>MUST StarTrack - Events &amp; Workshops</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100">
+<div class="relative flex min-h-screen w-full flex-col max-w-md mx-auto bg-background-light dark:bg-background-dark shadow-xl overflow-x-hidden">
+<!-- Header -->
+<header class="flex items-center p-4 justify-between sticky top-0 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md z-20">
+<div class="flex size-10 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined">arrow_back</span>
+</div>
+<h1 class="text-lg font-bold leading-tight tracking-tight flex-1 text-center">MUST StarTrack</h1>
+<div class="flex size-10 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined">notifications</span>
+</div>
+</header>
+<!-- Search and Filter -->
+<div class="px-4 py-3">
+<div class="flex gap-2">
+<label class="flex flex-col flex-1 h-12">
+<div class="flex w-full flex-1 items-stretch rounded-xl h-full bg-slate-200 dark:bg-slate-800">
+<div class="text-slate-500 flex items-center justify-center pl-4">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</div>
+<input class="form-input flex w-full border-none bg-transparent focus:ring-0 h-full placeholder:text-slate-500 px-3 text-base font-normal" placeholder="Search events or workshops..." value=""/>
+</div>
+</label>
+<button class="flex size-12 items-center justify-center rounded-xl bg-primary text-white">
+<span class="material-symbols-outlined">tune</span>
+</button>
+</div>
+</div>
+<!-- Categories -->
+<div class="flex gap-3 px-4 py-2 overflow-x-auto no-scrollbar">
+<div class="flex h-9 shrink-0 items-center justify-center px-5 rounded-full bg-primary text-white text-sm font-medium">
+                All
+            </div>
+<div class="flex h-9 shrink-0 items-center justify-center px-5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-medium">
+                Workshops
+            </div>
+<div class="flex h-9 shrink-0 items-center justify-center px-5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-medium">
+                Seminars
+            </div>
+<div class="flex h-9 shrink-0 items-center justify-center px-5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-medium">
+                Hackathons
+            </div>
+<div class="flex h-9 shrink-0 items-center justify-center px-5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-medium">
+                Career Fair
+            </div>
+</div>
+<!-- Featured Events Carousel -->
+<section class="mt-4">
+<div class="flex items-center justify-between px-4 mb-3">
+<h2 class="text-xl font-bold tracking-tight">Featured Events</h2>
+<span class="text-primary text-sm font-semibold">See All</span>
+</div>
+<div class="flex gap-4 px-4 overflow-x-auto no-scrollbar pb-2">
+<!-- Featured Card 1 -->
+<div class="relative min-w-[300px] h-48 rounded-2xl overflow-hidden group">
+<img class="absolute inset-0 w-full h-full object-cover" data-alt="University students working together in a modern tech lab" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA89fXT7iVdjoCkeMSc9SUyki3N93ylPDNsf8aSmipprP6QY8_BBAJUcrNYdjWFVtDo8lbXwoX4T1Im5ceEqHl8ylQURZTEcjpyNYvaFL7qpsv4hK39blyXlbc9fYpqZjPk7mUtekxflQzlUZyVB4aPX7g0T8O5k0qUv_qFENuNNh6xTuLfN4ja42MpfdpgOODfRYjkJYJmC6dONKthlpwMl5cHuCy9mvOPJXUaNYxPoNM5qJbQLXi830iBAsC2OxzAUjhOHchwQw"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+<div class="absolute bottom-4 left-4 right-4">
+<span class="bg-primary/90 text-white text-[10px] uppercase font-bold px-2 py-1 rounded mb-2 inline-block">Featured</span>
+<h3 class="text-white font-bold text-lg leading-tight">Global Tech Summit 2024</h3>
+<p class="text-slate-200 text-xs">Main Auditorium • Oct 24, 09:00 AM</p>
+</div>
+</div>
+<!-- Featured Card 2 -->
+<div class="relative min-w-[300px] h-48 rounded-2xl overflow-hidden group">
+<img class="absolute inset-0 w-full h-full object-cover" data-alt="Close up of futuristic robotic hand" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCPBg_NXuDW6ufIyvScmJAwmR5-PuwTiwuSMvuMFC5P6HQ8H6IZv1oUw-9hj31JZCvZkVr8fUhrGg6TMZCvZ5tGAXiTc_NP8OXvmxl8l4lYZ5NhnQJKcKbcS5Z3ugxNxCMDhHsGc5-Fuk8NJQXDQBwc9r0NJq5VeNWkXqh7mQXeEuqBFiz_Tpj1PMZvuuSfIfJ3W0wtIc1FsyFwnNYOpk_hUsaEtJ4YIKGUAFGsFQXrKReVQRFdkGsrgYeDXmhSg-wbVyyV3yErcQ"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+<div class="absolute bottom-4 left-4 right-4">
+<span class="bg-primary/90 text-white text-[10px] uppercase font-bold px-2 py-1 rounded mb-2 inline-block">Limited Slots</span>
+<h3 class="text-white font-bold text-lg leading-tight">AI &amp; Ethics Workshop</h3>
+<p class="text-slate-200 text-xs">Computing Block B • Oct 28, 02:00 PM</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Main Feed -->
+<section class="px-4 py-6 mb-20">
+<h2 class="text-xl font-bold tracking-tight mb-4">Upcoming Events</h2>
+<div class="flex flex-col gap-6">
+<!-- Event Card 1 -->
+<div class="bg-white dark:bg-slate-900 rounded-2xl overflow-hidden shadow-sm border border-slate-100 dark:border-slate-800">
+<div class="h-44 w-full relative">
+<img class="w-full h-full object-cover" data-alt="Matrix code on a digital screen for python workshop" src="https://lh3.googleusercontent.com/aida-public/AB6AXuACrXxHoTnZxGHsAsxTomk5MMKH992MTgDWjlESfrr0Chc7Y97eTWo45Dd5Epe9GP4Gug-Jb7WLrLNUs3LAK-A1_0L9Xi3KopoVm1clTIsz2C-DWPVp7aI3a_As07OkKmbacnawI-KV-hD0CUHYHf6ia2hXXdpHWlkklARhvaTKGFqq5NYuHhzjDXRiBysceh_-rzdgAdPp9si7IAPbBXx9xZgJTjLUOsO05qGJgvvjYszTz0CBRtJfTPGYyygaSAbNhJgn2OSPOA"/>
+<div class="absolute top-3 right-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm px-3 py-1 rounded-lg text-center shadow-md">
+<p class="text-[10px] font-bold text-primary uppercase">Oct</p>
+<p class="text-lg font-bold leading-none">15</p>
+</div>
+</div>
+<div class="p-4">
+<div class="flex gap-2 mb-2">
+<span class="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">Skills: Python</span>
+<span class="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold">Certificate Included</span>
+</div>
+<h3 class="text-lg font-bold mb-1">Advanced Python for Data Science</h3>
+<div class="flex items-center text-slate-500 dark:text-slate-400 text-sm mb-3 gap-3">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">schedule</span>
+<span>14:00 - 17:00</span>
+</div>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">location_on</span>
+<span>Computing Block, Lab 4</span>
+</div>
+</div>
+<button class="w-full py-3 bg-primary text-white rounded-xl font-bold text-sm">Register Now</button>
+</div>
+</div>
+<!-- Event Card 2 -->
+<div class="bg-white dark:bg-slate-900 rounded-2xl overflow-hidden shadow-sm border border-slate-100 dark:border-slate-800">
+<div class="h-44 w-full relative">
+<img class="w-full h-full object-cover" data-alt="Group of students at a career fair booth" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDRm8GtX6MnBagm46bZPjyX-5Lvt7GqwrjSoKpi6RCS7_7DJaiQivwtRN9I3EHVpFNTKOQCc4wzNroQGtEgGC8dYyy-_nArbajeqreNxklaEhdBqYFCn7t907oeMYbm7EBjU3VfNmRZssSL1quvXnFg42RmTFZJinYENoJMUxvFMui7hxec02w-SFKNyl_7HjoLN0Xoc8yJtZwQ3qDB2-bO9ulpgGHMswiWsKZjMXJDeiY2amNPWBMXxBVT7yaOA2zhBVcobUMqcw"/>
+<div class="absolute top-3 right-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm px-3 py-1 rounded-lg text-center shadow-md">
+<p class="text-[10px] font-bold text-primary uppercase">Oct</p>
+<p class="text-lg font-bold leading-none">20</p>
+</div>
+</div>
+<div class="p-4">
+<div class="flex gap-2 mb-2">
+<span class="px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-600 dark:text-orange-400 text-[10px] font-bold">Networking</span>
+</div>
+<h3 class="text-lg font-bold mb-1">Annual Engineering Career Fair</h3>
+<div class="flex items-center text-slate-500 dark:text-slate-400 text-sm mb-3 gap-3">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">schedule</span>
+<span>09:00 - 16:00</span>
+</div>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">location_on</span>
+<span>Grand Hall, Block A</span>
+</div>
+</div>
+<button class="w-full py-3 bg-primary text-white rounded-xl font-bold text-sm">View Participating Companies</button>
+</div>
+</div>
+<!-- Event Card 3 -->
+<div class="bg-white dark:bg-slate-900 rounded-2xl overflow-hidden shadow-sm border border-slate-100 dark:border-slate-800">
+<div class="h-44 w-full relative">
+<img class="w-full h-full object-cover" data-alt="Speaker presenting at a university seminar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAiRkSeonoRuHUDpGTOkokhUSvE1JOcXWQhLLURzFAcTO2ueETuYn0v8kyzPwU8tRuBxi_Zb6G3wfqlPc_H9GB9tHSx8tCiTX7lyRTxoJXQ1azqTjqweZsBfJO1ORzVWY3C8sVPPQQPi3iNN_VTIiOQ4FzabTIOKFDZ7_sesHJWxSZBqn2VQuDAa02mm1nJsPD7F8Wx1SMVUoIuf6JJx0IkWRXTiqkOkj2wqxEAVYuJM8tVk-a8cNfKSQqe6CjwTNPqMYid_giedw"/>
+<div class="absolute top-3 right-3 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm px-3 py-1 rounded-lg text-center shadow-md">
+<p class="text-[10px] font-bold text-primary uppercase">Oct</p>
+<p class="text-lg font-bold leading-none">22</p>
+</div>
+</div>
+<div class="p-4">
+<div class="flex gap-2 mb-2">
+<span class="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 text-[10px] font-bold">Entrepreneurship</span>
+</div>
+<h3 class="text-lg font-bold mb-1">Startup Pitching 101</h3>
+<div class="flex items-center text-slate-500 dark:text-slate-400 text-sm mb-3 gap-3">
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">schedule</span>
+<span>11:00 - 13:00</span>
+</div>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">location_on</span>
+<span>Business Incubation Hub</span>
+</div>
+</div>
+<button class="w-full py-3 bg-primary text-white rounded-xl font-bold text-sm">Register Now</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 w-full max-w-md bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-4 pb-6 pt-2 flex justify-between items-center z-30">
+<a class="flex flex-col items-center gap-1 text-slate-500 dark:text-slate-400" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="text-[10px] font-medium">Home</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined fill-1">event_available</span>
+<span class="text-[10px] font-bold">Events</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-500 dark:text-slate-400" href="#">
+<span class="material-symbols-outlined">schedule</span>
+<span class="text-[10px] font-medium">Schedule</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-500 dark:text-slate-400" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="text-[10px] font-medium">Profile</span>
+</a>
+</nav>
+</div>
+<style>
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .fill-1 {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+</body></html>

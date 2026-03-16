@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "417190454074",
+    "project_id": "star-track-4ba2b",
+    "storage_bucket": "star-track-4ba2b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:417190454074:android:7ddb6c82c7be0390a8e603",
+        "android_client_info": {
+          "package_name": "ug.ac.must.must_startrack"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAq4duSPB5AC5TEgz2-NjT1cMu0DQ-eCp0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

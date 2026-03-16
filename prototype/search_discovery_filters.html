@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Search &amp; Discovery - StarTrack</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Lexend', sans-serif;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #1152d433;
+            border-radius: 10px;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display">
+<div class="relative flex min-h-screen w-full flex-col max-w-md mx-auto bg-background-light dark:bg-background-dark overflow-x-hidden">
+<!-- Header & Search -->
+<header class="sticky top-0 z-20 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md px-4 pt-6 pb-2">
+<div class="flex items-center justify-between mb-4">
+<h1 class="text-2xl font-bold tracking-tight text-primary">Discover</h1>
+<button class="p-2 rounded-full bg-primary/10 text-primary">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+</div>
+<div class="flex gap-2">
+<div class="relative flex-1">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+<input class="w-full bg-white dark:bg-slate-800 border-none rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary shadow-sm" placeholder="Search projects, skills, or students" type="text"/>
+</div>
+<button class="bg-primary text-white p-3 rounded-xl shadow-md flex items-center justify-center">
+<span class="material-symbols-outlined">tune</span>
+</button>
+</div>
+</header>
+<main class="flex-1 px-4 py-2 overflow-y-auto custom-scrollbar pb-24">
+<!-- Recent Searches -->
+<section class="mb-6">
+<div class="flex items-center justify-between mb-3">
+<h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500">Recent Searches</h2>
+<button class="text-xs font-medium text-primary">Clear All</button>
+</div>
+<div class="flex flex-wrap gap-2">
+<div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-200 dark:bg-slate-800 text-xs font-medium">
+<span class="material-symbols-outlined text-[16px]">history</span>
+                        AI Ethics
+                    </div>
+<div class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-200 dark:bg-slate-800 text-xs font-medium">
+<span class="material-symbols-outlined text-[16px]">history</span>
+                        Blockchain Research
+                    </div>
+</div>
+</section>
+<!-- Trending Skills -->
+<section class="mb-8">
+<h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-3">Trending Skills</h2>
+<div class="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+<div class="flex-shrink-0 flex flex-col items-center gap-2">
+<div class="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-3xl">psychology</span>
+</div>
+<span class="text-[10px] font-medium">AI/ML</span>
+</div>
+<div class="flex-shrink-0 flex flex-col items-center gap-2">
+<div class="w-14 h-14 rounded-2xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600">
+<span class="material-symbols-outlined text-3xl">flutter_dash</span>
+</div>
+<span class="text-[10px] font-medium">Flutter</span>
+</div>
+<div class="flex-shrink-0 flex flex-col items-center gap-2">
+<div class="w-14 h-14 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600">
+<span class="material-symbols-outlined text-3xl">currency_bitcoin</span>
+</div>
+<span class="text-[10px] font-medium">Blockchain</span>
+</div>
+<div class="flex-shrink-0 flex flex-col items-center gap-2">
+<div class="w-14 h-14 rounded-2xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-orange-600">
+<span class="material-symbols-outlined text-3xl">database</span>
+</div>
+<span class="text-[10px] font-medium">Data Sci</span>
+</div>
+<div class="flex-shrink-0 flex flex-col items-center gap-2">
+<div class="w-14 h-14 rounded-2xl bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center text-rose-600">
+<span class="material-symbols-outlined text-3xl">security</span>
+</div>
+<span class="text-[10px] font-medium">Cyber</span>
+</div>
+</div>
+</section>
+<!-- Advanced Filters Section -->
+<section class="bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-sm border border-slate-100 dark:border-slate-800">
+<div class="flex items-center justify-between mb-6">
+<h2 class="text-lg font-bold">Advanced Filters</h2>
+<span class="material-symbols-outlined text-slate-400">expand_less</span>
+</div>
+<div class="space-y-6">
+<!-- Faculty -->
+<div>
+<label class="block text-xs font-bold text-slate-500 uppercase mb-3">Faculty</label>
+<select class="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg py-2.5 px-3 text-sm focus:ring-primary focus:border-primary">
+<option>Computing &amp; IT</option>
+<option>Engineering</option>
+<option>Business Management</option>
+<option>Applied Sciences</option>
+</select>
+</div>
+<!-- Program/Course -->
+<div>
+<label class="block text-xs font-bold text-slate-500 uppercase mb-3">Program / Course</label>
+<input class="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg py-2.5 px-3 text-sm focus:ring-primary focus:border-primary" placeholder="e.g. B.Sc. Computer Science" type="text"/>
+</div>
+<!-- Project Category -->
+<div>
+<label class="block text-xs font-bold text-slate-500 uppercase mb-3">Project Category</label>
+<div class="grid grid-cols-2 gap-2">
+<button class="border border-primary bg-primary/5 text-primary rounded-lg py-2 text-xs font-medium">Research</button>
+<button class="border border-slate-200 dark:border-slate-700 rounded-lg py-2 text-xs font-medium">Mobile App</button>
+<button class="border border-slate-200 dark:border-slate-700 rounded-lg py-2 text-xs font-medium">Hardware</button>
+<button class="border border-slate-200 dark:border-slate-700 rounded-lg py-2 text-xs font-medium">Data Analysis</button>
+</div>
+</div>
+<!-- Skill Requirement -->
+<div>
+<label class="block text-xs font-bold text-slate-500 uppercase mb-3">Skill Requirement</label>
+<div class="flex flex-wrap gap-2">
+<div class="flex items-center gap-1 bg-primary text-white px-3 py-1 rounded-full text-[11px]">
+                                Python <span class="material-symbols-outlined text-[14px]">close</span>
+</div>
+<div class="flex items-center gap-1 bg-primary text-white px-3 py-1 rounded-full text-[11px]">
+                                React <span class="material-symbols-outlined text-[14px]">close</span>
+</div>
+<button class="px-3 py-1 rounded-full border border-dashed border-slate-400 text-slate-500 text-[11px] font-medium">+ Add Skill</button>
+</div>
+</div>
+<!-- Post Date -->
+<div>
+<label class="block text-xs font-bold text-slate-500 uppercase mb-3">Recency</label>
+<div class="flex gap-2">
+<button class="flex-1 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-[11px] font-medium border-none">Anytime</button>
+<button class="flex-1 py-2 rounded-lg bg-primary text-white text-[11px] font-medium shadow-sm">Last 30 Days</button>
+<button class="flex-1 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-[11px] font-medium border-none">Last 7 Days</button>
+</div>
+</div>
+<div class="pt-4">
+<button class="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 rounded-xl shadow-lg transition-all active:scale-[0.98]">
+                            Apply Filters
+                        </button>
+<button class="w-full text-slate-500 text-sm font-medium py-3 mt-1">
+                            Reset All
+                        </button>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg border-t border-slate-200 dark:border-slate-800 px-6 py-3 z-30">
+<div class="flex items-center justify-between">
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">rss_feed</span>
+<span class="text-[10px] font-medium">Feed</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined fill-1">explore</span>
+<span class="text-[10px] font-bold">Discover</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">chat_bubble</span>
+<span class="text-[10px] font-medium">Messages</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="text-[10px] font-medium">Profile</span>
+</a>
+</div>
+</nav>
+</div>
+</body></html>

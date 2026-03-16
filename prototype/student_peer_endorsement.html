@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Student Peer Endorsement | MUST StarTrack</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Lexend', sans-serif;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .active-nav {
+            color: #1152d4;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="max-w-md mx-auto bg-white dark:bg-slate-900 min-h-screen shadow-xl flex flex-col relative overflow-hidden">
+<!-- Header -->
+<header class="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800 sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md z-10">
+<button class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+<span class="material-symbols-outlined block">arrow_back</span>
+</button>
+<h1 class="text-lg font-bold tracking-tight">Peer Endorsement</h1>
+<button class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+<span class="material-symbols-outlined block">share</span>
+</button>
+</header>
+<!-- Main Content -->
+<main class="flex-1 overflow-y-auto pb-24">
+<!-- Profile Summary -->
+<section class="p-6 text-center border-b border-slate-50 dark:border-slate-800">
+<div class="relative inline-block mb-4">
+<div class="w-28 h-28 rounded-full border-4 border-primary/10 p-1 mx-auto overflow-hidden">
+<img alt="Student profile portrait" class="w-full h-full object-cover rounded-full" data-alt="Close up portrait of a smiling male student" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDyPjQQpmgNb0cJGBjxcqtXfXXmzH2IvnIT18GHyGHi9_l3hmtdW9dd4-Dh-VUydqMjIiMJhgLHdzv59fANKAaiyhujjd2cPBaLjLBtPp2r3f12GgqmYCYay23o3Q3N1_HwmEpbJuz7jmDCt5ziSMPaQsYRjuI2q-8iPXAxlKBmlEv9xRk39oJJxNKbx-1T8jo_XGiB42Fs3IytucItONYITt814WMp1I7w-cgywIs_A2mOK5Ye2O_dE8bH9UWg2KQuwoglrHUraw"/>
+</div>
+<div class="absolute bottom-1 right-1 bg-green-500 w-5 h-5 border-2 border-white dark:border-slate-900 rounded-full"></div>
+</div>
+<h2 class="text-2xl font-bold text-slate-900 dark:text-white">Alex Johnson</h2>
+<p class="text-primary font-medium">Bachelor of Computer Science</p>
+<div class="mt-2 flex items-center justify-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+<span class="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">Class of 2025</span>
+<span class="w-1 h-1 bg-slate-300 rounded-full"></span>
+<span class="bg-primary/10 text-primary px-2 py-1 rounded font-semibold">MUST StarTrack</span>
+</div>
+</section>
+<!-- Top Endorsed Skills -->
+<section class="p-6">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-lg font-bold">Top Endorsed Skills</h3>
+<span class="text-xs font-semibold text-primary bg-primary/10 px-2 py-1 rounded-full uppercase tracking-wider">Verified</span>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<div class="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700 flex flex-col gap-2">
+<span class="material-symbols-outlined text-primary">palette</span>
+<div>
+<p class="font-bold text-sm">UI Design</p>
+<p class="text-xs text-slate-500">12 Endorsements</p>
+</div>
+</div>
+<div class="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700 flex flex-col gap-2">
+<span class="material-symbols-outlined text-primary">terminal</span>
+<div>
+<p class="font-bold text-sm">React Native</p>
+<p class="text-xs text-slate-500">8 Endorsements</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Endorse a Skill Search -->
+<section class="px-6 py-4">
+<div class="bg-primary/5 dark:bg-primary/10 rounded-2xl p-5 border border-primary/20">
+<h3 class="text-base font-bold mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-xl">verified_user</span>
+                        Endorse a Skill
+                    </h3>
+<div class="relative mb-4">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+<input class="w-full bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg py-2 pl-10 pr-4 text-sm focus:ring-primary focus:border-primary" placeholder="Search Alex's skills..." type="text"/>
+</div>
+<div class="flex flex-wrap gap-2">
+<button class="px-3 py-1.5 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-full text-xs font-medium hover:bg-primary hover:text-white transition-all">+ UX Research</button>
+<button class="px-3 py-1.5 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-full text-xs font-medium hover:bg-primary hover:text-white transition-all">+ Python</button>
+<button class="px-3 py-1.5 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-full text-xs font-medium hover:bg-primary hover:text-white transition-all">+ Technical Writing</button>
+</div>
+</div>
+</section>
+<!-- Write Peer Recommendation Form -->
+<section class="p-6">
+<h3 class="text-lg font-bold mb-4">Write a Recommendation</h3>
+<div class="space-y-4">
+<div class="flex items-start gap-3">
+<div class="w-10 h-10 rounded-full bg-primary/20 shrink-0 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">person</span>
+</div>
+<div class="flex-1">
+<textarea class="w-full border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-sm focus:ring-primary focus:border-primary" placeholder="How did you work with Alex? Describe their strengths..." rows="3"></textarea>
+<div class="flex justify-between items-center mt-2">
+<p class="text-[10px] text-slate-400">Context helps employers understand the value.</p>
+<button class="bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold hover:opacity-90 transition-opacity">
+                                    Post Recommendation
+                                </button>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Success Feedback (Hidden by default, shown as conceptual UI element) -->
+<div class="mx-6 p-3 bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800 rounded-lg flex items-center gap-3 mb-6">
+<span class="material-symbols-outlined text-green-600">check_circle</span>
+<p class="text-xs font-medium text-green-700 dark:text-green-400">Endorsement successfully submitted to Alex's profile!</p>
+</div>
+<!-- Recent Endorsements -->
+<section class="p-6">
+<h3 class="text-lg font-bold mb-4">Recent Endorsements</h3>
+<div class="space-y-4">
+<!-- Endorsement Item -->
+<div class="flex gap-4">
+<img alt="Peer profile" class="w-10 h-10 rounded-full object-cover shrink-0" data-alt="Portrait of a female student peer" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC5Jv-7dvZyiFhjvKLyoj6YeM88wIMVmt36U6uOYcO1AeM-co-Eo-C5V79ARvtSaDfom0WfbuxJwHuCfDK5NqGUE5TRb3SbN7w4XQ4Qukr18-m37XzLmE8q0yJ8BlB1craJc-z9LYCL9Beh0VBN_tc6mzZm1FrliOXlNTNvl7KwaGXY1mWuX6z2sxob1sQj0N24eIAO4CAyREuwGDO-rIMw6tZXk74a79KfQv392Ajz_gZDbXLC92e-mN3B_fnnlJDMtHhZjgP7rA"/>
+<div class="flex-1 pb-4 border-b border-slate-100 dark:border-slate-800">
+<p class="text-sm font-bold">Sarah Williams <span class="font-normal text-slate-500">endorsed Alex for</span> UI Design</p>
+<p class="text-xs text-slate-400 mt-1">2 days ago • Worked together on Design Sprint Project</p>
+</div>
+</div>
+<!-- Endorsement Item -->
+<div class="flex gap-4">
+<img alt="Peer profile" class="w-10 h-10 rounded-full object-cover shrink-0" data-alt="Portrait of a male student peer" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCuXbjSvrgcaI11T74oLNXWOqCxHNyfNtDJDFHXNIaqgcfDKirksYXB2KzHYQ4GcyqQ-x552WZZA7Y5J8ZJCvExCGVm6zjdx-rxammZJ46lUlwMQwamBVC-07FSsvu76Qsasitd9ayCmru7IsPED5r4cVj05UDXssztneam_kzWmwP8PhYKJmpQoU_WkRS41Mkp9hKOvyqjgMD-lZkg81YcMjMR0olqAYhgyJC-Jep090dus5pvMrzDGGrLL-68UqvwOX0cX1mhYw"/>
+<div class="flex-1 pb-4 border-b border-slate-100 dark:border-slate-800">
+<p class="text-sm font-bold">David Chen <span class="font-normal text-slate-500">endorsed Alex for</span> React Native</p>
+<p class="text-xs text-slate-400 mt-1">1 week ago • Hackathon teammates</p>
+</div>
+</div>
+</div>
+<button class="w-full mt-4 text-primary text-sm font-semibold hover:underline">View all 25 endorsements</button>
+</section>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="absolute bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-100 dark:border-slate-800 px-4 pb-6 pt-2 flex items-center justify-around z-10">
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="text-[10px] font-medium">Home</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="text-[10px] font-medium">Network</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined fill-[1]">military_tech</span>
+<span class="text-[10px] font-bold">Skills</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">account_circle</span>
+<span class="text-[10px] font-medium">Profile</span>
+</a>
+</nav>
+</div>
+</body></html>

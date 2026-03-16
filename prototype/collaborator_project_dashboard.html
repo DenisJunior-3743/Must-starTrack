@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>StarTrack | Project Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;family=Public+Sans:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0056b3",
+                        "background-light": "#f8fafc",
+                        "background-dark": "#0f172a",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"],
+                        "sans": ["Public Sans", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Public Sans', sans-serif; }
+        .font-display { font-family: 'Lexend', sans-serif; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen pb-20">
+<!-- Header / Navigation -->
+<header class="sticky top-0 z-50 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-3">
+<div class="max-w-7xl mx-auto flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="bg-primary p-2 rounded-lg text-white">
+<span class="material-symbols-outlined block">rocket_launch</span>
+</div>
+<div>
+<h1 class="font-display font-bold text-lg leading-none">StarTrack</h1>
+<p class="text-xs text-slate-500 dark:text-slate-400 font-medium">MUST University</p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<div class="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden border border-slate-300 dark:border-slate-600">
+<img alt="Profile" data-alt="Headshot of a university project collaborator" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDR3Xr_LRsGW3jcnqqX1dhKYcfxDf-iyOrgkHFlKb3c-0Htf12RO0R3J3B-qmlNlqXARo5lGNFpQu5N0nUglCFQZIeZSvHnEG4HGFgmIUVan18Uv2JHfyLwpNo-UN7fiFWMs9bnQlUU6HCCae15tuGffMIYcCT7QGVLiP4mCyRLnrektTo3G-DnwZEglfLHWXpsCqYryAh3mrTAKWgT5NSuILFA3xpwSJpV2PT37o-ELaYypDUSsn_AFJcN2p5pE70o7d_Od8n6yA"/>
+</div>
+</div>
+</div>
+</header>
+<main class="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
+<!-- Project Hero Card -->
+<section class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+<div class="flex flex-col md:flex-row">
+<div class="h-48 md:h-auto md:w-1/3 bg-slate-100 dark:bg-slate-800 relative">
+<div class="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5"></div>
+<img class="w-full h-full object-cover mix-blend-overlay" data-alt="Satellite in Earth orbit space view" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDxIZ1NIO_ZL4AqtlnrEKUg0AV1mXOHah-VQeElD_sKjh86hRut2dbX3aJLk0gCpWe1b_aAjcA42XKkN63LIREk2ZVe5TYivyy0wBx3wzaBfuj_wU8F98NiDalVaX861Gl_w9Xq09KtkoL2G42QviLcUvJQknsUp0f2ciSo07gOXcpSpk_sN_3b4wT-LEMuIkc-f22jKUs3loEgAjZXMOEL79MDHgKl0NEogbgE55yW05puX-MazxyD6lrJQOHvtho2aij48qWWHw"/>
+<div class="absolute bottom-4 left-4">
+<span class="bg-primary text-white text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">Active</span>
+</div>
+</div>
+<div class="p-6 flex-1 space-y-4">
+<div class="flex justify-between items-start">
+<div>
+<h2 class="font-display text-2xl font-bold text-slate-900 dark:text-white">MUST Satellite Launch Phase II</h2>
+<p class="text-slate-500 dark:text-slate-400 mt-1">Lead Researcher: Dr. Aris Thorne</p>
+</div>
+<button class="bg-primary text-white px-4 py-2 rounded-lg font-display font-semibold flex items-center gap-2 hover:bg-primary/90 transition-colors">
+<span class="material-symbols-outlined text-sm">add</span>
+                            Add Task
+                        </button>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+<div class="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+<p class="text-xs font-medium text-slate-500 uppercase">Progress</p>
+<div class="flex items-center gap-3 mt-1">
+<div class="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 65%;"></div>
+</div>
+<span class="font-display font-bold text-sm">65%</span>
+</div>
+</div>
+<div class="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+<p class="text-xs font-medium text-slate-500 uppercase">Deadline</p>
+<p class="font-display font-bold text-sm mt-1">Dec 15, 2024</p>
+</div>
+<div class="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+<p class="text-xs font-medium text-slate-500 uppercase">Priority</p>
+<p class="font-display font-bold text-sm mt-1 text-red-600 dark:text-red-400">High Priority</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<!-- Left Column: Collaborators & Milestones -->
+<div class="space-y-6">
+<!-- Collaborators -->
+<div class="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="flex justify-between items-center mb-4">
+<h3 class="font-display font-bold text-lg">Collaborators</h3>
+<button class="text-primary text-sm font-semibold hover:underline">View All</button>
+</div>
+<div class="space-y-4">
+<div class="flex items-center gap-3">
+<img class="h-10 w-10 rounded-full" data-alt="Portrait of Sarah Jenkins" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAvl0x8IVFgmNDXMfzfP7lR7ZemSrqOVQ2_Vf2--DW9ZAZXJofRbsediSfvFEsTW3QmFPjanNzDcaYwcuamek4Idc4yNDxiweLHJRXN26rsC1flmpghNTI5ZvS_78KFGA7th30FqUMUtlVp3ynkq4eBo2SRpoq-F5hrq6QLhXFQ0k_rPmDgEgr--o6AK5k4uNtqscWyo379BNHcUMtL49Qe3OE3ljI8qWli7MZkDG-SV5vaMuOQ9t_eoP4F078QXpsTXFF-3tN9TQ"/>
+<div>
+<p class="text-sm font-bold leading-none">Sarah Jenkins</p>
+<p class="text-xs text-slate-500">Systems Engineer</p>
+</div>
+<span class="ml-auto w-2 h-2 rounded-full bg-green-500"></span>
+</div>
+<div class="flex items-center gap-3">
+<img class="h-10 w-10 rounded-full" data-alt="Portrait of Michael Chen" src="https://lh3.googleusercontent.com/aida-public/AB6AXuARypTrVW8o3CWolUBwEDguVW5Z9TgkfS5VCUoClF2tEtVplhDYQgvBc8eKAQ9FAtfDuR53aW9XHiRfMiKOa9CN1SmyGAfv464tHaxgAOPkTQmFEXJylUopb8rZizW1swB6XcidS6kfKAuaW4Z7BuDvTfp-pY7Y9dVeX8W2oDVQm61bvWK6udSD0FF7ypX57HQGLJCCs3djbID_R7OX2t4FkTMIr_kCvUw6aTE-G3dIkmprAN2AIZ7tXEjjjC7noWWogu0T6TUF0g"/>
+<div>
+<p class="text-sm font-bold leading-none">Michael Chen</p>
+<p class="text-xs text-slate-500">Data Analyst</p>
+</div>
+<span class="ml-auto w-2 h-2 rounded-full bg-slate-300"></span>
+</div>
+<div class="flex items-center gap-3">
+<div class="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">
+                                JS
+                            </div>
+<div>
+<p class="text-sm font-bold leading-none">James Smith</p>
+<p class="text-xs text-slate-500">Graduate Assistant</p>
+</div>
+<span class="ml-auto w-2 h-2 rounded-full bg-green-500"></span>
+</div>
+</div>
+</div>
+<!-- Upcoming Milestones -->
+<div class="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<h3 class="font-display font-bold text-lg mb-4">Upcoming Milestones</h3>
+<div class="space-y-4">
+<div class="relative pl-6 border-l-2 border-primary/30">
+<div class="absolute -left-[5px] top-0 w-2 h-2 rounded-full bg-primary"></div>
+<p class="text-xs font-bold text-primary uppercase">Oct 24</p>
+<p class="text-sm font-semibold mt-1">Payload Integration Review</p>
+</div>
+<div class="relative pl-6 border-l-2 border-primary/10">
+<div class="absolute -left-[5px] top-0 w-2 h-2 rounded-full bg-slate-300"></div>
+<p class="text-xs font-bold text-slate-400 uppercase">Nov 12</p>
+<p class="text-sm font-semibold mt-1">Ground Station Calibration</p>
+</div>
+<div class="relative pl-6 border-l-2 border-primary/10">
+<div class="absolute -left-[5px] top-0 w-2 h-2 rounded-full bg-slate-300"></div>
+<p class="text-xs font-bold text-slate-400 uppercase">Dec 01</p>
+<p class="text-sm font-semibold mt-1">Final Flight Readiness Review</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Columns: Task Board (Kanban style) -->
+<div class="lg:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4">
+<!-- To Do -->
+<div class="space-y-4">
+<div class="flex items-center justify-between px-2">
+<h4 class="font-display font-bold text-slate-600 dark:text-slate-400 flex items-center gap-2">
+                            To Do <span class="bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded-full text-xs">3</span>
+</h4>
+</div>
+<div class="space-y-3">
+<div class="bg-white dark:bg-slate-900 p-4 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm hover:border-primary/50 transition-colors cursor-pointer">
+<span class="text-[10px] font-bold uppercase tracking-widest text-primary bg-primary/10 px-1.5 py-0.5 rounded">Research</span>
+<p class="text-sm font-semibold mt-2">Thermal vacuum chamber specs</p>
+<div class="flex items-center justify-between mt-4">
+<span class="material-symbols-outlined text-slate-400 text-sm">attach_file</span>
+<span class="text-[10px] text-slate-400">Oct 20</span>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 p-4 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm hover:border-primary/50 transition-colors cursor-pointer">
+<span class="text-[10px] font-bold uppercase tracking-widest text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded">Documentation</span>
+<p class="text-sm font-semibold mt-2">Safety protocol draft v2</p>
+<div class="flex items-center justify-between mt-4 text-slate-400">
+<span class="material-symbols-outlined text-sm">chat_bubble</span>
+<span class="text-[10px]">Oct 22</span>
+</div>
+</div>
+<button class="w-full py-2 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-lg text-slate-400 text-sm font-medium hover:border-primary hover:text-primary transition-all flex items-center justify-center gap-1">
+<span class="material-symbols-outlined text-sm">add</span> Add Task
+                        </button>
+</div>
+</div>
+<!-- In Progress -->
+<div class="space-y-4">
+<div class="flex items-center justify-between px-2">
+<h4 class="font-display font-bold text-primary flex items-center gap-2">
+                            In Progress <span class="bg-primary/10 px-2 py-0.5 rounded-full text-xs">2</span>
+</h4>
+</div>
+<div class="space-y-3">
+<div class="bg-white dark:bg-slate-900 p-4 rounded-lg border-l-4 border-primary border-y border-r border-slate-200 dark:border-slate-800 shadow-sm">
+<span class="text-[10px] font-bold uppercase tracking-widest text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded">Design</span>
+<p class="text-sm font-semibold mt-2">CAD layout for sensor array</p>
+<div class="mt-4 flex -space-x-2">
+<img class="h-6 w-6 rounded-full border-2 border-white dark:border-slate-900" data-alt="Collaborator avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB8pgz8yWA5IRK-EYQzLD0WdJrhxqcw4ETlOFS4H20QsB51-GPopFj_qFGKd7Cyj2f_4IHOWqL69XRyObZeUPemj-y0ZdQz2kbrVDWztCublK0lmDP10fILnBBB0_5etcXz_Deb6u5j_vwc-SMujkF96cwCTp-anlIyVF6N0mZNEYax3CAAQz206XFrWfpy3q6vQPJyr_WveT6GMYbFS_OqkuCwTm-e_giDmmdYB5_hL9u0SpoWuT2fMkscW9xr0nZJc0Fcy_k_8g"/>
+<img class="h-6 w-6 rounded-full border-2 border-white dark:border-slate-900" data-alt="Collaborator avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDnD9jn7C_gvf4_NB4l2F3oMRGKLxFfMlvdZolW32rMzBZQQh3SE3LLJEZdtboLlMaE-IJEfrZvomQvlFObTB_apcMY-uwyhPI2n7qdCNfaosO6-HIrNnnt30G8Uwd4xt4thKpSCsNGMW3ik6qZYJwc1ALDmJRvsfLTJ9D_or9qWoQb7J2-gTP51kbXl6bHvAYS67bX6Fjm9sGz2etV5UzPExoz40p1d8RtLd3L7O5OsH1xe_PLV30ftYz-QB91voL5sbKuTneVlw"/>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 p-4 rounded-lg border-l-4 border-primary border-y border-r border-slate-200 dark:border-slate-800 shadow-sm">
+<span class="text-[10px] font-bold uppercase tracking-widest text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded">Systems</span>
+<p class="text-sm font-semibold mt-2">Telemetry software debug</p>
+<div class="mt-4 flex justify-between items-center">
+<div class="flex -space-x-2">
+<div class="h-6 w-6 rounded-full bg-primary text-[8px] flex items-center justify-center text-white border-2 border-white dark:border-slate-900">JS</div>
+</div>
+<span class="text-[10px] font-medium text-primary">In Review</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Done -->
+<div class="space-y-4">
+<div class="flex items-center justify-between px-2">
+<h4 class="font-display font-bold text-emerald-600 flex items-center gap-2">
+                            Done <span class="bg-emerald-100 dark:bg-emerald-900/30 px-2 py-0.5 rounded-full text-xs">8</span>
+</h4>
+</div>
+<div class="space-y-3 opacity-80">
+<div class="bg-white dark:bg-slate-900 p-4 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="flex justify-between items-start">
+<p class="text-sm font-semibold line-through text-slate-500">Kickoff meeting minutes</p>
+<span class="material-symbols-outlined text-emerald-500 text-sm">check_circle</span>
+</div>
+<p class="text-[10px] text-slate-400 mt-2">Completed Oct 12</p>
+</div>
+<div class="bg-white dark:bg-slate-900 p-4 rounded-lg border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="flex justify-between items-start">
+<p class="text-sm font-semibold line-through text-slate-500">Component procurement list</p>
+<span class="material-symbols-outlined text-emerald-500 text-sm">check_circle</span>
+</div>
+<p class="text-[10px] text-slate-400 mt-2">Completed Oct 15</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-4 pb-safe-area-inset-bottom">
+<div class="max-w-md mx-auto flex justify-between items-center h-16">
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-[10px] font-bold">Dashboard</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">fact_check</span>
+<span class="text-[10px] font-bold">Tasks</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">folder</span>
+<span class="text-[10px] font-bold">Files</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="text-[10px] font-bold">Team</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-[10px] font-bold">Settings</span>
+</a>
+</div>
+</nav>
+</body></html>

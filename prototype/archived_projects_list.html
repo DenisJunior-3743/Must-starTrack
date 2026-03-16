@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>My Archived Projects - StarTrack</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Lexend', sans-serif;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="relative flex min-h-screen w-full flex-col overflow-x-hidden">
+<!-- Header Section -->
+<header class="flex items-center bg-background-light dark:bg-background-dark p-4 pb-2 justify-between sticky top-0 z-10 border-b border-primary/10">
+<div class="text-primary flex size-10 shrink-0 items-center justify-center rounded-full hover:bg-primary/10 cursor-pointer">
+<span class="material-symbols-outlined">arrow_back</span>
+</div>
+<h1 class="text-slate-900 dark:text-slate-100 text-xl font-bold leading-tight tracking-tight flex-1 px-4">Archived Projects</h1>
+<div class="text-slate-600 dark:text-slate-400 flex size-10 shrink-0 items-center justify-center">
+<span class="material-symbols-outlined">more_vert</span>
+</div>
+</header>
+<!-- Search Bar -->
+<div class="px-4 py-4">
+<label class="flex flex-col min-w-40 h-12 w-full">
+<div class="flex w-full flex-1 items-stretch rounded-xl h-full shadow-sm">
+<div class="text-primary/60 flex border-none bg-white dark:bg-slate-800 items-center justify-center pl-4 rounded-l-xl border-r-0">
+<span class="material-symbols-outlined">search</span>
+</div>
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-r-xl text-slate-900 dark:text-slate-100 focus:outline-0 focus:ring-2 focus:ring-primary border-none bg-white dark:bg-slate-800 h-full placeholder:text-slate-400 px-4 pl-2 text-base font-normal leading-normal" placeholder="Search archived projects..." value=""/>
+</div>
+</label>
+</div>
+<!-- Filter Tabs -->
+<div class="pb-3">
+<div class="flex border-b border-primary/10 px-4 gap-8 overflow-x-auto no-scrollbar">
+<a class="flex flex-col items-center justify-center border-b-[3px] border-primary text-primary pb-[13px] pt-4 whitespace-nowrap" href="#">
+<p class="text-sm font-bold leading-normal tracking-wide">All Archive</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-[3px] border-transparent text-slate-500 dark:text-slate-400 pb-[13px] pt-4 whitespace-nowrap" href="#">
+<p class="text-sm font-medium leading-normal">Completed</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-[3px] border-transparent text-slate-500 dark:text-slate-400 pb-[13px] pt-4 whitespace-nowrap" href="#">
+<p class="text-sm font-medium leading-normal">Paused</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-[3px] border-transparent text-slate-500 dark:text-slate-400 pb-[13px] pt-4 whitespace-nowrap" href="#">
+<p class="text-sm font-medium leading-normal">Cancelled</p>
+</a>
+</div>
+</div>
+<!-- Content Area -->
+<main class="flex-1 p-4 space-y-4">
+<!-- Project Card 1 -->
+<div class="flex flex-col items-stretch justify-start rounded-xl shadow-md border border-primary/5 bg-white dark:bg-slate-800 overflow-hidden">
+<div class="w-full bg-center bg-no-repeat aspect-[21/9] bg-cover" data-alt="A glowing blue satellite orbiting earth at night" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDs4LymVz222uRh_euFE6FnGHQ29so5fNW2Qh2r5_JvuA8PqdU-EHJ7hYodkBrT8-dIyNqDXDDTiiM3yuDZ7t1TtrKsLk3J1df7WJpuXHzoGTaMOPrXn4G_BL-JUn2Bh29gJutHoB_wMzUAshsVJtPYKGStY_yr3ztjA6yVu285RSYb6ySYF-wBveY-8jkNIWJMLf1u15DyGd0FIrsvWwGPxbGQQt93unF0iB7diU8Mlv08sCYanI07DvswMgnYQlvYbZz1Hr5FbQ");'>
+</div>
+<div class="flex w-full min-w-72 grow flex-col items-stretch justify-center gap-3 p-4">
+<div class="flex justify-between items-start">
+<div>
+<p class="text-slate-900 dark:text-white text-lg font-bold leading-tight">STAR Satellite Launch</p>
+<p class="text-slate-500 dark:text-slate-400 text-sm mt-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">calendar_today</span>
+                                Archived on Oct 12, 2023
+                            </p>
+</div>
+<span class="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider">Completed</span>
+</div>
+<div class="flex items-center gap-2 mt-2 pt-4 border-t border-primary/5">
+<button class="flex-1 flex cursor-pointer items-center justify-center gap-2 rounded-lg h-10 px-4 bg-primary text-white text-sm font-semibold transition-colors hover:bg-primary/90">
+<span class="material-symbols-outlined text-lg">unarchive</span>
+<span>Unarchive</span>
+</button>
+<button class="flex size-10 cursor-pointer items-center justify-center rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 transition-colors">
+<span class="material-symbols-outlined">delete_forever</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Project Card 2 -->
+<div class="flex flex-col items-stretch justify-start rounded-xl shadow-md border border-primary/5 bg-white dark:bg-slate-800 overflow-hidden">
+<div class="w-full bg-center bg-no-repeat aspect-[21/9] bg-cover" data-alt="A large space telescope under construction" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAM1wNtE6cZj29EC_0pBDVCftkNinbUCa22VaUdpndcgWY6Wfs8K-W7SZS2JqP2ZbM9qQSIAaOIinN3mn0CX1THZqS9i554zFLrTDi1ex99GBzd0dcSKy-7ZNsogBsFgwT8K8KUUfV0PWH50olLzRBvz_FI7YWKu7X0bobQTB0bri6U75yAEfSUk9l7L58RcnrfZcu14pD75sH4dr63fvKmk5N1BfOHAiCe86HdS73-0PZN_WwzvUonJqzAWhg3KpWPOrvqa1ot6A");'>
+</div>
+<div class="flex w-full min-w-72 grow flex-col items-stretch justify-center gap-3 p-4">
+<div class="flex justify-between items-start">
+<div>
+<p class="text-slate-900 dark:text-white text-lg font-bold leading-tight">Lunar Base Prototype</p>
+<p class="text-slate-500 dark:text-slate-400 text-sm mt-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">calendar_today</span>
+                                Archived on Sep 05, 2023
+                            </p>
+</div>
+<span class="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider">Paused</span>
+</div>
+<div class="flex items-center gap-2 mt-2 pt-4 border-t border-primary/5">
+<button class="flex-1 flex cursor-pointer items-center justify-center gap-2 rounded-lg h-10 px-4 bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors">
+<span class="material-symbols-outlined text-lg">unarchive</span>
+<span>Unarchive</span>
+</button>
+<button class="flex size-10 cursor-pointer items-center justify-center rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 transition-colors">
+<span class="material-symbols-outlined">delete_forever</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Project Card 3 -->
+<div class="flex flex-col items-stretch justify-start rounded-xl shadow-md border border-primary/5 bg-white dark:bg-slate-800 overflow-hidden">
+<div class="w-full bg-center bg-no-repeat aspect-[21/9] bg-cover" data-alt="Earth seen from space station window" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCw5C9-HH1ID67udfdm8ullvGdOYnVhctTVSEthAsYI2ADk4i_M_T4BUY51cHRIwi_NNlIb645hb_bs5Wlhjz3Jr1LChMJyxlqvD_0kCwT3UPn5hL81qoPhudxtACPkUEvx7z0SWY1pXQQ4ZPbFlamcXbfY9MEYilYkaSQlAxBFCjIbelCY4JV_DXOpNmE677KDWskBxcOGhX57V5O910EkXYK-4P19gaEBb-__tQYUj_D54c8LBiZrNx_Qlv5qM3NtJdjQQBnCKA");'>
+</div>
+<div class="flex w-full min-w-72 grow flex-col items-stretch justify-center gap-3 p-4">
+<div class="flex justify-between items-start">
+<div>
+<p class="text-slate-900 dark:text-white text-lg font-bold leading-tight">Deep Space Comm Hub</p>
+<p class="text-slate-500 dark:text-slate-400 text-sm mt-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">calendar_today</span>
+                                Archived on Aug 20, 2023
+                            </p>
+</div>
+<span class="bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider">Completed</span>
+</div>
+<div class="flex items-center gap-2 mt-2 pt-4 border-t border-primary/5">
+<button class="flex-1 flex cursor-pointer items-center justify-center gap-2 rounded-lg h-10 px-4 bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors">
+<span class="material-symbols-outlined text-lg">unarchive</span>
+<span>Unarchive</span>
+</button>
+<button class="flex size-10 cursor-pointer items-center justify-center rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 transition-colors">
+<span class="material-symbols-outlined">delete_forever</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="sticky bottom-0 border-t border-primary/10 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md px-4 pb-4 pt-2">
+<div class="flex gap-2">
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">folder</span>
+<p class="text-xs font-medium leading-normal tracking-wide">Projects</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">archive</span>
+<p class="text-xs font-bold leading-normal tracking-wide">Archived</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">check_box</span>
+<p class="text-xs font-medium leading-normal tracking-wide">Tasks</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">account_circle</span>
+<p class="text-xs font-medium leading-normal tracking-wide">Profile</p>
+</a>
+</div>
+</nav>
+<div class="h-2 bg-background-light dark:bg-background-dark"></div>
+</div>
+</body></html>

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<title>Post Opportunity - MUST StarTrack</title>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="relative flex h-full w-full max-w-[480px] mx-auto flex-col bg-background-light dark:bg-background-dark shadow-xl min-h-screen">
+<!-- Top App Bar -->
+<div class="sticky top-0 z-10 flex items-center bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md p-4 border-b border-slate-200 dark:border-slate-800 justify-between">
+<div class="text-primary flex size-10 shrink-0 items-center justify-center rounded-full hover:bg-primary/10 transition-colors cursor-pointer">
+<span class="material-symbols-outlined">arrow_back</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-[-0.015em] flex-1 ml-4">Post Opportunity</h2>
+<div class="size-10"></div> <!-- Spacer for balance -->
+</div>
+<!-- Form Content -->
+<div class="flex flex-col gap-6 px-4 py-6 pb-24">
+<!-- Opportunity Title -->
+<div class="flex flex-col gap-2">
+<label class="text-slate-700 dark:text-slate-300 text-sm font-semibold">Opportunity Title
+<input class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-base focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="e.g., Graduate Research Assistant" type="text"/>
+</label></div>
+<!-- Category -->
+<div class="flex flex-col gap-2">
+<label class="text-slate-700 dark:text-slate-300 text-sm font-semibold">Category
+<div class="relative">
+<select class="w-full appearance-none rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-base focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all">
+<option disabled="" selected="" value="">Select Category</option>
+<option value="research">Research</option>
+<option value="internship">Internship</option>
+<option value="workshop">Workshop</option>
+<option value="event">Academic Event</option>
+</select>
+<span class="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">expand_more</span>
+</div>
+</label></div>
+<!-- Target Faculty -->
+<div class="flex flex-col gap-2">
+<label class="text-slate-700 dark:text-slate-300 text-sm font-semibold">Target Faculty/Program
+<div class="relative">
+<select class="w-full appearance-none rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-base focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all">
+<option disabled="" selected="" value="">Select Faculty</option>
+<option value="computing">Faculty of Computing</option>
+<option value="engineering">Faculty of Engineering</option>
+<option value="business">Business School</option>
+<option value="science">Faculty of Applied Sciences</option>
+</select>
+<span class="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">expand_more</span>
+</div>
+</label></div>
+<!-- Description -->
+<div class="flex flex-col gap-2">
+<label class="text-slate-700 dark:text-slate-300 text-sm font-semibold">Description
+<textarea class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-base min-h-[120px] focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="Describe the opportunity objectives and responsibilities..."></textarea>
+</label></div>
+<!-- Key Requirements -->
+<div class="flex flex-col gap-2">
+<label class="text-slate-700 dark:text-slate-300 text-sm font-semibold">Key Requirements/Skills Needed
+<textarea class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-base min-h-[100px] focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" placeholder="e.g., Python, Academic Writing, 3.5 GPA..."></textarea>
+</label></div>
+<!-- Application Deadline -->
+<div class="flex flex-col gap-2">
+<label class="text-slate-700 dark:text-slate-300 text-sm font-semibold">Application Deadline
+<div class="relative">
+<input class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-base focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all" type="date"/>
+<span class="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">calendar_today</span>
+</div>
+</label></div>
+<!-- Attachment/Link -->
+<div class="flex flex-col gap-2">
+<label class="text-slate-700 dark:text-slate-300 text-sm font-semibold">Attachment/Link (Optional)
+<div class="flex gap-2">
+<div class="flex-1 relative">
+<input class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-base focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all pl-12" placeholder="https://external-link.com" type="url"/>
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">link</span>
+</div>
+<button class="flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-xl px-4 border border-slate-200 dark:border-slate-700">
+<span class="material-symbols-outlined text-slate-600 dark:text-slate-400">upload_file</span>
+</button>
+</div>
+</label></div>
+<!-- Visibility Settings -->
+<div class="flex flex-col gap-4 p-4 rounded-xl bg-primary/5 border border-primary/10">
+<p class="text-slate-900 dark:text-slate-100 text-sm font-semibold">Visibility Settings</p>
+<div class="flex gap-4">
+<label class="flex flex-1 items-center gap-3 cursor-pointer p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 has-[:checked]:border-primary has-[:checked]:ring-1 has-[:checked]:ring-primary transition-all">
+<input checked="" class="w-4 h-4 text-primary focus:ring-primary" name="visibility" type="radio" value="public"/>
+<div class="flex flex-col">
+<span class="text-sm font-medium">Public</span>
+<span class="text-[10px] text-slate-500">Visible to everyone</span>
+</div>
+</label>
+<label class="flex flex-1 items-center gap-3 cursor-pointer p-3 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 has-[:checked]:border-primary has-[:checked]:ring-1 has-[:checked]:ring-primary transition-all">
+<input class="w-4 h-4 text-primary focus:ring-primary" name="visibility" type="radio" value="internal"/>
+<div class="flex flex-col">
+<span class="text-sm font-medium">Internal</span>
+<span class="text-[10px] text-slate-500">MUST users only</span>
+</div>
+</label>
+</div>
+</div>
+</div>
+<!-- Sticky Footer Action -->
+<div class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] p-4 bg-background-light/95 dark:bg-background-dark/95 backdrop-blur-sm border-t border-slate-200 dark:border-slate-800">
+<button class="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/25 transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+<span class="material-symbols-outlined">send</span>
+                Publish Opportunity
+            </button>
+</div>
+</div>
+</body></html>

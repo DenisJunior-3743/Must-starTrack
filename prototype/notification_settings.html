@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>StarTrack Notification Settings</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Lexend', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .active-nav { color: #1152d4; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+<!-- Header -->
+<header class="sticky top-0 z-10 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+<div class="flex items-center p-4 justify-between max-w-2xl mx-auto w-full">
+<div class="flex items-center gap-3">
+<button class="flex items-center justify-center p-2 rounded-full hover:bg-primary/10 transition-colors">
+<span class="material-symbols-outlined text-slate-700 dark:text-slate-300">arrow_back</span>
+</button>
+<h1 class="text-xl font-bold tracking-tight">Notification Settings</h1>
+</div>
+<button class="text-primary font-semibold text-sm px-3 py-1 rounded-lg hover:bg-primary/5">Save</button>
+</div>
+</header>
+<main class="flex-1 max-w-2xl mx-auto w-full p-4 space-y-6 pb-24">
+<!-- Global Push Toggle Card -->
+<div class="p-1">
+<div class="flex flex-col items-start justify-between gap-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:flex-row sm:items-center shadow-sm">
+<div class="flex flex-col gap-1">
+<p class="text-base font-bold leading-tight">Master Push Notifications</p>
+<p class="text-slate-500 dark:text-slate-400 text-sm font-normal">Enable or disable all mobile push alerts instantly</p>
+</div>
+<label class="relative flex h-[31px] w-[51px] cursor-pointer items-center rounded-full border-none bg-slate-200 dark:bg-slate-700 p-0.5 has-[:checked]:justify-end has-[:checked]:bg-primary transition-all">
+<div class="h-full w-[27px] rounded-full bg-white shadow-md"></div>
+<input checked="" class="invisible absolute" type="checkbox"/>
+</label>
+</div>
+</div>
+<!-- Academic & Opportunities -->
+<section class="space-y-3">
+<h2 class="text-primary text-sm font-bold uppercase tracking-wider px-1">Academic &amp; Opportunities</h2>
+<div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+<!-- Sub-category Item -->
+<div class="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800">
+<div>
+<p class="font-medium">New Internships</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Career center matches</p>
+</div>
+<div class="flex gap-4">
+<div class="flex flex-col items-center gap-1">
+<span class="text-[10px] uppercase font-bold text-slate-400">Push</span>
+<input checked="" class="rounded text-primary focus:ring-primary h-5 w-5 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700" type="checkbox"/>
+</div>
+<div class="flex flex-col items-center gap-1">
+<span class="text-[10px] uppercase font-bold text-slate-400">Email</span>
+<input checked="" class="rounded text-primary focus:ring-primary h-5 w-5 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700" type="checkbox"/>
+</div>
+</div>
+</div>
+<!-- Sub-category Item -->
+<div class="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800">
+<div>
+<p class="font-medium">Research Calls</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Faculty assistant roles</p>
+</div>
+<div class="flex gap-4">
+<div class="flex flex-col items-center gap-1">
+<input checked="" class="rounded text-primary focus:ring-primary h-5 w-5 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700" type="checkbox"/>
+</div>
+<div class="flex flex-col items-center gap-1">
+<input class="rounded text-primary focus:ring-primary h-5 w-5 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700" type="checkbox"/>
+</div>
+</div>
+</div>
+<!-- Sub-category Item -->
+<div class="flex items-center justify-between p-4">
+<div>
+<p class="font-medium">Skill Endorsements</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Peer and mentor verifications</p>
+</div>
+<div class="flex gap-4">
+<div class="flex flex-col items-center gap-1">
+<input checked="" class="rounded text-primary focus:ring-primary h-5 w-5 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700" type="checkbox"/>
+</div>
+<div class="flex flex-col items-center gap-1">
+<input class="rounded text-primary focus:ring-primary h-5 w-5 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700" type="checkbox"/>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Social & Collaboration -->
+<section class="space-y-3">
+<h2 class="text-primary text-sm font-bold uppercase tracking-wider px-1">Social &amp; Collaboration</h2>
+<div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+<div class="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800">
+<div>
+<p class="font-medium">New Messages</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Direct peer communication</p>
+</div>
+<div class="flex gap-4">
+<input checked="" class="rounded text-primary focus:ring-primary h-5 w-5 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700" type="checkbox"/>
+<input checked="" class="rounded text-primary focus:ring-primary h-5 w-5 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700" type="checkbox"/>
+</div>
+</div>
+<div class="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800">
+<div>
+<p class="font-medium">Collaboration Requests</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Project and study group invites</p>
+</div>
+<div class="flex gap-4">
+<input checked="" class="rounded text-primary focus:ring-primary h-5 w-5 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700" type="checkbox"/>
+<input checked="" class="rounded text-primary focus:ring-primary h-5 w-5 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700" type="checkbox"/>
+</div>
+</div>
+<div class="flex items-center justify-between p-4">
+<div>
+<p class="font-medium">New Followers</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Network growth alerts</p>
+</div>
+<div class="flex gap-4">
+<input class="rounded text-primary focus:ring-primary h-5 w-5 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700" type="checkbox"/>
+<input class="rounded text-primary focus:ring-primary h-5 w-5 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700" type="checkbox"/>
+</div>
+</div>
+</div>
+</section>
+<!-- Academic Quiet Hours Scheduler -->
+<section class="space-y-3">
+<h2 class="text-primary text-sm font-bold uppercase tracking-wider px-1">Focus Mode</h2>
+<div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm space-y-4">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary">bedtime</span>
+<div>
+<p class="font-bold">Academic Quiet Hours</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Silence alerts during study blocks</p>
+</div>
+</div>
+<label class="relative flex h-[24px] w-[44px] cursor-pointer items-center rounded-full border-none bg-slate-200 dark:bg-slate-700 p-0.5 has-[:checked]:justify-end has-[:checked]:bg-primary transition-all">
+<div class="h-full w-[20px] rounded-full bg-white shadow-sm"></div>
+<input checked="" class="invisible absolute" type="checkbox"/>
+</label>
+</div>
+<div class="grid grid-cols-2 gap-4 pt-2">
+<div class="space-y-1">
+<label class="text-[10px] font-bold text-slate-400 uppercase">Starts From</label>
+<div class="flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+<span class="material-symbols-outlined text-sm">schedule</span>
+<span class="text-sm">11:00 PM</span>
+</div>
+</div>
+<div class="space-y-1">
+<label class="text-[10px] font-bold text-slate-400 uppercase">Ends At</label>
+<div class="flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
+<span class="material-symbols-outlined text-sm">wb_sunny</span>
+<span class="text-sm">07:00 AM</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Activity & Rewards -->
+<section class="space-y-3">
+<h2 class="text-primary text-sm font-bold uppercase tracking-wider px-1">Activity &amp; Rewards</h2>
+<div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+<div class="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800">
+<div>
+<p class="font-medium">Daily Streak Reminders</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Maintain your learning momentum</p>
+</div>
+<input checked="" class="rounded text-primary focus:ring-primary h-5 w-5 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700" type="checkbox"/>
+</div>
+<div class="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800">
+<div>
+<p class="font-medium">Achievement Badges</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">New credential celebrations</p>
+</div>
+<input checked="" class="rounded text-primary focus:ring-primary h-5 w-5 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700" type="checkbox"/>
+</div>
+<div class="flex items-center justify-between p-4">
+<div>
+<p class="font-medium">Weekly Progress</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Personal performance reports</p>
+</div>
+<input class="rounded text-primary focus:ring-primary h-5 w-5 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700" type="checkbox"/>
+</div>
+</div>
+</section>
+<!-- System & Security -->
+<section class="space-y-3">
+<h2 class="text-primary text-sm font-bold uppercase tracking-wider px-1">System &amp; Security</h2>
+<div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+<div class="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800">
+<div>
+<p class="font-medium">Login Alerts</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Security notifications for new logins</p>
+</div>
+<input checked="" class="rounded text-primary opacity-50 h-5 w-5 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700" disabled="" type="checkbox"/>
+</div>
+<div class="flex items-center justify-between p-4">
+<div>
+<p class="font-medium">Content Moderation</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Updates on community guidelines</p>
+</div>
+<input checked="" class="rounded text-primary focus:ring-primary h-5 w-5 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700" type="checkbox"/>
+</div>
+</div>
+</section>
+<!-- Footer Actions -->
+<div class="pt-4 text-center">
+<button class="text-red-500 dark:text-red-400 text-sm font-semibold py-3 px-6 rounded-xl border border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors w-full">
+                Reset to Defaults
+            </button>
+<p class="text-slate-400 text-[10px] mt-6 uppercase tracking-widest font-medium">StarTrack University System v4.2.0</p>
+</div>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 right-0 border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm px-4 pb-safe pt-2 flex justify-around items-center z-20">
+<a class="flex flex-col items-center gap-1 text-slate-500 dark:text-slate-400 p-2" href="#">
+<span class="material-symbols-outlined">home</span>
+<p class="text-[10px] font-medium leading-none">Home</p>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-500 dark:text-slate-400 p-2" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<p class="text-[10px] font-medium leading-none">Track</p>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-500 dark:text-slate-400 p-2" href="#">
+<span class="material-symbols-outlined">school</span>
+<p class="text-[10px] font-medium leading-none">Research</p>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-500 dark:text-slate-400 p-2" href="#">
+<span class="material-symbols-outlined">group</span>
+<p class="text-[10px] font-medium leading-none">Social</p>
+</a>
+<a class="flex flex-col items-center gap-1 text-primary p-2" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">settings</span>
+<p class="text-[10px] font-medium leading-none">Settings</p>
+</a>
+</nav>
+</body></html>

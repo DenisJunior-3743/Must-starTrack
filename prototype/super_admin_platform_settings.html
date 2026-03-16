@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Super Admin Platform Settings - MUST StarTrack</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Lexend', sans-serif;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
+<header class="sticky top-0 z-50 flex items-center bg-white dark:bg-slate-900 border-b border-primary/10 p-4 justify-between">
+<div class="flex items-center gap-3">
+<div class="bg-primary/10 p-2 rounded-lg text-primary">
+<span class="material-symbols-outlined">shield_person</span>
+</div>
+<div>
+<h1 class="text-lg font-bold leading-tight tracking-tight">Super Admin</h1>
+<p class="text-xs text-slate-500 dark:text-slate-400">MUST StarTrack Control</p>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined">search</span>
+</button>
+<div class="size-10 rounded-full bg-primary flex items-center justify-center text-white font-bold">
+                    JD
+                </div>
+</div>
+</header>
+<main class="flex-1 pb-24">
+<section class="px-4 pt-6">
+<h2 class="text-[22px] font-bold leading-tight tracking-tight mb-4">System Configuration</h2>
+<div class="bg-white dark:bg-slate-900 rounded-xl overflow-hidden border border-primary/5">
+<div class="flex items-center gap-4 px-4 min-h-[72px] py-2 justify-between border-b border-slate-50 dark:border-slate-800">
+<div class="flex items-center gap-4">
+<div class="text-primary flex items-center justify-center rounded-lg bg-primary/10 shrink-0 size-12">
+<span class="material-symbols-outlined">engineering</span>
+</div>
+<div class="flex flex-col justify-center">
+<p class="text-base font-medium leading-normal">Maintenance Mode</p>
+<p class="text-slate-500 dark:text-slate-400 text-sm">Disable public access for updates</p>
+</div>
+</div>
+<div class="shrink-0">
+<label class="relative flex h-[31px] w-[51px] cursor-pointer items-center rounded-full border-none bg-slate-200 dark:bg-slate-700 p-0.5 has-[:checked]:justify-end has-[:checked]:bg-primary">
+<div class="h-full w-[27px] rounded-full bg-white shadow-sm"></div>
+<input class="invisible absolute" type="checkbox"/>
+</label>
+</div>
+</div>
+<div class="flex items-center gap-4 px-4 min-h-[72px] py-2 justify-between border-b border-slate-50 dark:border-slate-800">
+<div class="flex items-center gap-4">
+<div class="text-primary flex items-center justify-center rounded-lg bg-primary/10 shrink-0 size-12">
+<span class="material-symbols-outlined">notifications_active</span>
+</div>
+<div class="flex flex-col justify-center">
+<p class="text-base font-medium leading-normal">Global Notifications</p>
+<p class="text-slate-500 dark:text-slate-400 text-sm">Enable system-wide campus alerts</p>
+</div>
+</div>
+<div class="shrink-0">
+<label class="relative flex h-[31px] w-[51px] cursor-pointer items-center rounded-full border-none bg-slate-200 dark:bg-slate-700 p-0.5 has-[:checked]:justify-end has-[:checked]:bg-primary">
+<div class="h-full w-[27px] rounded-full bg-white shadow-sm"></div>
+<input checked="" class="invisible absolute" type="checkbox"/>
+</label>
+</div>
+</div>
+<div class="flex items-center gap-4 px-4 min-h-[72px] py-2 justify-between">
+<div class="flex items-center gap-4">
+<div class="text-primary flex items-center justify-center rounded-lg bg-primary/10 shrink-0 size-12">
+<span class="material-symbols-outlined">speed</span>
+</div>
+<div class="flex flex-col justify-center">
+<p class="text-base font-medium leading-normal">API Rate Limits</p>
+<p class="text-slate-500 dark:text-slate-400 text-sm">Current: 10k req/min</p>
+</div>
+</div>
+<button class="text-primary font-semibold text-sm">Adjust</button>
+</div>
+</div>
+</section>
+<section class="px-4 pt-8">
+<h2 class="text-lg font-bold leading-tight mb-3">User Management &amp; Roles</h2>
+<div class="grid grid-cols-1 gap-3">
+<div class="bg-white dark:bg-slate-900 p-4 rounded-xl border border-primary/5 flex items-center gap-4">
+<div class="bg-primary/10 text-primary p-3 rounded-lg">
+<span class="material-symbols-outlined">group_add</span>
+</div>
+<div class="flex-1">
+<h3 class="font-semibold">Manage Admins</h3>
+<p class="text-xs text-slate-500 dark:text-slate-400">12 Active Platform Admins</p>
+</div>
+<span class="material-symbols-outlined text-slate-400">chevron_right</span>
+</div>
+<div class="bg-white dark:bg-slate-900 p-4 rounded-xl border border-primary/5 flex items-center gap-4">
+<div class="bg-primary/10 text-primary p-3 rounded-lg">
+<span class="material-symbols-outlined">admin_panel_settings</span>
+</div>
+<div class="flex-1">
+<h3 class="font-semibold">Role Permissions</h3>
+<p class="text-xs text-slate-500 dark:text-slate-400">Define staff &amp; faculty access</p>
+</div>
+<span class="material-symbols-outlined text-slate-400">chevron_right</span>
+</div>
+<div class="bg-white dark:bg-slate-900 p-4 rounded-xl border border-primary/5 flex items-center gap-4">
+<div class="bg-primary/10 text-primary p-3 rounded-lg">
+<span class="material-symbols-outlined">person_search</span>
+</div>
+<div class="flex-1">
+<h3 class="font-semibold">University-wide Search</h3>
+<p class="text-xs text-slate-500 dark:text-slate-400">Search students, faculty, alumni</p>
+</div>
+<span class="material-symbols-outlined text-slate-400">chevron_right</span>
+</div>
+</div>
+</section>
+<section class="px-4 pt-8">
+<h2 class="text-lg font-bold leading-tight mb-3">Security &amp; Compliance</h2>
+<div class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-primary/5 space-y-4">
+<div class="flex justify-between items-center">
+<div class="flex gap-3 items-center">
+<span class="material-symbols-outlined text-primary">password</span>
+<span class="text-sm font-medium">Password Policy</span>
+</div>
+<span class="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">Strict</span>
+</div>
+<div class="flex justify-between items-center">
+<div class="flex gap-3 items-center">
+<span class="material-symbols-outlined text-primary">timer</span>
+<span class="text-sm font-medium">Session Timeout</span>
+</div>
+<span class="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">30 Minutes</span>
+</div>
+<div class="flex justify-between items-center">
+<div class="flex gap-3 items-center">
+<span class="material-symbols-outlined text-primary">enhanced_encryption</span>
+<span class="text-sm font-medium">Data Encryption Logs</span>
+</div>
+<span class="material-symbols-outlined text-slate-400 text-sm">open_in_new</span>
+</div>
+</div>
+</section>
+<section class="px-4 pt-8">
+<h2 class="text-lg font-bold leading-tight mb-3">Content Moderation Presets</h2>
+<div class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-primary/5">
+<p class="text-sm font-medium mb-4">AI Sensitivity Score</p>
+<input class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary mb-6" max="100" min="0" type="range" value="75"/>
+<div class="flex justify-between text-[10px] text-slate-400 uppercase font-bold tracking-widest">
+<span>Low</span>
+<span>Balanced (75%)</span>
+<span>High</span>
+</div>
+<div class="mt-6 flex items-center justify-between p-3 bg-primary/5 rounded-lg border border-primary/10">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary">history_edu</span>
+<span class="text-sm font-medium">Moderation Queue</span>
+</div>
+<div class="bg-primary text-white text-[10px] px-2 py-0.5 rounded-full">14 New</div>
+</div>
+</div>
+</section>
+<section class="px-4 pt-8">
+<h2 class="text-lg font-bold leading-tight mb-3">Platform Analytics Controls</h2>
+<div class="flex gap-3 overflow-x-auto pb-2">
+<div class="bg-white dark:bg-slate-900 min-w-[160px] p-4 rounded-xl border border-primary/5">
+<div class="flex justify-between items-start mb-4">
+<span class="material-symbols-outlined text-primary">monitoring</span>
+<label class="relative flex h-[24px] w-[40px] cursor-pointer items-center rounded-full bg-slate-200 dark:bg-slate-700 p-0.5 has-[:checked]:justify-end has-[:checked]:bg-primary">
+<div class="h-full w-[20px] rounded-full bg-white"></div>
+<input checked="" class="invisible absolute" type="checkbox"/>
+</label>
+</div>
+<p class="text-sm font-semibold">Usage Tracking</p>
+</div>
+<div class="bg-white dark:bg-slate-900 min-w-[160px] p-4 rounded-xl border border-primary/5">
+<div class="flex justify-between items-start mb-4">
+<span class="material-symbols-outlined text-primary">send_and_archive</span>
+<label class="relative flex h-[24px] w-[40px] cursor-pointer items-center rounded-full bg-slate-200 dark:bg-slate-700 p-0.5 has-[:checked]:justify-end has-[:checked]:bg-primary">
+<div class="h-full w-[20px] rounded-full bg-white"></div>
+<input class="invisible absolute" type="checkbox"/>
+</label>
+</div>
+<p class="text-sm font-semibold">External Reporting</p>
+</div>
+</div>
+</section>
+<section class="px-4 pt-10">
+<div class="bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/20 rounded-2xl p-6">
+<h2 class="text-red-600 dark:text-red-400 text-lg font-bold mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined">warning</span>
+                        Dangerous Zone
+                    </h2>
+<div class="space-y-3">
+<button class="w-full bg-white dark:bg-slate-900 border border-red-200 dark:border-red-900/30 text-red-600 font-semibold py-3 rounded-xl flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-sm">backup</span>
+                            Perform Full Data Backup
+                        </button>
+<button class="w-full bg-white dark:bg-slate-900 border border-red-200 dark:border-red-900/30 text-red-600 font-semibold py-3 rounded-xl flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-sm">auto_delete</span>
+                            Purge System Logs
+                        </button>
+<button class="w-full bg-red-600 text-white font-bold py-3 rounded-xl shadow-lg shadow-red-200 dark:shadow-none mt-2">
+                            Factory System Reset
+                        </button>
+</div>
+</div>
+</section>
+</main>
+<nav class="fixed bottom-0 left-0 right-0 z-50 flex border-t border-slate-100 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md px-4 pb-6 pt-2">
+<a class="flex flex-1 flex-col items-center justify-end gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<p class="text-[10px] font-medium uppercase tracking-widest">Dashboard</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-end gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">groups</span>
+<p class="text-[10px] font-medium uppercase tracking-widest">Users</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-end gap-1 text-primary" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">settings</span>
+<p class="text-[10px] font-medium uppercase tracking-widest">Settings</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-end gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">article</span>
+<p class="text-[10px] font-medium uppercase tracking-widest">Logs</p>
+</a>
+</nav>
+</div>
+</body></html>

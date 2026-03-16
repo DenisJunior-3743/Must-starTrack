@@ -1,0 +1,8 @@
+------starTrack-----
+API key: 973571939236915 
+API secret: rNX_UMtmqdhIFnnPdY96C1yIyIw
+
+
+------Root--------
+API key: 537149261613989
+API secret: KzVqhYnCR7cWRajm9hIRn3c8yAU

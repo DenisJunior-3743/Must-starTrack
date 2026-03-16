@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>User Monitoring Details - MUST StarTrack</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Lexend', sans-serif;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #e2e8f0;
+            border-radius: 10px;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+<!-- Header -->
+<header class="sticky top-0 z-50 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-4 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<button class="flex items-center justify-center size-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<h1 class="text-lg font-bold tracking-tight">User Monitoring</h1>
+</div>
+<button class="flex items-center justify-center size-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</header>
+<main class="flex-1 overflow-y-auto pb-24">
+<!-- User Profile Summary -->
+<section class="p-6 flex flex-col items-center bg-gradient-to-b from-white to-background-light dark:from-slate-900 dark:to-background-dark">
+<div class="relative">
+<div class="size-32 rounded-full border-4 border-white dark:border-slate-800 shadow-xl overflow-hidden bg-slate-200" data-alt="Professional headshot of a young male student Alex Johnson" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBBS-OWM159VemN4kcfPaY3Z1ZkIPavgP0UTAXv2NIsMhitBsyUtQTTHHf07OePeVDG9PG-N1PobmV1r59lJzPRVINcnScoqoCfU48t9C8yx8FZO_ajPLgVrSzmDehaQ7SLAmFIUdahgQgYqGWqdig1iL-DrRaPHIb7pyE_FgTWq2bPQXmB0ulFtJJ6K7t_P_yN8PNbLX6N4DqVhry22ic19QEqIw43u5kQBaQYgDECEH3VxtjhtjPFk_CRdr-pCjLa5R1sXv_aBQ'); background-size: cover;">
+</div>
+<div class="absolute bottom-1 right-1 size-6 bg-green-500 border-4 border-white dark:border-slate-900 rounded-full"></div>
+</div>
+<div class="mt-4 text-center">
+<h2 class="text-2xl font-bold">Alex Johnson</h2>
+<p class="text-primary font-medium">Student • Engineering Faculty</p>
+<div class="mt-2 inline-flex items-center px-3 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-semibold">
+<span class="size-1.5 rounded-full bg-green-500 mr-2"></span>
+                    ACTIVE
+                </div>
+</div>
+</section>
+<!-- Quick Action Buttons -->
+<section class="px-4 py-2 grid grid-cols-2 gap-3">
+<button class="flex items-center justify-center gap-2 bg-primary text-white py-3 px-4 rounded-xl font-semibold text-sm shadow-sm hover:bg-primary/90">
+<span class="material-symbols-outlined text-sm">edit</span>
+                Change Role
+            </button>
+<button class="flex items-center justify-center gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 py-3 px-4 rounded-xl font-semibold text-sm hover:bg-slate-50 dark:hover:bg-slate-700">
+<span class="material-symbols-outlined text-sm">lock_reset</span>
+                Reset Pass
+            </button>
+<button class="flex items-center justify-center gap-2 bg-red-50 dark:bg-red-900/10 text-red-600 border border-red-100 dark:border-red-900/30 py-3 px-4 rounded-xl font-semibold text-sm hover:bg-red-100 dark:hover:bg-red-900/20">
+<span class="material-symbols-outlined text-sm">block</span>
+                Suspend
+            </button>
+<button class="flex items-center justify-center gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 py-3 px-4 rounded-xl font-semibold text-sm hover:bg-slate-50 dark:hover:bg-slate-700">
+<span class="material-symbols-outlined text-sm">download</span>
+                Export Log
+            </button>
+</section>
+<!-- Activity Statistics -->
+<section class="mt-6 px-4">
+<h3 class="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 ml-1">Activity Statistics</h3>
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+<div class="size-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 mb-3">
+<span class="material-symbols-outlined">login</span>
+</div>
+<p class="text-2xl font-bold">142</p>
+<p class="text-xs text-slate-500 font-medium">Total Logins</p>
+</div>
+<div class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+<div class="size-10 rounded-lg bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center text-purple-600 mb-3">
+<span class="material-symbols-outlined">article</span>
+</div>
+<p class="text-2xl font-bold">28</p>
+<p class="text-xs text-slate-500 font-medium">Posts Created</p>
+</div>
+<div class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+<div class="size-10 rounded-lg bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center text-amber-600 mb-3">
+<span class="material-symbols-outlined">group_add</span>
+</div>
+<p class="text-2xl font-bold">12</p>
+<p class="text-xs text-slate-500 font-medium">Collaborations</p>
+</div>
+<div class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+<div class="size-10 rounded-lg bg-red-50 dark:bg-red-900/20 flex items-center justify-center text-red-600 mb-3">
+<span class="material-symbols-outlined">report_problem</span>
+</div>
+<p class="text-2xl font-bold">0</p>
+<p class="text-xs text-slate-500 font-medium">Reports</p>
+</div>
+</div>
+</section>
+<!-- Account Metadata -->
+<section class="mt-8 px-4">
+<div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 overflow-hidden shadow-sm">
+<div class="p-4 border-b border-slate-50 dark:border-slate-700 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50">
+<h3 class="font-bold text-sm">Account Metadata</h3>
+<span class="material-symbols-outlined text-slate-400 text-sm">info</span>
+</div>
+<div class="p-4 space-y-4">
+<div class="flex justify-between items-center">
+<span class="text-sm text-slate-500 font-medium">Joined Date</span>
+<span class="text-sm font-semibold">Sep 12, 2023</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-sm text-slate-500 font-medium">Last Login</span>
+<span class="text-sm font-semibold">2 hours ago</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-sm text-slate-500 font-medium">Verification</span>
+<span class="flex items-center text-sm font-semibold text-green-600">
+<span class="material-symbols-outlined text-xs mr-1">verified</span>
+                            Verified
+                        </span>
+</div>
+</div>
+</div>
+</section>
+<!-- Device & Security -->
+<section class="mt-8 px-4">
+<h3 class="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 ml-1">Device &amp; Security</h3>
+<div class="space-y-3">
+<div class="flex items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+<div class="size-12 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined">laptop_mac</span>
+</div>
+<div class="flex-1">
+<p class="text-sm font-bold">MacBook Pro M2</p>
+<p class="text-xs text-slate-500">IP: 192.168.1.14 • Chrome (macOS)</p>
+</div>
+<div class="text-[10px] font-bold text-primary uppercase">Current</div>
+</div>
+<div class="flex items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+<div class="size-12 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined">smartphone</span>
+</div>
+<div class="flex-1">
+<p class="text-sm font-bold">iPhone 15 Pro</p>
+<p class="text-xs text-slate-500">IP: 172.20.10.4 • StarTrack App</p>
+</div>
+<div class="text-[10px] font-bold text-slate-400 uppercase">3 days ago</div>
+</div>
+</div>
+</section>
+<!-- Recent Activity Feed -->
+<section class="mt-8 px-4">
+<div class="flex items-center justify-between mb-3 ml-1">
+<h3 class="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Recent Activity</h3>
+<button class="text-primary text-xs font-bold">View All</button>
+</div>
+<div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm divide-y divide-slate-50 dark:divide-slate-700">
+<div class="p-4 flex gap-4">
+<div class="mt-1 size-2 rounded-full bg-primary ring-4 ring-primary/10"></div>
+<div>
+<p class="text-sm font-semibold">Created Project Post</p>
+<p class="text-xs text-slate-500 mt-1">"Solar Panel Efficiency Study" in Engineering Dept.</p>
+<p class="text-[10px] text-slate-400 mt-2">Today, 10:45 AM</p>
+</div>
+</div>
+<div class="p-4 flex gap-4">
+<div class="mt-1 size-2 rounded-full bg-slate-300"></div>
+<div>
+<p class="text-sm font-semibold">Accepted Collaboration</p>
+<p class="text-xs text-slate-500 mt-1">Joined "AI Ethics" group project by Dr. Sarah.</p>
+<p class="text-[10px] text-slate-400 mt-2">Yesterday, 04:20 PM</p>
+</div>
+</div>
+<div class="p-4 flex gap-4">
+<div class="mt-1 size-2 rounded-full bg-amber-400"></div>
+<div>
+<p class="text-sm font-semibold">Logged in from New Device</p>
+<p class="text-xs text-slate-500 mt-1">New session detected on iPhone 15 Pro.</p>
+<p class="text-[10px] text-slate-400 mt-2">Oct 24, 09:12 AM</p>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-6 py-3 flex justify-between items-center z-50">
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-[10px] font-medium">Home</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined fill-[1]">group</span>
+<span class="text-[10px] font-medium">Users</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">monitoring</span>
+<span class="text-[10px] font-medium">Activity</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-[10px] font-medium">Settings</span>
+</a>
+</nav>
+</body></html>

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Activity Analytics - StarTrack</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100">
+<div class="relative flex h-auto min-h-screen w-full flex-col bg-background-light dark:bg-background-dark group/design-root overflow-x-hidden">
+<!-- TopAppBar -->
+<div class="sticky top-0 z-10 flex items-center bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md p-4 pb-2 justify-between border-b border-primary/10">
+<div class="text-slate-900 dark:text-slate-100 flex size-10 shrink-0 items-center justify-center rounded-full hover:bg-primary/10 cursor-pointer">
+<span class="material-symbols-outlined">arrow_back</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-tight flex-1 text-center pr-10">Activity Analytics</h2>
+</div>
+<!-- Date Range Selector -->
+<div class="pb-3 bg-background-light dark:bg-background-dark">
+<div class="flex border-b border-primary/10 px-4 gap-8 overflow-x-auto no-scrollbar">
+<a class="flex flex-col items-center justify-center border-b-[3px] border-b-transparent text-slate-500 dark:text-slate-400 pb-[13px] pt-4 whitespace-nowrap" href="#">
+<p class="text-sm font-bold tracking-wide">Last 7 Days</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-[3px] border-primary text-primary pb-[13px] pt-4 whitespace-nowrap" href="#">
+<p class="text-sm font-bold tracking-wide">Last 30 Days</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-[3px] border-b-transparent text-slate-500 dark:text-slate-400 pb-[13px] pt-4 whitespace-nowrap" href="#">
+<p class="text-sm font-bold tracking-wide">Last 90 Days</p>
+</a>
+</div>
+</div>
+<!-- Key Metric Cards -->
+<div class="flex flex-wrap gap-3 p-4">
+<div class="flex min-w-[140px] flex-1 flex-col gap-2 rounded-xl p-4 bg-white dark:bg-slate-900 border border-primary/10 shadow-sm">
+<div class="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+<span class="material-symbols-outlined text-sm">groups</span>
+<p class="text-xs font-medium uppercase tracking-wider">Total DAU</p>
+</div>
+<p class="text-slate-900 dark:text-slate-100 text-2xl font-bold leading-tight">1,248</p>
+<p class="text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">trending_up</span> +12%
+                </p>
+</div>
+<div class="flex min-w-[140px] flex-1 flex-col gap-2 rounded-xl p-4 bg-white dark:bg-slate-900 border border-primary/10 shadow-sm">
+<div class="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+<span class="material-symbols-outlined text-sm">schedule</span>
+<p class="text-xs font-medium uppercase tracking-wider">Avg Session</p>
+</div>
+<p class="text-slate-900 dark:text-slate-100 text-2xl font-bold leading-tight">14m 20s</p>
+<p class="text-rose-600 dark:text-rose-400 text-xs font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">trending_down</span> -2%
+                </p>
+</div>
+<div class="flex min-w-[140px] flex-1 flex-col gap-2 rounded-xl p-4 bg-white dark:bg-slate-900 border border-primary/10 shadow-sm">
+<div class="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+<span class="material-symbols-outlined text-sm">ads_click</span>
+<p class="text-xs font-medium uppercase tracking-wider">Interact. Rate</p>
+</div>
+<p class="text-slate-900 dark:text-slate-100 text-2xl font-bold leading-tight">4.8%</p>
+<p class="text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">trending_up</span> +5%
+                </p>
+</div>
+</div>
+<!-- User Engagement Trends Chart -->
+<div class="px-4 py-2">
+<div class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-primary/10 shadow-sm">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight">Engagement Trends</h3>
+<p class="text-slate-500 dark:text-slate-400 text-sm">Daily vs Weekly Active Users</p>
+</div>
+<span class="material-symbols-outlined text-primary">insights</span>
+</div>
+<div class="flex items-baseline gap-2 mb-4">
+<p class="text-slate-900 dark:text-slate-100 text-3xl font-bold">8.4k</p>
+<p class="text-emerald-600 dark:text-emerald-400 text-sm font-medium">+8% from last month</p>
+</div>
+<div class="flex flex-col gap-4">
+<svg fill="none" height="120" preserveaspectratio="none" viewbox="0 0 478 150" width="100%" xmlns="http://www.w3.org/2000/svg">
+<path d="M0 109C18.1538 109 18.1538 21 36.3077 21C54.4615 21 54.4615 41 72.6154 41C90.7692 41 90.7692 93 108.923 93C127.077 93 127.077 33 145.231 33C163.385 33 163.385 101 181.538 101C199.692 101 199.692 61 217.846 61C236 61 236 45 254.154 45C272.308 45 272.308 121 290.462 121C308.615 121 308.615 149 326.769 149C344.923 149 344.923 1 363.077 1C381.231 1 381.231 81 399.385 81C417.538 81 417.538 129 435.692 129C453.846 129 453.846 25 472 25" stroke="#1152d4" stroke-linecap="round" stroke-width="4"></path>
+</svg>
+<div class="flex justify-between border-t border-primary/5 pt-2">
+<p class="text-slate-400 text-xs font-bold">Week 1</p>
+<p class="text-slate-400 text-xs font-bold">Week 2</p>
+<p class="text-slate-400 text-xs font-bold">Week 3</p>
+<p class="text-slate-400 text-xs font-bold">Week 4</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Top Content Categories -->
+<div class="px-4 py-4">
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-bold mb-3 px-1">Top Content Categories</h3>
+<div class="bg-white dark:bg-slate-900 rounded-xl p-4 border border-primary/10 shadow-sm space-y-4">
+<div class="space-y-2">
+<div class="flex justify-between text-sm mb-1">
+<span class="font-medium">Software Engineering</span>
+<span class="text-primary font-bold">42%</span>
+</div>
+<div class="w-full bg-primary/10 h-2 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[42%]"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-sm mb-1">
+<span class="font-medium">AI &amp; Machine Learning</span>
+<span class="text-primary font-bold">35%</span>
+</div>
+<div class="w-full bg-primary/10 h-2 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[35%]"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-sm mb-1">
+<span class="font-medium">Academic Research</span>
+<span class="text-primary font-bold">23%</span>
+</div>
+<div class="w-full bg-primary/10 h-2 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[23%]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- User Retention -->
+<div class="px-4 py-2">
+<div class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-primary/10 shadow-sm">
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-bold mb-4">User Retention</h3>
+<div class="flex items-center gap-6">
+<div class="relative size-24 shrink-0 flex items-center justify-center">
+<svg class="size-full -rotate-90" viewbox="0 0 36 36">
+<circle class="stroke-primary/10" cx="18" cy="18" fill="none" r="16" stroke-width="4"></circle>
+<circle class="stroke-primary" cx="18" cy="18" fill="none" r="16" stroke-dasharray="68, 100" stroke-width="4"></circle>
+</svg>
+<div class="absolute text-center">
+<span class="block text-xl font-bold">68%</span>
+</div>
+</div>
+<div class="flex-1 space-y-3">
+<div class="flex items-center gap-2">
+<div class="size-3 rounded-sm bg-primary"></div>
+<div class="flex-1">
+<p class="text-xs text-slate-500 dark:text-slate-400">Returning Users</p>
+<p class="text-sm font-bold">849 users</p>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<div class="size-3 rounded-sm bg-primary/20"></div>
+<div class="flex-1">
+<p class="text-xs text-slate-500 dark:text-slate-400">New Sign-ups</p>
+<p class="text-sm font-bold">399 users</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Recent High-Impact Actions Feed -->
+<div class="px-4 py-6">
+<div class="flex justify-between items-center mb-3">
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-bold">High-Impact Actions</h3>
+<button class="text-primary text-sm font-bold">View All</button>
+</div>
+<div class="space-y-3">
+<div class="flex gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-primary/10">
+<div class="size-10 shrink-0 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center text-emerald-600">
+<span class="material-symbols-outlined">handshake</span>
+</div>
+<div>
+<p class="text-sm font-bold">New Collaboration Formed</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Dept. of IT and Mbarara Hospital</p>
+<p class="text-[10px] mt-1 text-slate-400 font-medium">2 hours ago</p>
+</div>
+</div>
+<div class="flex gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-primary/10">
+<div class="size-10 shrink-0 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center text-amber-600">
+<span class="material-symbols-outlined">workspace_premium</span>
+</div>
+<div>
+<p class="text-sm font-bold">Milestone Badge Earned</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Dr. Sarah J. achieved 'Top Researcher' status</p>
+<p class="text-[10px] mt-1 text-slate-400 font-medium">5 hours ago</p>
+</div>
+</div>
+<div class="flex gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-primary/10">
+<div class="size-10 shrink-0 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center text-blue-600">
+<span class="material-symbols-outlined">rocket_launch</span>
+</div>
+<div>
+<p class="text-sm font-bold">Major Project Launch</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">AI Health Diagnostic Tool v2.0 published</p>
+<p class="text-[10px] mt-1 text-slate-400 font-medium">Yesterday</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Export Action -->
+<div class="p-6 pb-12 mt-auto">
+<button class="w-full bg-primary text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/20 hover:bg-primary/90">
+<span class="material-symbols-outlined">file_download</span>
+                Export Report (PDF/CSV)
+            </button>
+</div>
+</div>
+</body></html>

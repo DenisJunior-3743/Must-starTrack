@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<title>StarTrack Achievements</title>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 antialiased">
+<div class="relative flex min-h-screen w-full flex-col max-w-md mx-auto bg-background-light dark:bg-background-dark overflow-x-hidden border-x border-slate-200 dark:border-slate-800">
+<!-- Header -->
+<header class="sticky top-0 z-10 flex items-center bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md p-4 border-b border-slate-200 dark:border-slate-800 justify-between">
+<div class="text-primary flex size-10 shrink-0 items-center justify-center rounded-full hover:bg-primary/10 transition-colors">
+<span class="material-symbols-outlined">arrow_back</span>
+</div>
+<h1 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-tight flex-1 text-center">My Achievements</h1>
+<div class="flex w-10 items-center justify-end">
+<button class="flex items-center justify-center rounded-full size-10 text-primary hover:bg-primary/10 transition-colors">
+<span class="material-symbols-outlined">share</span>
+</button>
+</div>
+</header>
+<!-- Stats Overview -->
+<section class="px-4 pt-6 pb-2">
+<div class="bg-primary rounded-xl p-6 text-white shadow-lg shadow-primary/20 relative overflow-hidden">
+<div class="relative z-10">
+<p class="text-primary-100 text-sm font-medium opacity-80">Current Standing</p>
+<h2 class="text-3xl font-bold mt-1">Star Scholar</h2>
+<div class="flex items-center gap-4 mt-4">
+<div class="flex flex-col">
+<span class="text-xs opacity-70">Badges</span>
+<span class="text-lg font-bold">12</span>
+</div>
+<div class="h-8 w-px bg-white/20"></div>
+<div class="flex flex-col">
+<span class="text-xs opacity-70">Points</span>
+<span class="text-lg font-bold">2,450</span>
+</div>
+<div class="h-8 w-px bg-white/20"></div>
+<div class="flex flex-col">
+<span class="text-xs opacity-70">Rank</span>
+<span class="text-lg font-bold">Top 5%</span>
+</div>
+</div>
+</div>
+<div class="absolute -right-4 -bottom-4 opacity-10">
+<span class="material-symbols-outlined !text-[120px]">military_tech</span>
+</div>
+</div>
+</section>
+<!-- Earned Badges Section -->
+<section class="px-4 py-6">
+<div class="flex items-center justify-between mb-4">
+<h2 class="text-slate-900 dark:text-slate-100 text-xl font-bold tracking-tight">Earned Badges</h2>
+<span class="text-primary text-sm font-medium">View All</span>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<!-- Innovator -->
+<div class="bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col items-center text-center">
+<div class="size-16 rounded-full bg-amber-100 flex items-center justify-center mb-3">
+<span class="material-symbols-outlined text-amber-600 text-3xl">lightbulb</span>
+</div>
+<h3 class="text-slate-900 dark:text-slate-100 text-sm font-bold">Innovator</h3>
+<p class="text-slate-500 dark:text-slate-400 text-xs mt-1 leading-relaxed line-clamp-2">Won the annual university hackathon</p>
+</div>
+<!-- Top Collaborator -->
+<div class="bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col items-center text-center">
+<div class="size-16 rounded-full bg-blue-100 flex items-center justify-center mb-3">
+<span class="material-symbols-outlined text-blue-600 text-3xl">groups</span>
+</div>
+<h3 class="text-slate-900 dark:text-slate-100 text-sm font-bold">Top Collaborator</h3>
+<p class="text-slate-500 dark:text-slate-400 text-xs mt-1 leading-relaxed line-clamp-2">High engagement in group study sessions</p>
+</div>
+<!-- Code Master -->
+<div class="bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col items-center text-center">
+<div class="size-16 rounded-full bg-emerald-100 flex items-center justify-center mb-3">
+<span class="material-symbols-outlined text-emerald-600 text-3xl">terminal</span>
+</div>
+<h3 class="text-slate-900 dark:text-slate-100 text-sm font-bold">Code Master</h3>
+<p class="text-slate-500 dark:text-slate-400 text-xs mt-1 leading-relaxed line-clamp-2">Mastery in advanced data structures</p>
+</div>
+<!-- Project Lead -->
+<div class="bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col items-center text-center">
+<div class="size-16 rounded-full bg-purple-100 flex items-center justify-center mb-3">
+<span class="material-symbols-outlined text-purple-600 text-3xl">star</span>
+</div>
+<h3 class="text-slate-900 dark:text-slate-100 text-sm font-bold">Project Lead</h3>
+<p class="text-slate-500 dark:text-slate-400 text-xs mt-1 leading-relaxed line-clamp-2">Led team to successful project completion</p>
+</div>
+<!-- Faculty Star -->
+<div class="bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col items-center text-center col-span-2">
+<div class="flex items-center gap-4 w-full">
+<div class="size-16 shrink-0 rounded-full bg-rose-100 flex items-center justify-center">
+<span class="material-symbols-outlined text-rose-600 text-3xl">verified_user</span>
+</div>
+<div class="text-left">
+<h3 class="text-slate-900 dark:text-slate-100 text-sm font-bold">Faculty Star</h3>
+<p class="text-slate-500 dark:text-slate-400 text-xs mt-1 leading-relaxed">Officially recognized by department head for academic excellence and peer mentoring.</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Next Milestones -->
+<section class="px-4 py-6 bg-slate-100/50 dark:bg-slate-900/30 flex-grow">
+<h2 class="text-slate-900 dark:text-slate-100 text-xl font-bold tracking-tight mb-4">Next Milestones</h2>
+<div class="space-y-3">
+<!-- Research Guru (Locked) -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex items-center gap-4 group">
+<div class="size-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0 grayscale">
+<span class="material-symbols-outlined text-slate-400">science</span>
+</div>
+<div class="flex-grow">
+<div class="flex justify-between items-center mb-1">
+<h4 class="text-sm font-bold text-slate-700 dark:text-slate-300">Research Guru</h4>
+<span class="text-[10px] font-bold text-primary px-2 py-0.5 bg-primary/10 rounded-full">LOCKED</span>
+</div>
+<div class="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[65%]" style="width: 65%"></div>
+</div>
+<p class="text-[10px] text-slate-500 mt-1">Publish 1 research paper (65% completed)</p>
+</div>
+</div>
+<!-- Global Citizen (Locked) -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex items-center gap-4 group">
+<div class="size-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0 grayscale">
+<span class="material-symbols-outlined text-slate-400">public</span>
+</div>
+<div class="flex-grow">
+<div class="flex justify-between items-center mb-1">
+<h4 class="text-sm font-bold text-slate-700 dark:text-slate-300">Global Citizen</h4>
+<span class="text-[10px] font-bold text-primary px-2 py-0.5 bg-primary/10 rounded-full">LOCKED</span>
+</div>
+<div class="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[20%]" style="width: 20%"></div>
+</div>
+<p class="text-[10px] text-slate-500 mt-1">Attend 5 international seminars (1/5)</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Bottom Navigation -->
+<nav class="sticky bottom-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 px-4 py-2 flex items-center justify-around">
+<a class="flex flex-col items-center gap-1 p-2 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="text-[10px] font-medium">Home</span>
+</a>
+<a class="flex flex-col items-center gap-1 p-2 text-primary" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">emoji_events</span>
+<span class="text-[10px] font-bold">Badges</span>
+</a>
+<a class="flex flex-col items-center gap-1 p-2 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">menu_book</span>
+<span class="text-[10px] font-medium">Courses</span>
+</a>
+<a class="flex flex-col items-center gap-1 p-2 text-slate-400 dark:text-slate-500" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="text-[10px] font-medium">Profile</span>
+</a>
+</nav>
+</div>
+</body></html>

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>MUST StarTrack - Faculty Course Catalog</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100">
+<div class="relative flex min-h-screen w-full flex-col overflow-x-hidden max-w-md mx-auto bg-white dark:bg-slate-900 shadow-xl">
+<!-- Header Section -->
+<header class="sticky top-0 z-50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+<div class="flex items-center p-4 justify-between">
+<div class="flex items-center gap-3">
+<button class="flex size-10 items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-slate-700 dark:text-slate-300">arrow_back</span>
+</button>
+<div>
+<h1 class="text-sm font-medium text-primary uppercase tracking-wider">Faculty Catalog</h1>
+<h2 class="text-lg font-bold leading-tight">Computing &amp; Informatics</h2>
+</div>
+</div>
+<button class="flex size-10 items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-slate-700 dark:text-slate-300">info</span>
+</button>
+</div>
+<!-- Search Bar -->
+<div class="px-4 pb-4">
+<label class="flex flex-col w-full group">
+<div class="flex w-full items-stretch rounded-xl h-12 bg-slate-100 dark:bg-slate-800 border border-transparent focus-within:border-primary/30 focus-within:bg-white dark:focus-within:bg-slate-900 transition-all">
+<div class="flex items-center justify-center pl-4 text-slate-500">
+<span class="material-symbols-outlined text-xl">search</span>
+</div>
+<input class="w-full bg-transparent border-none focus:ring-0 text-slate-900 dark:text-slate-100 placeholder:text-slate-500 text-sm" placeholder="Search courses (e.g. Software Testing)" type="text"/>
+</div>
+</label>
+</div>
+<!-- Horizontal Filters -->
+<div class="flex gap-2 px-4 pb-4 overflow-x-auto no-scrollbar">
+<button class="flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-primary px-4 text-white">
+<span class="text-xs font-semibold">Undergraduate</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-slate-100 dark:bg-slate-800 px-4 text-slate-700 dark:text-slate-300">
+<span class="text-xs font-semibold">Postgraduate</span>
+</button>
+<div class="w-px h-6 bg-slate-200 dark:bg-slate-700 self-center mx-1"></div>
+<button class="flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-slate-100 dark:bg-slate-800 px-4 text-slate-700 dark:text-slate-300">
+<span class="text-xs font-semibold">Year 1</span>
+<span class="material-symbols-outlined text-sm">expand_more</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-slate-100 dark:bg-slate-800 px-4 text-slate-700 dark:text-slate-300">
+<span class="text-xs font-semibold">Semester</span>
+<span class="material-symbols-outlined text-sm">expand_more</span>
+</button>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="flex-1 overflow-y-auto pb-24">
+<!-- Program Header -->
+<div class="p-4 bg-slate-50 dark:bg-slate-800/50">
+<div class="flex items-center justify-between mb-2">
+<span class="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-bold uppercase">Department of Computer Science</span>
+<span class="text-[11px] text-slate-500 font-medium">12 Courses Available</span>
+</div>
+<h3 class="text-xl font-bold text-slate-900 dark:text-slate-100">B.Sc. in Computer Science</h3>
+<p class="text-sm text-slate-600 dark:text-slate-400 mt-1">Foundational program focusing on algorithms, software development, and systems design.</p>
+</div>
+<!-- Year Separator -->
+<div class="px-4 py-3 bg-white dark:bg-slate-900 sticky top-[184px] z-40 border-b border-slate-100 dark:border-slate-800">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-lg">calendar_today</span>
+<h4 class="text-sm font-bold uppercase tracking-widest text-slate-500">Year 3 - Semester 1</h4>
+</div>
+</div>
+<!-- Course Cards List -->
+<div class="flex flex-col divide-y divide-slate-100 dark:divide-slate-800">
+<!-- Course Card 1 -->
+<div class="p-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+<div class="flex justify-between items-start mb-2">
+<div class="flex flex-col">
+<span class="text-[11px] font-bold text-primary mb-0.5">CSC3102</span>
+<h5 class="text-base font-bold">Artificial Intelligence</h5>
+</div>
+<div class="flex flex-col items-end">
+<span class="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 px-2 py-1 rounded-md text-[10px] font-bold">4 UNITS</span>
+</div>
+</div>
+<p class="text-sm text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed mb-3">
+                        Introduction to the fundamental concepts of AI including search strategies, knowledge representation, and machine learning basics.
+                    </p>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-sm text-slate-400">group</span>
+<span class="text-xs text-slate-500">Core Course</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-sm text-slate-400">lab_profile</span>
+<span class="text-xs text-slate-500">2h Lab/wk</span>
+</div>
+</div>
+</div>
+<!-- Course Card 2 -->
+<div class="p-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+<div class="flex justify-between items-start mb-2">
+<div class="flex flex-col">
+<span class="text-[11px] font-bold text-primary mb-0.5">CSC3105</span>
+<h5 class="text-base font-bold">Mobile App Development</h5>
+</div>
+<div class="flex flex-col items-end">
+<span class="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 px-2 py-1 rounded-md text-[10px] font-bold">3 UNITS</span>
+</div>
+</div>
+<p class="text-sm text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed mb-3">
+                        Design and implementation of mobile applications for modern platforms. Focus on UI/UX and native performance.
+                    </p>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-sm text-slate-400">category</span>
+<span class="text-xs text-slate-500">Elective</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-sm text-slate-400">terminal</span>
+<span class="text-xs text-slate-500">Project Based</span>
+</div>
+</div>
+</div>
+<!-- Course Card 3 -->
+<div class="p-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+<div class="flex justify-between items-start mb-2">
+<div class="flex flex-col">
+<span class="text-[11px] font-bold text-primary mb-0.5">CSC3110</span>
+<h5 class="text-base font-bold">Cyber Security Principles</h5>
+</div>
+<div class="flex flex-col items-end">
+<span class="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 px-2 py-1 rounded-md text-[10px] font-bold">4 UNITS</span>
+</div>
+</div>
+<p class="text-sm text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed mb-3">
+                        Protecting systems, networks, and programs from digital attacks. Includes cryptography and network security protocols.
+                    </p>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-sm text-slate-400">shield</span>
+<span class="text-xs text-slate-500">Security Track</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Next Program Section -->
+<div class="mt-4 p-4 border-t border-slate-200 dark:border-slate-800">
+<button class="w-full flex items-center justify-between p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 group shadow-sm">
+<div class="text-left">
+<h5 class="text-sm font-bold">B.Sc. in Software Engineering</h5>
+<p class="text-xs text-slate-500">View 48 Courses</p>
+</div>
+<span class="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors">chevron_right</span>
+</button>
+</div>
+<div class="p-4">
+<button class="w-full flex items-center justify-between p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 group shadow-sm">
+<div class="text-left">
+<h5 class="text-sm font-bold">B.Sc. in Data Science</h5>
+<p class="text-xs text-slate-500">View 42 Courses</p>
+</div>
+<span class="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors">chevron_right</span>
+</button>
+</div>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-4 py-2 flex items-center justify-around z-50">
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="text-[10px] font-medium">Home</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">menu_book</span>
+<span class="text-[10px] font-bold">Catalog</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">assignment_turned_in</span>
+<span class="text-[10px] font-medium">Enrollment</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="text-[10px] font-medium">Profile</span>
+</a>
+</nav>
+</div>
+<style>
+        /* Custom scrollbar hide for the filter bar */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</body></html>

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sign in - MUST StarTrack</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "primary": "#1152d4",
+                "background-light": "#f6f6f8",
+                "background-dark": "#101622",
+              },
+              fontFamily: {
+                "display": ["Lexend", "sans-serif"]
+              },
+              borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+            },
+          },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Lexend', sans-serif;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark min-h-screen flex items-center justify-center p-4">
+<div class="max-w-md w-full bg-white dark:bg-slate-900 rounded-xl shadow-xl overflow-hidden border border-slate-200 dark:border-slate-800">
+<!-- Header -->
+<div class="flex items-center p-4 justify-between border-b border-slate-100 dark:border-slate-800">
+<button class="text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 p-2 rounded-full transition-colors">
+<span class="material-symbols-outlined block">close</span>
+</button>
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 bg-contain bg-no-repeat bg-center" data-alt="Google logo icon" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCqaikuo8s9cdVvruXMWLHmTG2urwr5yyDB3HB5gLcj_m88IIINK3w6Jj4uY4Sm45po7u7ee4wtMhfTjN_4LU-EsjO6ylWhqjaW3ZYuR4dCm0TEzyk3Yt6Nc9t3XUVUlPXlQNIIXLinKWSiBc9tZrOeY1b5qNjvkSkuT6ule5O0f9dstAUGdT3IHkkgRU9peV3FAKz6aC-Xb2aPfvYECSpyElqDrWfDooaxjuXQAVy2Oow7RZEriWLAoprjUZYfR2PsxLS7uvXLMA')"></div>
+<span class="text-slate-600 dark:text-slate-300 font-medium text-sm">Sign in</span>
+</div>
+<div class="w-10"></div> <!-- Spacer for balance -->
+</div>
+<!-- App Branding Area -->
+<div class="p-6 text-center">
+<div class="mx-auto w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-4">
+<span class="material-symbols-outlined text-primary text-4xl" style="font-variation-settings: 'FILL' 1">stars</span>
+</div>
+<h1 class="text-slate-900 dark:text-slate-100 text-2xl font-bold tracking-tight">Choose an account</h1>
+<p class="text-slate-500 dark:text-slate-400 mt-2">to continue to <span class="text-primary font-semibold">MUST StarTrack</span></p>
+</div>
+<!-- Warning/Requirement Banner -->
+<div class="mx-6 mb-4 p-3 bg-blue-50 dark:bg-primary/10 border border-primary/20 rounded-lg flex gap-3">
+<span class="material-symbols-outlined text-primary text-xl">info</span>
+<p class="text-xs text-primary font-medium leading-relaxed">
+                Please use your MUST institutional email address (@std.must.ac.ug or @must.ac.ug) to access your academic records.
+            </p>
+</div>
+<!-- Account List -->
+<div class="px-2 pb-2">
+<!-- Selected/Confirmation State -->
+<button class="w-full flex items-center gap-4 p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors rounded-lg group text-left relative border-2 border-primary/30 bg-primary/5">
+<div class="w-10 h-10 rounded-full bg-slate-200 overflow-hidden flex-shrink-0">
+<img alt="User avatar" class="w-full h-full object-cover" data-alt="User profile picture for Felix" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDYIUiCMACZAOYM2VERPPmip8rVhSNb02mgjRKVhl5_H_TX-jILj6kIP8xqUosNOt9RSVdm2wZrxsXJfGhNJ0HCpIP316zSDNtaYBCIB3OimYJSRjxJ3l_s1ISuUeKlD-lG7V9FfagNx_fzKdIU5IbAwdAu-B8axmoCAlL-t5qR_bMsdqSljhhSkgODxS1IZmJ9pUW0o8dAN-qTODkTlCo6-aN5E2Le2mmw41v1kK58wHdjdK5z_Jvae4liEXqe56I7mGgEDO9gnQ"/>
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">Musinguzi Felix</p>
+<p class="text-xs text-slate-500 dark:text-slate-400 truncate">fmusinguzi@std.must.ac.ug</p>
+</div>
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1">check_circle</span>
+</button>
+<!-- Other Account -->
+<button class="w-full flex items-center gap-4 p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors rounded-lg group text-left">
+<div class="w-10 h-10 rounded-full bg-slate-200 overflow-hidden flex-shrink-0">
+<img alt="User avatar" class="w-full h-full object-cover" data-alt="User profile picture for Jane" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD2pjYt_jx-fG5vv7o997OSSetC_dJFc9jqzLWTla3wFfOB78v5-wHF4HTDKGbllIBA6GQHprHMD7pGYwZWsVeW3FWfff9JHVLii5oxVIIX0-MADNd3FbAjHERxyY6SwQdRWWyiHuFLZuJudw40-bT-UL6Bac_cpCuquGIrQRqoIK1-_IYC-JSefMRzDAcBa-L3Q1-zL_RlZWHVKowU5gYuazmZYlhZxDDt3MNTXgMieZjAtsSEGiAVFiQZHo-S6CSXSp-wPllMFQ"/>
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">Jane Namata</p>
+<p class="text-xs text-slate-500 dark:text-slate-400 truncate">jane.namata@gmail.com</p>
+</div>
+<div class="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">PERSONAL</div>
+</button>
+<!-- Use another account -->
+<button class="w-full flex items-center gap-4 p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors rounded-lg group text-left mt-1 border-t border-slate-100 dark:border-slate-800">
+<div class="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-slate-600 dark:text-slate-400">person_add</span>
+</div>
+<div class="flex-1">
+<p class="text-sm font-medium text-slate-900 dark:text-slate-100">Use another account</p>
+</div>
+</button>
+</div>
+<!-- Footer / Security Disclaimer -->
+<div class="p-6 pt-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+<p class="text-[11px] leading-relaxed text-slate-500 dark:text-slate-500">
+                To continue, Google will share your name, email address, language preference, and profile picture with MUST StarTrack. Before using this app, you can review MUST StarTrack's 
+                <a class="text-primary hover:underline" href="#">privacy policy</a> and 
+                <a class="text-primary hover:underline" href="#">terms of service</a>.
+            </p>
+<div class="flex justify-between mt-6 text-xs text-slate-400 font-medium">
+<div class="flex gap-4">
+<a class="hover:text-slate-600 dark:hover:text-slate-300" href="#">English (United States)</a>
+</div>
+<div class="flex gap-4">
+<a class="hover:text-slate-600 dark:hover:text-slate-300" href="#">Help</a>
+<a class="hover:text-slate-600 dark:hover:text-slate-300" href="#">Privacy</a>
+<a class="hover:text-slate-600 dark:hover:text-slate-300" href="#">Terms</a>
+</div>
+</div>
+</div>
+</div>
+<!-- Navigation Bar -->
+<div class="fixed bottom-0 left-0 right-0 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 px-4 py-2 flex justify-around items-center">
+<a class="flex flex-col items-center p-2 text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="text-[10px] mt-1">Home</span>
+</a>
+<a class="flex flex-col items-center p-2 text-primary font-bold" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">shield_person</span>
+<span class="text-[10px] mt-1">Auth</span>
+</a>
+<a class="flex flex-col items-center p-2 text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-[10px] mt-1">Settings</span>
+</a>
+</div>
+</body></html>

@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>MUST StarTrack - Departmental Analytics</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Lexend', sans-serif;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #1152d433;
+            border-radius: 10px;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+<!-- Header -->
+<header class="sticky top-0 z-10 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-primary/10">
+<div class="flex items-center p-4 justify-between max-w-5xl mx-auto w-full">
+<div class="flex items-center gap-3">
+<button class="flex size-10 items-center justify-center rounded-full hover:bg-primary/10 transition-colors">
+<span class="material-symbols-outlined text-primary">arrow_back</span>
+</button>
+<div>
+<h1 class="text-xl font-bold leading-tight tracking-tight text-slate-900 dark:text-slate-100">Software Engineering</h1>
+<p class="text-xs font-medium text-primary uppercase tracking-wider">Departmental Analytics</p>
+</div>
+</div>
+<button class="flex size-10 items-center justify-center rounded-full hover:bg-primary/10 transition-colors">
+<span class="material-symbols-outlined text-slate-600 dark:text-slate-400">search</span>
+</button>
+</div>
+</header>
+<main class="flex-1 overflow-y-auto max-w-5xl mx-auto w-full pb-24">
+<!-- Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
+<div class="flex flex-col gap-2 rounded-xl p-6 bg-white dark:bg-slate-900 border border-primary/5 shadow-sm">
+<div class="flex items-center justify-between">
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Active Projects</p>
+<span class="material-symbols-outlined text-primary text-xl">folder_open</span>
+</div>
+<p class="text-slate-900 dark:text-slate-100 text-3xl font-bold leading-tight">24</p>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-emerald-500 text-sm">trending_up</span>
+<p class="text-emerald-500 text-xs font-semibold">+5.4% from last month</p>
+</div>
+</div>
+<div class="flex flex-col gap-2 rounded-xl p-6 bg-white dark:bg-slate-900 border border-primary/5 shadow-sm">
+<div class="flex items-center justify-between">
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Collaborations</p>
+<span class="material-symbols-outlined text-primary text-xl">handshake</span>
+</div>
+<p class="text-slate-900 dark:text-slate-100 text-3xl font-bold leading-tight">12</p>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-emerald-500 text-sm">trending_up</span>
+<p class="text-emerald-500 text-xs font-semibold">+2 new this week</p>
+</div>
+</div>
+<div class="flex flex-col gap-2 rounded-xl p-6 bg-white dark:bg-slate-900 border border-primary/5 shadow-sm">
+<div class="flex items-center justify-between">
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Participation Rate</p>
+<span class="material-symbols-outlined text-primary text-xl">group</span>
+</div>
+<p class="text-slate-900 dark:text-slate-100 text-3xl font-bold leading-tight">85%</p>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-emerald-500 text-sm">trending_up</span>
+<p class="text-emerald-500 text-xs font-semibold">+10.2% vs Faculty Avg</p>
+</div>
+</div>
+</div>
+<!-- Project Categories Breakdown & Top Skills -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 px-4 py-2">
+<!-- Chart Section -->
+<section class="bg-white dark:bg-slate-900 rounded-xl p-6 border border-primary/5 shadow-sm">
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-bold tracking-tight">Project Categories</h3>
+<select class="text-xs bg-background-light dark:bg-slate-800 border-none rounded-lg text-slate-600 dark:text-slate-300 focus:ring-primary">
+<option>This Semester</option>
+<option>Last Semester</option>
+</select>
+</div>
+<div class="space-y-5">
+<div class="space-y-2">
+<div class="flex justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
+<span>Web Dev</span>
+<span>40%</span>
+</div>
+<div class="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 40%;"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
+<span>AI / Machine Learning</span>
+<span>70%</span>
+</div>
+<div class="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-primary/80 rounded-full" style="width: 70%;"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
+<span>Blockchain</span>
+<span>25%</span>
+</div>
+<div class="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-primary/60 rounded-full" style="width: 25%;"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-xs font-semibold text-slate-500 uppercase tracking-wider">
+<span>Mobile App Dev</span>
+<span>50%</span>
+</div>
+<div class="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-primary/40 rounded-full" style="width: 50%;"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- Top Skills -->
+<section class="bg-white dark:bg-slate-900 rounded-xl p-6 border border-primary/5 shadow-sm">
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-bold tracking-tight">Top Departmental Skills</h3>
+<span class="material-symbols-outlined text-slate-400">info</span>
+</div>
+<div class="space-y-6">
+<div class="flex items-center gap-4">
+<div class="size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold">Py</div>
+<div class="flex-1">
+<div class="flex justify-between mb-1">
+<span class="text-sm font-semibold">Python</span>
+<span class="text-xs text-slate-500">92% Prevalence</span>
+</div>
+<div class="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full">
+<div class="h-full bg-primary rounded-full" style="width: 92%;"></div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold">Fl</div>
+<div class="flex-1">
+<div class="flex justify-between mb-1">
+<span class="text-sm font-semibold">Flutter</span>
+<span class="text-xs text-slate-500">78% Prevalence</span>
+</div>
+<div class="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full">
+<div class="h-full bg-primary/80 rounded-full" style="width: 78%;"></div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold">UI</div>
+<div class="flex-1">
+<div class="flex justify-between mb-1">
+<span class="text-sm font-semibold">UI/UX Design</span>
+<span class="text-xs text-slate-500">65% Prevalence</span>
+</div>
+<div class="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full">
+<div class="h-full bg-primary/60 rounded-full" style="width: 65%;"></div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold">Ts</div>
+<div class="flex-1">
+<div class="flex justify-between mb-1">
+<span class="text-sm font-semibold">TypeScript</span>
+<span class="text-xs text-slate-500">45% Prevalence</span>
+</div>
+<div class="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full">
+<div class="h-full bg-primary/40 rounded-full" style="width: 45%;"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Recent Milestones -->
+<section class="px-4 py-4">
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-bold tracking-tight mb-4">Recent Department Milestones</h3>
+<div class="space-y-3">
+<div class="flex gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-primary/5 shadow-sm">
+<div class="shrink-0 flex flex-col items-center">
+<div class="size-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center">
+<span class="material-symbols-outlined">check_circle</span>
+</div>
+<div class="w-px h-full bg-slate-100 dark:bg-slate-800 my-2"></div>
+</div>
+<div class="pb-2">
+<p class="text-xs font-bold text-primary uppercase tracking-widest mb-1">Project Completion</p>
+<h4 class="text-sm font-bold text-slate-900 dark:text-slate-100">AI-Driven Campus Security System</h4>
+<p class="text-xs text-slate-500 mt-1">Successfully deployed by Team Alpha (Lead: Dr. Sarah Chen). Rated 4.9/5 by student stakeholders.</p>
+<span class="text-[10px] text-slate-400 mt-2 block">2 hours ago</span>
+</div>
+</div>
+<div class="flex gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-primary/5 shadow-sm">
+<div class="shrink-0 flex flex-col items-center">
+<div class="size-10 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center">
+<span class="material-symbols-outlined">description</span>
+</div>
+<div class="w-px h-full bg-slate-100 dark:bg-slate-800 my-2"></div>
+</div>
+<div class="pb-2">
+<p class="text-xs font-bold text-primary uppercase tracking-widest mb-1">New Publication</p>
+<h4 class="text-sm font-bold text-slate-900 dark:text-slate-100">Blockchain Interoperability in Higher Ed</h4>
+<p class="text-xs text-slate-500 mt-1">Published in IEEE Software Journal. Authored by Prof. James Wilson and 3 Masters students.</p>
+<span class="text-[10px] text-slate-400 mt-2 block">Yesterday</span>
+</div>
+</div>
+<div class="flex gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl border border-primary/5 shadow-sm">
+<div class="shrink-0 flex flex-col items-center">
+<div class="size-10 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 flex items-center justify-center">
+<span class="material-symbols-outlined">handshake</span>
+</div>
+</div>
+<div class="pb-2">
+<p class="text-xs font-bold text-primary uppercase tracking-widest mb-1">Industry Collaboration</p>
+<h4 class="text-sm font-bold text-slate-900 dark:text-slate-100">TechCorp Cloud Internship Program</h4>
+<p class="text-xs text-slate-500 mt-1">New partnership signed for 15 dedicated software engineering student placements.</p>
+<span class="text-[10px] text-slate-400 mt-2 block">3 days ago</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Navigation -->
+<nav class="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-950/90 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 px-4 pb-6 pt-3 z-20">
+<div class="max-w-md mx-auto flex justify-between items-center">
+<a class="flex flex-col items-center gap-1 group" href="#">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors">dashboard</span>
+<p class="text-[10px] font-semibold text-slate-400 group-hover:text-primary">Dashboard</p>
+</a>
+<a class="flex flex-col items-center gap-1 group" href="#">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors">folder_shared</span>
+<p class="text-[10px] font-semibold text-slate-400 group-hover:text-primary">Projects</p>
+</a>
+<a class="flex flex-col items-center gap-1 group" href="#">
+<span class="material-symbols-outlined text-primary fill-1">monitoring</span>
+<p class="text-[10px] font-bold text-primary">Analytics</p>
+</a>
+<a class="flex flex-col items-center gap-1 group" href="#">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors">settings</span>
+<p class="text-[10px] font-semibold text-slate-400 group-hover:text-primary">Settings</p>
+</a>
+</div>
+</nav>
+</body></html>

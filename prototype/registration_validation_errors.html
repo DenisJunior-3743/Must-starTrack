@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "error": "#dc2626",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display antialiased text-slate-900 dark:text-slate-100">
+<div class="flex flex-col min-h-screen max-w-[480px] mx-auto bg-white dark:bg-slate-900 shadow-xl overflow-x-hidden">
+<!-- Header -->
+<header class="sticky top-0 z-10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md px-4 py-4 flex items-center gap-4">
+<button class="flex items-center justify-center size-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-slate-700 dark:text-slate-200">arrow_back</span>
+</button>
+<h1 class="text-xl font-bold tracking-tight">University Information</h1>
+</header>
+<!-- Progress Bar Section -->
+<div class="px-6 py-4 flex flex-col gap-2">
+<div class="flex justify-between items-center mb-1">
+<span class="text-sm font-semibold text-slate-500 uppercase tracking-wider">Step 2 of 3</span>
+<span class="text-sm font-bold text-primary">66%</span>
+</div>
+<div class="w-full h-2.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full transition-all duration-500 ease-out" style="width: 66.6%;"></div>
+</div>
+</div>
+<!-- Scrollable Form Content -->
+<main class="flex-1 px-6 py-4 space-y-6 overflow-y-auto pb-32">
+<div class="space-y-1">
+<h3 class="text-lg font-semibold">Academic Profile</h3>
+<p class="text-sm text-slate-500">Please provide your official university details.</p>
+</div>
+<!-- Field 1: Registration Number (Error State) -->
+<div class="space-y-2">
+<label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Registration Number</label>
+<div class="relative group">
+<input class="w-full h-14 px-4 bg-red-50 dark:bg-red-900/10 border-2 border-red-500 rounded-xl focus:ring-4 focus:ring-red-500/10 focus:border-red-600 transition-all outline-none text-slate-900 dark:text-slate-100 font-medium" placeholder="YYYY/XXX/NNN/PS" type="text" value="2020/BSE/001"/>
+<div class="absolute right-4 top-1/2 -translate-y-1/2 flex items-center">
+<span class="material-symbols-outlined text-red-600">error</span>
+</div>
+</div>
+<p class="text-xs font-medium text-red-600 leading-relaxed bg-red-50 dark:bg-red-900/20 p-2 rounded-lg border border-red-100 dark:border-red-900/30">
+                    Invalid format. Use YYYY/XXX/NNN/PS or YYYY/XXX/NNN/GS (e.g., 2023/BCS/001/PS)
+                </p>
+</div>
+<!-- Field 2: Institutional Email (Error State) -->
+<div class="space-y-2">
+<label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Institutional Email</label>
+<div class="relative group">
+<input class="w-full h-14 px-4 bg-red-50 dark:bg-red-900/10 border-2 border-red-500 rounded-xl focus:ring-4 focus:ring-red-500/10 focus:border-red-600 transition-all outline-none text-slate-900 dark:text-slate-100 font-medium" placeholder="username@std.must.ac.ug" type="email" value="felix@gmail.com"/>
+<div class="absolute right-4 top-1/2 -translate-y-1/2 flex items-center">
+<span class="material-symbols-outlined text-red-600">mail_lock</span>
+</div>
+</div>
+<p class="text-xs font-medium text-red-600 leading-relaxed bg-red-50 dark:bg-red-900/20 p-2 rounded-lg border border-red-100 dark:border-red-900/30">
+                    Please use your MUST institutional email (e.g., 2020bse001@std.must.ac.ug)
+                </p>
+</div>
+<!-- Default/Completed Fields -->
+<div class="space-y-5 pt-2">
+<div class="space-y-2">
+<label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Faculty</label>
+<div class="relative">
+<select class="w-full h-14 px-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all appearance-none">
+<option selected="">Faculty of Computing and Informatics</option>
+<option>Faculty of Medicine</option>
+<option>Faculty of Engineering</option>
+</select>
+<div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+<span class="material-symbols-outlined text-slate-400">expand_more</span>
+</div>
+</div>
+</div>
+<div class="space-y-2">
+<label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Program</label>
+<div class="relative">
+<select class="w-full h-14 px-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all appearance-none">
+<option selected="">Bachelor of Software Engineering</option>
+<option>Bachelor of Computer Science</option>
+<option>Bachelor of Information Technology</option>
+</select>
+<div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+<span class="material-symbols-outlined text-slate-400">expand_more</span>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="space-y-2">
+<label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Year of Study</label>
+<div class="relative">
+<select class="w-full h-14 px-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all appearance-none">
+<option>Year 1</option>
+<option>Year 2</option>
+<option>Year 3</option>
+<option selected="">Year 4</option>
+</select>
+<div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+<span class="material-symbols-outlined text-slate-400">calendar_today</span>
+</div>
+</div>
+</div>
+<div class="space-y-2">
+<label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Campus</label>
+<div class="relative">
+<select class="w-full h-14 px-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all appearance-none">
+<option selected="">Kihumuro</option>
+<option>Town Campus</option>
+</select>
+<div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+<span class="material-symbols-outlined text-slate-400">location_on</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Fixed Footer Action -->
+<footer class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] p-6 bg-gradient-to-t from-white dark:from-slate-900 via-white/95 dark:via-slate-900/95 to-transparent">
+<button class="w-full h-14 bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-bold rounded-xl cursor-not-allowed flex items-center justify-center gap-2 group transition-all">
+<span>Next Step</span>
+<span class="material-symbols-outlined text-lg">arrow_forward</span>
+</button>
+<p class="text-center text-[10px] text-red-500 font-medium mt-3 uppercase tracking-tighter">Please resolve the errors highlighted above to continue</p>
+</footer>
+</div>
+</body></html>

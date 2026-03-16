@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Send Collaboration Request</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Lexend', sans-serif;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark min-h-screen flex items-center justify-center p-4">
+<!-- Modal Container -->
+<div class="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
+<!-- Header -->
+<div class="flex items-center justify-between p-5 border-b border-slate-100 dark:border-slate-800">
+<h2 class="text-slate-900 dark:text-slate-100 text-xl font-bold leading-tight tracking-tight">Collaboration Request</h2>
+<button class="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<!-- Recipient Profile Summary -->
+<div class="p-6 bg-slate-50 dark:bg-slate-800/50 flex flex-col items-center gap-4">
+<div class="relative">
+<div class="size-24 rounded-full border-4 border-white dark:border-slate-700 shadow-sm bg-center bg-cover" data-alt="Professional headshot of a male AI researcher" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCtyMiWQEaaFgC_D1cY7xIy5ePkSj10gowN1pIuFBIrrJB2B8mnXRbsIOxf_R5y7z2_EzXpd4Xj4nL5BG_PX31Hrh4PAy_nXDZq77MGVbWIbXXKag7yx8icN8tkkkToIwqKO0RdI_QWrCOVje881SsdRoTUr-wtEvMOdQ4CtNs-2vJPBZPN5T3d52iw0DYIoCXwsE6QTv32qzIyWnt8_c3ZoqW1K6wcv0gaNXvRZQSAH4WKNnB7UCQWzLuSjsl3cVMi75lbG2Gkgw");'>
+</div>
+<div class="absolute bottom-0 right-0 size-6 bg-green-500 border-2 border-white dark:border-slate-700 rounded-full"></div>
+</div>
+<div class="text-center">
+<h3 class="text-slate-900 dark:text-slate-100 text-2xl font-bold">Alex Rivers</h3>
+<p class="text-primary font-medium">AI Researcher &amp; Developer</p>
+<p class="text-slate-500 dark:text-slate-400 text-sm">University of Tech • Computer Science Dept.</p>
+</div>
+</div>
+<!-- Request Form -->
+<div class="p-6 space-y-6">
+<!-- Project Selection -->
+<div class="space-y-2">
+<label class="block text-slate-700 dark:text-slate-300 text-sm font-semibold">Select Your Project</label>
+<div class="relative">
+<select class="appearance-none w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all">
+<option disabled="" selected="" value="">Choose from My Projects</option>
+<option value="neural-ui">Neural Interface v2.0</option>
+<option value="data-viz">Quantum Data Visualizer</option>
+<option value="robotic-arm">Robotic Control Module</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-500">
+<span class="material-symbols-outlined">expand_more</span>
+</div>
+</div>
+<p class="text-xs text-slate-500 dark:text-slate-400">Which project are you inviting Alex to collaborate on?</p>
+</div>
+<!-- Personalized Message -->
+<div class="space-y-2">
+<label class="block text-slate-700 dark:text-slate-300 text-sm font-semibold">Personalized Message</label>
+<textarea class="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all min-h-[120px] resize-none" placeholder="e.g., I saw your AI project and would love to help with the UI design..."></textarea>
+<div class="flex justify-between items-center">
+<p class="text-xs text-slate-500 dark:text-slate-400 italic">Be specific about why you want to work together.</p>
+<span class="text-xs text-slate-400">0/500</span>
+</div>
+</div>
+</div>
+<!-- Actions -->
+<div class="p-6 pt-0 flex flex-col sm:flex-row-reverse gap-3">
+<button class="flex-1 bg-primary hover:bg-primary/90 text-white font-bold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined text-[20px]">send</span>
+                Send Request
+            </button>
+<button class="flex-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold py-3 px-6 rounded-lg transition-colors">
+                Cancel
+            </button>
+</div>
+<!-- Branding Footer -->
+<div class="px-6 py-4 bg-slate-50 dark:bg-slate-800/30 border-t border-slate-100 dark:border-slate-800 flex items-center justify-center gap-2">
+<div class="size-6 bg-primary rounded flex items-center justify-center">
+<span class="material-symbols-outlined text-white text-[16px]">school</span>
+</div>
+<span class="text-[10px] uppercase tracking-[0.2em] font-bold text-slate-400 dark:text-slate-500">University Research Network</span>
+</div>
+</div>
+</body></html>

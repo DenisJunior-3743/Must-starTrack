@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Student Public Profile | MUST StarTrack</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "secondary": "#fbbf24",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Lexend', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+<header class="sticky top-0 z-50 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-primary/10">
+<div class="flex items-center justify-between px-4 py-3 max-w-2xl mx-auto">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">arrow_back</span>
+<span class="font-bold text-lg tracking-tight">Public Profile</span>
+</div>
+<button class="bg-primary text-white px-4 py-1.5 rounded-full text-sm font-semibold hover:bg-primary/90 transition-colors">
+                Sign In
+            </button>
+</div>
+</header>
+<main class="max-w-2xl mx-auto pb-24">
+<div class="flex flex-col items-center px-4 pt-8 pb-6 bg-gradient-to-b from-primary/5 to-transparent">
+<div class="relative">
+<div class="size-32 rounded-full border-4 border-white dark:border-slate-800 shadow-xl overflow-hidden bg-slate-200">
+<img alt="Student profile portrait" class="w-full h-full object-cover" data-alt="Professional portrait of a young male student" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDkUzaRYyT3muDg9PZfTydgh9D2z7Khz1b1Hl3hOdI_dMdHoWpYiMlXeDLVM53jJIO4IQdIO-ZDHOKx_XYKdWN9m0hzLVZ4swwGQC76XU5VY8iZa-fv1C5BdvLjTkcsuwCLsWaiZVihl9JqVP3naUkaKXttySeTHbqwsZLpHRhYVfVxAnb40Htdo8ncL4M4dMNiC-QEb7qaCGme8CM64g29t7XblbTc0WVvbONtWm_d1r3r9E-JNHCUqx4DbCbRju9WtKEiaA4ztQ"/>
+</div>
+<div class="absolute bottom-1 right-1 bg-secondary text-slate-900 p-1.5 rounded-full shadow-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-sm font-bold">verified</span>
+</div>
+</div>
+<div class="mt-4 text-center">
+<h1 class="text-2xl font-bold text-slate-900 dark:text-slate-100">Alex Johnson</h1>
+<p class="text-primary font-medium mt-1">Faculty of Engineering</p>
+<p class="text-slate-500 dark:text-slate-400 text-sm italic">B.Sc. Computer Science • 3rd Year</p>
+<div class="flex items-center justify-center gap-2 mt-2 text-slate-400">
+<span class="material-symbols-outlined text-sm">location_on</span>
+<span class="text-xs uppercase tracking-wider font-semibold">MUST Main Campus</span>
+</div>
+</div>
+</div>
+<div class="px-4 py-6 bg-primary/10 border-y border-primary/20 mx-4 rounded-xl mb-6">
+<div class="flex items-center gap-3 mb-2">
+<span class="material-symbols-outlined text-primary">info</span>
+<h3 class="font-bold text-primary">Limited Guest View</h3>
+</div>
+<p class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                You are viewing a public portfolio. Log in to contact this student, request collaboration, or view restricted academic achievements.
+            </p>
+<button class="mt-4 w-full bg-primary text-white py-2 rounded-lg font-bold text-sm shadow-md">
+                Log in to interact
+            </button>
+</div>
+<div class="flex justify-around px-4 mb-8">
+<div class="text-center">
+<p class="text-2xl font-bold text-slate-900 dark:text-slate-100">12</p>
+<p class="text-xs text-slate-500 uppercase font-bold tracking-tighter">Projects</p>
+</div>
+<div class="h-10 w-px bg-slate-200 dark:bg-slate-800"></div>
+<div class="text-center">
+<p class="text-2xl font-bold text-slate-900 dark:text-slate-100">450</p>
+<p class="text-xs text-slate-500 uppercase font-bold tracking-tighter">Views</p>
+</div>
+<div class="h-10 w-px bg-slate-200 dark:bg-slate-800"></div>
+<div class="text-center">
+<p class="text-2xl font-bold text-slate-900 dark:text-slate-100">8</p>
+<p class="text-xs text-slate-500 uppercase font-bold tracking-tighter">Awards</p>
+</div>
+</div>
+<section class="px-4 mb-8">
+<h3 class="text-lg font-bold mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">person</span>
+                About
+            </h3>
+<p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+                Passionate software developer specializing in AI and cloud architecture. Currently leading the Robotics Club at MUST and focusing on sustainable tech solutions for developing regions. Open to collaborative research projects in Machine Learning.
+            </p>
+</section>
+<section class="px-4 mb-8">
+<h3 class="text-lg font-bold mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">psychology</span>
+                Skills
+            </h3>
+<div class="flex flex-wrap gap-2">
+<span class="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-xs font-medium border border-slate-200 dark:border-slate-700">Python</span>
+<span class="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-xs font-medium border border-slate-200 dark:border-slate-700">React Native</span>
+<span class="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-xs font-medium border border-slate-200 dark:border-slate-700">TensorFlow</span>
+<span class="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-xs font-medium border border-slate-200 dark:border-slate-700">UI/UX Design</span>
+<span class="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-xs font-medium border border-slate-200 dark:border-slate-700">AWS Cloud</span>
+<span class="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-xs font-medium border border-slate-200 dark:border-slate-700">C++</span>
+</div>
+</section>
+<section class="px-4 mb-8">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-lg font-bold flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">rocket_launch</span>
+                    Public Projects
+                </h3>
+<span class="text-xs font-bold text-primary uppercase">View All</span>
+</div>
+<div class="space-y-4">
+<div class="bg-white dark:bg-slate-900 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="h-32 bg-slate-200 relative overflow-hidden">
+<img alt="Project screenshot" class="w-full h-full object-cover opacity-80" data-alt="Code on a screen representing a software project" src="https://lh3.googleusercontent.com/aida-public/AB6AXuATyL82FqC_g-EOr-hvMEC642Jslog0j7ixOVmjfJXnDciY65Wof3fPpVfr1vKLgJcw2-QVGTqYGgr5HmLSr8QZt20SN_0WoRWh1LxcdibjTAUW_EmVyRzkmOH11O5cSY6MS4BjcjP7fFwOGG5p8b2JQzh3HgNrg_L22OvLQB-tInueLzIh6WTAbGiYJDh-z5n52XnGfK6wCnPFAXJKCGGFzpDoBpnlIu7rviKnJS9iw8Yfc004InVWvVsO4nMCofzhMaY1VGoplQ"/>
+<div class="absolute top-2 right-2 bg-secondary text-slate-900 text-[10px] font-bold px-2 py-0.5 rounded shadow-sm uppercase">
+                            Featured
+                        </div>
+</div>
+<div class="p-4">
+<p class="text-[10px] font-bold text-primary uppercase mb-1">Artificial Intelligence</p>
+<h4 class="font-bold text-slate-900 dark:text-slate-100">Smart Campus Navigation App</h4>
+<p class="text-xs text-slate-500 mt-2 line-clamp-2">An AR-based navigation tool for new students to find lecture halls across the MUST campus.</p>
+<div class="flex items-center gap-3 mt-4">
+<div class="flex -space-x-2">
+<div class="size-6 rounded-full border-2 border-white bg-slate-300"></div>
+<div class="size-6 rounded-full border-2 border-white bg-slate-400"></div>
+</div>
+<span class="text-[10px] text-slate-400 font-medium">+2 Collaborators</span>
+</div>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm opacity-60 grayscale-[0.5]">
+<div class="h-32 bg-slate-200 relative overflow-hidden">
+<img alt="Hardware project" class="w-full h-full object-cover" data-alt="Circuit board and electronic components" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAat87k-e9r9s3DmZ9GLQwFWee_s9Yseo9NNoqS4esKT01pj98TORtul7BUiKC9_ejkql93W-gcSKQoN3sw8Zx9tgvNCwPN2G3lyYVLoDdALi71bf3L2C3VPPKx_fg3exZLcmn-exF_N6BgIi3lK5zdFIKqVvyr7XLAtOINA4ZdQng3SvUjYmLpVLBqF7_SzuCDtjoAOlxRfw64TLUVSnNIHY38ncLmOEbLdVbOYf0xjHVS8-F_rAyajawSAhu9S9Z8QLkBN6r-SQ"/>
+<div class="absolute inset-0 bg-slate-900/40 flex items-center justify-center">
+<span class="material-symbols-outlined text-white text-3xl">lock</span>
+</div>
+</div>
+<div class="p-4">
+<p class="text-[10px] font-bold text-slate-400 uppercase mb-1">Hardware &amp; IoT</p>
+<h4 class="font-bold text-slate-900 dark:text-slate-100">Smart Grid Monitor</h4>
+<p class="text-xs text-slate-500 mt-2">Log in to view project details and documentation.</p>
+</div>
+</div>
+</div>
+</section>
+<div class="px-4 py-8 text-center bg-slate-100 dark:bg-slate-900/50 rounded-2xl mx-4 mb-8">
+<h4 class="font-bold mb-2">Want to see more?</h4>
+<p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Create a StarTrack account to follow Alex and get updates on new projects.</p>
+<div class="flex flex-col gap-3">
+<button class="bg-primary text-white font-bold py-3 rounded-xl shadow-lg shadow-primary/20">Create Free Account</button>
+<button class="text-primary font-bold text-sm">Already have an account? Sign in</button>
+</div>
+</div>
+</main>
+<nav class="fixed bottom-0 w-full bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 px-4 py-2 flex justify-between items-center max-w-2xl mx-auto left-0 right-0 z-50">
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">explore</span>
+<span class="text-[10px] font-bold uppercase tracking-widest">Explore</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">search</span>
+<span class="text-[10px] font-bold uppercase tracking-widest">Search</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined font-fill">account_circle</span>
+<span class="text-[10px] font-bold uppercase tracking-widest">Profile</span>
+</a>
+<div class="h-8 w-px bg-slate-200 dark:bg-slate-800"></div>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">login</span>
+<span class="text-[10px] font-bold uppercase tracking-widest">Sign In</span>
+</a>
+</nav>
+</body></html>

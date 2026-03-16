@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Suspicion Score Detail - StarTrack Admin</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1152d4",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Lexend', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="max-w-2xl mx-auto bg-white dark:bg-slate-900 shadow-sm min-h-screen flex flex-col">
+<!-- TopAppBar -->
+<header class="flex items-center px-4 py-4 border-b border-slate-200 dark:border-slate-800 sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md z-10">
+<button class="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
+<span class="material-symbols-outlined text-primary">arrow_back</span>
+</button>
+<h1 class="ml-2 text-lg font-bold tracking-tight">Suspicion Score Detail</h1>
+<div class="ml-auto flex items-center gap-2">
+<span class="px-2 py-1 bg-primary/10 text-primary text-xs font-bold rounded uppercase">ID: #ST-8821</span>
+</div>
+</header>
+<main class="flex-1 p-4 space-y-6">
+<!-- Summary Card -->
+<section>
+<h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Overall Risk Assessment</h2>
+<div class="bg-primary/5 border border-primary/10 rounded-xl p-6">
+<div class="flex items-center justify-between mb-4">
+<div>
+<p class="text-slate-600 dark:text-slate-400 text-sm font-medium">Suspicion Score</p>
+<p class="text-4xl font-bold text-slate-900 dark:text-white">85<span class="text-lg text-slate-400">/100</span></p>
+</div>
+<div class="h-16 w-16 rounded-full border-4 border-red-500 flex items-center justify-center">
+<span class="text-red-500 font-bold">High</span>
+</div>
+</div>
+<div class="space-y-2">
+<div class="w-full bg-slate-200 dark:bg-slate-700 h-2.5 rounded-full overflow-hidden">
+<div class="bg-red-500 h-full w-[85%]"></div>
+</div>
+<p class="text-xs text-slate-500 flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">report</span>
+                            Critical: Requires immediate administrative review
+                        </p>
+</div>
+</div>
+</section>
+<!-- Flagged Content Preview -->
+<section>
+<h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Flagged Content Preview</h2>
+<div class="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 flex gap-4">
+<div class="w-20 h-20 bg-slate-200 dark:bg-slate-700 rounded-lg shrink-0 overflow-hidden relative">
+<img alt="Thumbnail" class="w-full h-full object-cover blur-[2px]" data-alt="Blurred thumbnail of a reported social post image" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAIGtD1VOaab2k0Mekfl3ZA_fEqPGCo7NWuQsFFndbxXOoD_fF7F-8s84LLU2cekjz9zbx5lt9hWPv5pV7EpuJ_3RV12nY0rMdXO-g6wIfN22OIVUtsV4r_iyFbgb8X3JT-REJXSpZm7xKyGYLzxlPbCbRVSLivZBc3zLkT7tVLcBTID6ZGUoPY5IUNYYtmsotGnTPVGja9EEWh5xY-mDAo4oV4FM4QY4s3kSwciHTCLLAyUARgohFjpzH-cBy1xhh0a9R-ysrOSQ"/>
+<div class="absolute inset-0 bg-black/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-white">visibility_off</span>
+</div>
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-sm text-slate-800 dark:text-slate-200 line-clamp-3 italic">
+                            "Check out this exclusive leak for the upcoming finals! Follow this link for the full PDF download and bypass the portal..."
+                        </p>
+<p class="text-xs text-primary mt-2 font-medium">Posted 14 minutes ago</p>
+</div>
+</div>
+</section>
+<!-- AI Reasoning Breakdown -->
+<section>
+<div class="flex items-center gap-2 mb-3">
+<h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wider">AI Reasoning (Gemini v2.1)</h2>
+<span class="material-symbols-outlined text-primary text-sm">auto_awesome</span>
+</div>
+<div class="space-y-4">
+<!-- High Risk -->
+<div class="p-4 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-xl">
+<div class="flex justify-between items-center mb-2">
+<span class="text-sm font-bold text-red-700 dark:text-red-400">Inappropriate Media</span>
+<span class="text-sm font-bold text-red-700">90%</span>
+</div>
+<div class="w-full bg-red-200 dark:bg-red-900/40 h-1.5 rounded-full mb-3">
+<div class="bg-red-500 h-full w-[90%]"></div>
+</div>
+<p class="text-xs text-red-800 dark:text-red-300">Image contains watermarks matching proprietary StarTrack portal assets. AI detected potential academic integrity violation (unauthorized material distribution).</p>
+</div>
+<!-- Medium Risk -->
+<div class="p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 rounded-xl">
+<div class="flex justify-between items-center mb-2">
+<span class="text-sm font-bold text-amber-700 dark:text-amber-400">External Link Safety</span>
+<span class="text-sm font-bold text-amber-700">45%</span>
+</div>
+<div class="w-full bg-amber-200 dark:bg-amber-900/40 h-1.5 rounded-full mb-1">
+<div class="bg-amber-500 h-full w-[45%]"></div>
+</div>
+</div>
+<!-- Low Risk -->
+<div class="p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl">
+<div class="flex justify-between items-center mb-2">
+<span class="text-sm font-medium text-slate-600 dark:text-slate-400">Hate Speech/Harassment</span>
+<span class="text-sm font-medium text-slate-600">10%</span>
+</div>
+<div class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full">
+<div class="bg-slate-400 h-full w-[10%]"></div>
+</div>
+</div>
+<div class="p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl">
+<div class="flex justify-between items-center mb-2">
+<span class="text-sm font-medium text-slate-600 dark:text-slate-400">Spam/Bot Activity</span>
+<span class="text-sm font-medium text-slate-600">5%</span>
+</div>
+<div class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full">
+<div class="bg-slate-400 h-full w-[5%]"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- User History -->
+<section>
+<h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">User Context</h2>
+<div class="grid grid-cols-2 gap-3">
+<div class="p-4 border border-slate-200 dark:border-slate-700 rounded-xl">
+<p class="text-xs text-slate-500">Flags History</p>
+<p class="text-lg font-bold text-red-600">2 Previous Flags</p>
+</div>
+<div class="p-4 border border-slate-200 dark:border-slate-700 rounded-xl">
+<p class="text-xs text-slate-500">Account Age</p>
+<p class="text-lg font-bold text-slate-800 dark:text-slate-200">4 Months</p>
+</div>
+</div>
+</section>
+</main>
+<!-- Administrative Actions -->
+<footer class="p-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky bottom-0 flex flex-col gap-3">
+<div class="flex gap-3">
+<button class="flex-1 flex items-center justify-center gap-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-900 dark:text-slate-100 font-bold py-3 rounded-xl transition-colors">
+<span class="material-symbols-outlined">check_circle</span>
+                    Approve
+                </button>
+<button class="flex-1 flex items-center justify-center gap-2 bg-red-100 dark:bg-red-900/30 hover:bg-red-200 text-red-600 dark:text-red-400 font-bold py-3 rounded-xl transition-colors">
+<span class="material-symbols-outlined">delete_forever</span>
+                    Delete
+                </button>
+</div>
+<button class="w-full flex items-center justify-center gap-2 bg-primary text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all">
+<span class="material-symbols-outlined">block</span>
+                Ban User Permanently
+            </button>
+</footer>
+</div>
+</body></html>
