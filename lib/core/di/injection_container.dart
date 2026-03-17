@@ -91,13 +91,11 @@ class InjectionContainer {
     sl.registerSingleton<fb.FirebaseAuth>(fb.FirebaseAuth.instance);
     sl.registerSingleton<FirebaseFirestore>(FirebaseFirestore.instance);
 
-    // Google Sign-In restricted to MUST domain
+    // Let Google show available device accounts; the repository enforces
+    // allowed MUST domains after the user selects an account.
     sl.registerSingleton<GoogleSignIn>(
       GoogleSignIn(
         scopes: ['email', 'profile'],
-        // hostedDomain restricts the Google account chooser to @must.ac.ug.
-        // This is UI-level only; server-side rules enforce it independently.
-        hostedDomain: 'must.ac.ug',
       ),
     );
 

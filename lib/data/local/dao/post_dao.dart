@@ -434,6 +434,25 @@ class PostDao {
 
   // ── Serialisation helpers ──────────────────────────────────────────────────
 
+  List<String> _imageMediaUrls(PostModel post) {
+    return post.mediaUrls.where((url) => !_looksLikeVideoUrl(url)).toList();
+  }
+
+  List<String> _videoMediaUrls(PostModel post) {
+    return post.mediaUrls.where(_looksLikeVideoUrl).toList();
+  }
+
+  bool _looksLikeVideoUrl(String url) {
+    final lower = url.toLowerCase();
+    return lower.contains('/video/upload/') ||
+        lower.endsWith('.mp4') ||
+        lower.endsWith('.mov') ||
+        lower.endsWith('.m4v') ||
+        lower.endsWith('.3gp') ||
+        lower.endsWith('.webm') ||
+        lower.endsWith('.mkv');
+  }
+
   Map<String, dynamic> _toDbMap(PostModel p) => {
     'id': p.id,
     'author_id': p.authorId,
@@ -447,12 +466,20 @@ class PostDao {
     'faculty': p.faculty,
     'program': p.program,
     'skills_used': jsonEncode(p.skillsUsed),
+    'images': jsonEncode(_imageMediaUrls(p)),
+    'videos': jsonEncode(_videoMediaUrls(p)),
     'media_urls': jsonEncode(p.mediaUrls),
     'youtube_url': p.youtubeUrl,
+    'youtube_link': p.youtubeUrl,
     'external_links': jsonEncode(p.externalLinks),
+    'external_link': p.externalLinks.isNotEmpty
+      ? p.externalLinks.first.values.firstOrNull
+      : null,
     'visibility': p.visibility.name,
     'moderation_status': p.moderationStatus.name,
+    'status': p.moderationStatus == ModerationStatus.approved ? 'published' : p.moderationStatus.name,
     'trust_score': p.trustScore,
+    'suspicion_score': p.trustScore,
     'like_count': p.likeCount,
     'dislike_count': p.dislikeCount,
     'comment_count': p.commentCount,
@@ -505,6 +532,14 @@ class PostDao {
       return null;
     }
 
+    final parsedMediaUrls = parseList(row['media_urls']);
+    final parsedImages = parseList(row['images']);
+    final parsedVideos = parseList(row['videos']);
+    final combinedLegacyMedia = [...parsedImages, ...parsedVideos];
+
+    final parsedExternalLinks = parseLinks(row['external_links']);
+    final legacyExternalLink = pickString(['external_link']);
+
     return PostModel(
       id: row['id'] as String,
       authorId: row['author_id'] as String,
@@ -519,9 +554,15 @@ class PostDao {
       faculty: row['faculty'] as String?,
       program: row['program'] as String?,
       skillsUsed: parseList(row['skills_used']),
-      mediaUrls: parseList(row['media_urls']),
-      youtubeUrl: row['youtube_url'] as String?,
-      externalLinks: parseLinks(row['external_links']),
+      mediaUrls: parsedMediaUrls.isNotEmpty ? parsedMediaUrls : combinedLegacyMedia,
+      youtubeUrl: pickString(['youtube_url', 'youtube_link']),
+      externalLinks: parsedExternalLinks.isNotEmpty
+          ? parsedExternalLinks
+          : legacyExternalLink != null
+              ? [
+                  {'url': legacyExternalLink}
+                ]
+              : [],
       visibility: PostVisibility.values.firstWhere(
         (v) => v.name == row['visibility'],
         orElse: () => PostVisibility.public,

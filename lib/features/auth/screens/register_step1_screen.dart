@@ -3,18 +3,14 @@
 // MUST StarTrack — Registration Step 1: Biographical Data
 //
 // Collects: full name, gender, phone, short bio, skills.
-// Optional: profile photo.
 // Data is stored in memory and passed to Step 2 via GoRouter extra.
 //
-// HCI: progress stepper, live validation, skill chip input,
-//      photo affordance, footer sticky CTA.
+// HCI: progress stepper, live validation, skill chip input, footer sticky CTA.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:image_picker/image_picker.dart';
-import 'dart:io';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
@@ -40,8 +36,6 @@ class _RegisterStep1ScreenState extends State<RegisterStep1Screen> {
 
   String? _selectedGender;
   List<String> _skills = [];
-  File? _photoFile;
-  final _picker = ImagePicker();
 
   static const _genders = ['Male', 'Female', 'Other', 'Prefer not to say'];
 
@@ -53,14 +47,6 @@ class _RegisterStep1ScreenState extends State<RegisterStep1Screen> {
     super.dispose();
   }
 
-  Future<void> _pickPhoto() async {
-    final xFile = await _picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 800, maxHeight: 800, imageQuality: 80,
-    );
-    if (xFile != null) setState(() => _photoFile = File(xFile.path));
-  }
-
   void _next(BuildContext context) {
     if (!_formKey.currentState!.validate()) return;
     final from = GoRouterState.of(context).uri.queryParameters['from'];
@@ -70,7 +56,6 @@ class _RegisterStep1ScreenState extends State<RegisterStep1Screen> {
       'phone': _phoneCtrl.text.trim(),
       'bio': _bioCtrl.text.trim(),
       'skills': _skills,
-      'photoPath': _photoFile?.path,
       if (from != null && from.isNotEmpty) 'returnTo': from,
     };
     context.read<AuthCubit>().advanceToStep2(data);
@@ -114,13 +99,6 @@ class _RegisterStep1ScreenState extends State<RegisterStep1Screen> {
                         Text('Tell us about yourself',
                           style: GoogleFonts.lexend(
                             fontSize: 14, color: AppColors.textSecondaryLight)),
-                        const SizedBox(height: 24),
-
-                        // ── Photo picker ───────────────────────────────────
-                        Center(child: _PhotoPicker(
-                          photoFile: _photoFile,
-                          onTap: _pickPhoto,
-                        )),
                         const SizedBox(height: 24),
 
                         // ── Full Name ──────────────────────────────────────
@@ -203,47 +181,6 @@ class _RegisterStep1ScreenState extends State<RegisterStep1Screen> {
           ),
         );
       }),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Photo picker widget
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _PhotoPicker extends StatelessWidget {
-  final File? photoFile;
-  final VoidCallback onTap;
-
-  const _PhotoPicker({required this.photoFile, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Stack(
-        children: [
-          CircleAvatar(
-            radius: 52,
-            backgroundColor: AppColors.primaryTint10,
-            backgroundImage: photoFile != null ? FileImage(photoFile!) : null,
-            child: photoFile == null
-                ? const Icon(Icons.person_outline_rounded, size: 48, color: AppColors.primary)
-                : null,
-          ),
-          Positioned(
-            bottom: 0, right: 0,
-            child: Container(
-              width: 32, height: 32,
-              decoration: const BoxDecoration(
-                color: AppColors.primary,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.camera_alt_rounded, size: 18, color: Colors.white),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

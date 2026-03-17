@@ -231,7 +231,7 @@ class FcmService {
       case 'opportunity':
       case 'collaboration':
         if (entityId != null) {
-          router.push('${RouteNames.projectDetail}/$entityId');
+          router.push('/project/$entityId');
         } else {
           router.push(RouteNames.notifications);
         }

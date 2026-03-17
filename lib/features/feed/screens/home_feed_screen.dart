@@ -15,16 +15,19 @@
 //      Affordance (FAB for creating posts).
 
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:timeago/timeago.dart' as timeago;
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/router/route_guards.dart';
-import '../../shared/hci_components/post_card.dart';
+import '../../../data/models/post_model.dart';
+import '../../auth/bloc/auth_cubit.dart';
 import '../bloc/feed_cubit.dart';
 
 class HomeFeedScreen extends StatefulWidget {
@@ -141,10 +144,11 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                     if (state.posts.isEmpty) {
                       return const SliverFillRemaining(child: _EmptyFeed());
                     }
+                    final authorGroups = _groupPostsByAuthor(state.posts);
                     return SliverList(
                       delegate: SliverChildBuilderDelegate(
                         (_, i) {
-                          if (i == state.posts.length) {
+                          if (i == authorGroups.length) {
                             return state.isLoadingMore
                                 ? const Padding(
                                     padding: EdgeInsets.all(24),
@@ -156,19 +160,16 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                                     ? const SizedBox(height: 80)
                                     : const _EndOfFeed();
                           }
-                          final post = state.posts[i];
-                          return PostCard(
-                            post: post,
-                            onTap: () => ctx.push(
-                              '${RouteNames.projectDetail}/${post.id}',
-                            ),
-                            onLike: () => cubit.likePost(post.id),
-                            onAuthorTap: () => ctx.push(
-                              '${RouteNames.profile}/${post.authorId}',
+                          final group = authorGroups[i];
+                          return _AuthorMediaShelf(
+                            group: group,
+                            onOpenPost: (post) => ctx.push('/project/${post.id}'),
+                            onOpenAuthor: () => ctx.push(
+                              '${RouteNames.profile}/${group.authorId}',
                             ),
                           );
                         },
-                        childCount: state.posts.length + 1,
+                        childCount: authorGroups.length + 1,
                       ),
                     );
                   }
@@ -182,11 +183,343 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
   }
 }
 
+List<_AuthorPostGroup> _groupPostsByAuthor(List<PostModel> posts) {
+  final grouped = <String, List<PostModel>>{};
+  final orderedAuthorIds = <String>[];
+
+  for (final post in posts) {
+    if (!grouped.containsKey(post.authorId)) {
+      grouped[post.authorId] = <PostModel>[];
+      orderedAuthorIds.add(post.authorId);
+    }
+    grouped[post.authorId]!.add(post);
+  }
+
+  return orderedAuthorIds
+      .map((authorId) => _AuthorPostGroup(authorId, grouped[authorId]!))
+      .toList();
+}
+
+class _AuthorPostGroup {
+  final String authorId;
+  final List<PostModel> posts;
+
+  const _AuthorPostGroup(this.authorId, this.posts);
+
+  PostModel get leadPost => posts.first;
+  String get authorName => leadPost.authorName ?? 'Unknown author';
+  String? get authorPhotoUrl => leadPost.authorPhotoUrl;
+  List<PostModel> get photoPosts =>
+      posts.where((post) => post.mediaUrls.any((url) => !_isVideoUrl(url))).toList();
+  List<PostModel> get videoPosts =>
+      posts.where((post) => post.mediaUrls.any(_isVideoUrl)).toList();
+}
+
+bool _isVideoUrl(String url) {
+  final lower = url.toLowerCase();
+  return lower.contains('/video/upload/') ||
+      lower.endsWith('.mp4') ||
+      lower.endsWith('.mov') ||
+      lower.endsWith('.m4v') ||
+      lower.endsWith('.3gp') ||
+      lower.endsWith('.webm') ||
+      lower.endsWith('.mkv');
+}
+
+class _AuthorMediaShelf extends StatelessWidget {
+  final _AuthorPostGroup group;
+  final void Function(PostModel post) onOpenPost;
+  final VoidCallback onOpenAuthor;
+
+  const _AuthorMediaShelf({
+    required this.group,
+    required this.onOpenPost,
+    required this.onOpenAuthor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+        border: Border.all(color: AppColors.borderLight, width: 0.8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: DefaultTabController(
+        length: 3,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            InkWell(
+              onTap: onOpenAuthor,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(AppDimensions.radiusLg),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 22,
+                      backgroundColor: AppColors.primaryTint10,
+                      backgroundImage: group.authorPhotoUrl != null
+                          ? CachedNetworkImageProvider(group.authorPhotoUrl!)
+                          : null,
+                      child: group.authorPhotoUrl == null
+                          ? Text(
+                              group.authorName.isNotEmpty
+                                  ? group.authorName[0].toUpperCase()
+                                  : '?',
+                              style: GoogleFonts.lexend(
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.primary,
+                              ),
+                            )
+                          : null,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            group.authorName,
+                            style: GoogleFonts.lexend(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            '${group.posts.length} posts',
+                            style: GoogleFonts.lexend(
+                              fontSize: 12,
+                              color: AppColors.textSecondaryLight,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      timeago.format(group.leadPost.createdAt),
+                      style: GoogleFonts.lexend(
+                        fontSize: 12,
+                        color: AppColors.textSecondaryLight,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const Divider(height: 1),
+            const TabBar(
+              labelColor: AppColors.primary,
+              unselectedLabelColor: AppColors.textSecondaryLight,
+              indicatorColor: AppColors.primary,
+              tabs: [
+                Tab(text: 'Photos'),
+                Tab(text: 'Videos'),
+                Tab(text: 'Posts'),
+              ],
+            ),
+            SizedBox(
+              height: 228,
+              child: TabBarView(
+                children: [
+                  _MediaStrip(
+                    posts: group.photoPosts,
+                    onOpenPost: onOpenPost,
+                    emptyLabel: 'No photos shared yet.',
+                    mode: _MediaStripMode.photos,
+                  ),
+                  _MediaStrip(
+                    posts: group.videoPosts,
+                    onOpenPost: onOpenPost,
+                    emptyLabel: 'No videos shared yet.',
+                    mode: _MediaStripMode.videos,
+                  ),
+                  _MediaStrip(
+                    posts: group.posts,
+                    onOpenPost: onOpenPost,
+                    emptyLabel: 'No posts yet.',
+                    mode: _MediaStripMode.posts,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+enum _MediaStripMode { photos, videos, posts }
+
+class _MediaStrip extends StatelessWidget {
+  final List<PostModel> posts;
+  final void Function(PostModel post) onOpenPost;
+  final String emptyLabel;
+  final _MediaStripMode mode;
+
+  const _MediaStrip({
+    required this.posts,
+    required this.onOpenPost,
+    required this.emptyLabel,
+    required this.mode,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (posts.isEmpty) {
+      return Center(
+        child: Text(
+          emptyLabel,
+          style: GoogleFonts.lexend(color: AppColors.textSecondaryLight),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      itemBuilder: (_, index) => _MediaShelfTile(
+        post: posts[index],
+        onTap: () => onOpenPost(posts[index]),
+        mode: mode,
+      ),
+      separatorBuilder: (_, __) => const SizedBox(width: 12),
+      itemCount: posts.length,
+    );
+  }
+}
+
+class _MediaShelfTile extends StatelessWidget {
+  final PostModel post;
+  final VoidCallback onTap;
+  final _MediaStripMode mode;
+
+  const _MediaShelfTile({
+    required this.post,
+    required this.onTap,
+    required this.mode,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final width = mode == _MediaStripMode.posts ? 220.0 : 180.0;
+    final previewUrl = _previewUrl();
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+      child: SizedBox(
+        width: width,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+                child: Container(
+                  color: AppColors.primaryTint10,
+                  child: previewUrl != null && mode != _MediaStripMode.videos
+                      ? CachedNetworkImage(
+                          imageUrl: previewUrl,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          errorWidget: (_, __, ___) => _MediaFallback(mode: mode),
+                          placeholder: (_, __) => Container(
+                            color: AppColors.primaryTint10,
+                          ),
+                        )
+                      : _MediaFallback(mode: mode),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              post.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.lexend(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              post.category ?? post.type,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.lexend(
+                fontSize: 11,
+                color: AppColors.textSecondaryLight,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String? _previewUrl() {
+    if (mode == _MediaStripMode.videos) {
+      return null;
+    }
+    for (final url in post.mediaUrls) {
+      if (!_isVideoUrl(url)) {
+        return url;
+      }
+    }
+    return null;
+  }
+}
+
+class _MediaFallback extends StatelessWidget {
+  final _MediaStripMode mode;
+
+  const _MediaFallback({required this.mode});
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = switch (mode) {
+      _MediaStripMode.photos => Icons.image_outlined,
+      _MediaStripMode.videos => Icons.play_circle_outline_rounded,
+      _MediaStripMode.posts => Icons.article_outlined,
+    };
+
+    return Center(
+      child: Icon(
+        icon,
+        size: 40,
+        color: AppColors.primary,
+      ),
+    );
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Sticky app bar
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _FeedAppBar extends StatelessWidget {
+  String _greetingName() {
+    final user = sl<AuthCubit>().currentUser;
+    final displayName = user?.displayName?.trim();
+    if (displayName == null || displayName.isEmpty) {
+      return 'there';
+    }
+    return displayName.split(' ').first;
+  }
+
   void _handleLoginTap(BuildContext context) {
     final guards = sl<RouteGuards>();
     if (!guards.isAuthenticated) {
@@ -314,6 +647,7 @@ class _FeedAppBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final greetingName = _greetingName();
     return SliverAppBar(
       floating: true,
       snap: true,
@@ -323,9 +657,10 @@ class _FeedAppBar extends StatelessWidget {
       flexibleSpace: FlexibleSpaceBar(
         background: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Row(
                   children: [
@@ -375,7 +710,7 @@ class _FeedAppBar extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 2),
-                Text('Hi there 👋',
+                Text('Hi $greetingName 👋',
                   style: GoogleFonts.lexend(
                     fontSize: 23,
                     fontWeight: FontWeight.w700,

@@ -19,6 +19,7 @@
 //   • Universal Design: 48dp touch targets, semantic labels
 
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -59,7 +60,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 2, vsync: this);
+    _tabCtrl = TabController(length: 3, vsync: this);
     _load();
   }
 
@@ -92,6 +93,10 @@ class _ProfileScreenState extends State<ProfileScreen>
       displayName: 'Student User', role: UserRole.student,
       createdAt: DateTime.now(), updatedAt: DateTime.now(),
     );
+    final photoPosts = _posts.where((post) =>
+      post.mediaUrls.any((url) => !_isVideoUrl(url))).toList();
+    final videoPosts = _posts.where((post) =>
+      post.mediaUrls.any(_isVideoUrl)).toList();
 
     return Scaffold(
       body: NestedScrollView(
@@ -121,8 +126,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                 labelColor: AppColors.primary,
                 unselectedLabelColor: AppColors.textSecondaryLight,
                 tabs: const [
-                  Tab(icon: Icon(Icons.grid_view_rounded)),
-                  Tab(icon: Icon(Icons.person_outline_rounded)),
+                  Tab(text: 'Photos', icon: Icon(Icons.photo_library_outlined)),
+                  Tab(text: 'Videos', icon: Icon(Icons.play_circle_outline_rounded)),
+                  Tab(text: 'About', icon: Icon(Icons.person_outline_rounded)),
                 ],
               ),
             ),
@@ -131,13 +137,34 @@ class _ProfileScreenState extends State<ProfileScreen>
         body: TabBarView(
           controller: _tabCtrl,
           children: [
-            _ProjectsGrid(posts: _posts),
+            _ProjectsGrid(
+              posts: photoPosts,
+              emptyTitle: 'No photos yet',
+              emptySubtitle: 'Published images will appear here.',
+            ),
+            _ProjectsGrid(
+              posts: videoPosts,
+              emptyTitle: 'No videos yet',
+              emptySubtitle: 'Published videos will appear here.',
+              preferVideoBadge: true,
+            ),
             _AboutTab(user: user),
           ],
         ),
       ),
     );
   }
+}
+
+bool _isVideoUrl(String url) {
+  final lower = url.toLowerCase();
+  return lower.contains('/video/upload/') ||
+      lower.endsWith('.mp4') ||
+      lower.endsWith('.mov') ||
+      lower.endsWith('.m4v') ||
+      lower.endsWith('.3gp') ||
+      lower.endsWith('.webm') ||
+      lower.endsWith('.mkv');
 }
 
 // ── Header ────────────────────────────────────────────────────────────────────
@@ -160,7 +187,7 @@ class _Header extends StatelessWidget {
                 radius: 52,
                 backgroundColor: AppColors.primaryTint10,
                 backgroundImage: user.photoUrl != null
-                    ? NetworkImage(user.photoUrl!) : null,
+                  ? CachedNetworkImageProvider(user.photoUrl!) : null,
                 child: user.photoUrl == null
                     ? Text((user.displayName?.isNotEmpty == true)
                       ? user.displayName![0].toUpperCase() : '?',
@@ -397,7 +424,16 @@ class _SkillsSection extends StatelessWidget {
 
 class _ProjectsGrid extends StatelessWidget {
   final List<PostModel> posts;
-  const _ProjectsGrid({required this.posts});
+  final String emptyTitle;
+  final String emptySubtitle;
+  final bool preferVideoBadge;
+
+  const _ProjectsGrid({
+    required this.posts,
+    required this.emptyTitle,
+    required this.emptySubtitle,
+    this.preferVideoBadge = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -406,12 +442,18 @@ class _ProjectsGrid extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.rocket_launch_outlined, size: 60, color: AppColors.primary),
+            Icon(
+              preferVideoBadge
+                  ? Icons.play_circle_outline_rounded
+                  : Icons.photo_library_outlined,
+              size: 60,
+              color: AppColors.primary,
+            ),
             const SizedBox(height: 12),
-            Text('No projects yet',
+            Text(emptyTitle,
               style: GoogleFonts.lexend(fontSize: 16, fontWeight: FontWeight.w700)),
             const SizedBox(height: 6),
-            Text('Share your first project!',
+            Text(emptySubtitle,
               style: GoogleFonts.lexend(fontSize: 13, color: AppColors.textSecondaryLight)),
           ],
         ),
@@ -423,26 +465,51 @@ class _ProjectsGrid extends StatelessWidget {
         crossAxisCount: 3, mainAxisSpacing: 2, crossAxisSpacing: 2,
       ),
       itemCount: posts.length,
-      itemBuilder: (ctx, i) => _GridTile(post: posts[i]),
+      itemBuilder: (ctx, i) => _GridTile(post: posts[i], preferVideoBadge: preferVideoBadge),
     );
   }
 }
 
 class _GridTile extends StatelessWidget {
   final PostModel post;
-  const _GridTile({required this.post});
+  final bool preferVideoBadge;
+  const _GridTile({required this.post, this.preferVideoBadge = false});
 
   @override
   Widget build(BuildContext context) {
+    final previewUrl = _previewUrl(post);
     return GestureDetector(
-      onTap: () => context.push('${RouteNames.projectDetail}/${post.id}'),
+      onTap: () => context.push('/project/${post.id}'),
       child: Stack(
         fit: StackFit.expand,
         children: [
-          post.mediaUrls.isNotEmpty
-              ? Image.network(post.mediaUrls.first, fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => _GridPlaceholder())
-              : _GridPlaceholder(),
+          previewUrl != null
+              ? CachedNetworkImage(
+                  imageUrl: previewUrl,
+                  fit: BoxFit.cover,
+                  errorWidget: (_, __, ___) => const _GridPlaceholder(),
+                  placeholder: (_, __) => Container(
+                    color: AppColors.primaryTint10,
+                  ),
+                )
+              : _GridPlaceholder(isVideo: preferVideoBadge || post.mediaUrls.any(_isVideoUrl)),
+          if (preferVideoBadge)
+            Positioned(
+              right: 6,
+              bottom: 6,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: const Icon(
+                  Icons.play_arrow_rounded,
+                  color: Colors.white,
+                  size: 14,
+                ),
+              ),
+            ),
           // Subtle overlay so text projects are still identifiable
           if (post.mediaUrls.isEmpty)
             Container(
@@ -459,14 +526,34 @@ class _GridTile extends StatelessWidget {
       ),
     );
   }
+
+  String? _previewUrl(PostModel post) {
+    if (!preferVideoBadge) {
+      final imageUrl = post.mediaUrls.where((url) => !_isVideoUrl(url)).cast<String?>().firstWhere(
+        (_) => true,
+        orElse: () => null,
+      );
+      return imageUrl;
+    }
+    return null;
+  }
 }
 
 class _GridPlaceholder extends StatelessWidget {
+  final bool isVideo;
+
+  const _GridPlaceholder({this.isVideo = false});
+
   @override
   Widget build(BuildContext context) => Container(
     color: AppColors.primaryTint10,
-    child: const Center(
-      child: Icon(Icons.rocket_launch_rounded, color: AppColors.primary, size: 28)),
+    child: Center(
+      child: Icon(
+        isVideo ? Icons.play_circle_outline_rounded : Icons.rocket_launch_rounded,
+        color: AppColors.primary,
+        size: 28,
+      ),
+    ),
   );
 }
 

@@ -273,7 +273,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   final post = _results[i];
                   return PostCard(
                     post: post,
-                    onTap: () => context.push('${RouteNames.projectDetail}/${post.id}'),
+                    onTap: () => context.push('/project/${post.id}'),
                     onAuthorTap: () => context.push('${RouteNames.profile}/${post.authorId}'),
                   );
                 },

@@ -194,17 +194,27 @@ class AppRouter {
           ),
         ),
         GoRoute(
+          name: RouteNames.registerStep2Name,
           path: Routes.registerStep2,
-          builder: (_, __) => BlocProvider.value(
+          builder: (_, state) => BlocProvider.value(
             value: sl<AuthCubit>(),
-            child: const RegisterStep2Screen(),
+            child: RegisterStep2Screen(
+              step1Data: state.extra is Map<String, dynamic>
+                  ? state.extra! as Map<String, dynamic>
+                  : const {},
+            ),
           ),
         ),
         GoRoute(
+          name: RouteNames.registerStep3Name,
           path: Routes.registerStep3,
-          builder: (_, __) => BlocProvider.value(
+          builder: (_, state) => BlocProvider.value(
             value: sl<AuthCubit>(),
-            child: const RegisterStep3Screen(),
+            child: RegisterStep3Screen(
+              combinedData: state.extra is Map<String, dynamic>
+                  ? state.extra! as Map<String, dynamic>
+                  : const {},
+            ),
           ),
         ),
         GoRoute(

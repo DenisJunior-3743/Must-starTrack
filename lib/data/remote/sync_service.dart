@@ -28,12 +28,14 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 
 import '../local/dao/sync_queue_dao.dart';
 import '../local/dao/user_dao.dart';
 import '../local/dao/post_dao.dart';
 import '../local/dao/message_dao.dart';
 import 'firestore_service.dart';
+import '../models/post_model.dart';
 
 // ── Sync result ───────────────────────────────────────────────────────────────
 
@@ -88,7 +90,10 @@ class SyncService {
           r == ConnectivityResult.mobile ||
           r == ConnectivityResult.ethernet);
 
-      if (isOnline) processPendingSync();
+      if (isOnline) {
+        unawaited(processPendingSync());
+        unawaited(syncRemoteToLocal());
+      }
     });
   }
 
@@ -122,6 +127,28 @@ class SyncService {
       return SyncResult(processed: processed, failed: failed, remaining: remaining);
     } finally {
       _isSyncing = false;
+    }
+  }
+
+  /// Pull a recent set of remote posts and authors into SQLite when online.
+  Future<void> syncRemoteToLocal({int postLimit = 50}) async {
+    try {
+      final posts = await _firestore.getRecentPosts(limit: postLimit);
+      if (posts.isEmpty) {
+        return;
+      }
+
+      final authorIds = posts.map((post) => post.authorId).toSet();
+      final users = await _firestore.getUsersByIds(authorIds);
+      for (final user in users) {
+        await _userDao.insertUser(user);
+      }
+
+      for (final post in posts) {
+        await _postDao.insertPost(post);
+      }
+    } catch (error) {
+      debugPrint('[SyncService] Remote-to-local sync failed: $error');
     }
   }
 
@@ -181,7 +208,30 @@ class SyncService {
     switch (job.operation) {
       case 'create':
       case 'update':
-        final post = await _postDao.getPostById(job.entityId);
+        final payload = job.payloadJson;
+        PostModel? postFromPayload;
+        if (payload.isNotEmpty) {
+          try {
+            postFromPayload = PostModel.fromJson({
+              'id': job.entityId,
+              ...payload,
+            });
+          } catch (_) {}
+        }
+
+        final localPost = await _postDao.getPostById(job.entityId);
+        final post = localPost == null
+            ? postFromPayload
+            : (postFromPayload != null &&
+                    postFromPayload.mediaUrls.isNotEmpty &&
+                    localPost.mediaUrls.isEmpty)
+                ? localPost.copyWith(
+                    mediaUrls: postFromPayload.mediaUrls,
+                    youtubeUrl: postFromPayload.youtubeUrl,
+                    externalLinks: postFromPayload.externalLinks,
+                  )
+                : localPost;
+
         if (post == null) return true;
         await _firestore.setPost(post);
         return true;

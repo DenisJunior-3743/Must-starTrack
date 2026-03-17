@@ -27,6 +27,7 @@
 //    3G in Mbarara still get a great experience."
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 import '../models/post_model.dart';
 import '../local/dao/message_dao.dart';
@@ -147,6 +148,56 @@ class FirestoreService {
     final snapshot = await query.get();
     return snapshot.docs.map((d) =>
         PostModel.fromJson({'id': d.id, ...d.data()})).toList();
+  }
+
+  /// Pull a recent batch of posts from Firestore for local cache hydration.
+  Future<List<PostModel>> getRecentPosts({int limit = 50}) async {
+    final snapshot = await _posts
+        .where('is_archived', isEqualTo: false)
+        .limit(limit)
+        .get();
+
+    final posts = <PostModel>[];
+    for (final doc in snapshot.docs) {
+      try {
+        final post = PostModel.fromJson({'id': doc.id, ...doc.data()});
+        if (post.isArchived) {
+          continue;
+        }
+        posts.add(post);
+      } catch (error) {
+        debugPrint('[FirestoreService] Skipping unreadable post ${doc.id}: $error');
+      }
+    }
+    posts.sort((left, right) => right.createdAt.compareTo(left.createdAt));
+    return posts;
+  }
+
+  /// Fetches users by Firestore document ID in small batches.
+  Future<List<UserModel>> getUsersByIds(Iterable<String> userIds) async {
+    final uniqueIds = userIds.where((id) => id.isNotEmpty).toSet().toList();
+    if (uniqueIds.isEmpty) {
+      return const [];
+    }
+
+    final users = <UserModel>[];
+    for (var index = 0; index < uniqueIds.length; index += 10) {
+      final batch = uniqueIds.sublist(
+        index,
+        index + 10 > uniqueIds.length ? uniqueIds.length : index + 10,
+      );
+
+      final snapshot = await _users.where(FieldPath.documentId, whereIn: batch).get();
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        try {
+          users.add(UserModel.fromJson({'id': doc.id, ...data}));
+        } catch (error) {
+          debugPrint('[FirestoreService] Skipping unreadable user ${doc.id}: $error');
+        }
+      }
+    }
+    return users;
   }
 
   // ── Messaging operations ──────────────────────────────────────────────────

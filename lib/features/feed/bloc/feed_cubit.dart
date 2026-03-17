@@ -148,6 +148,7 @@ class FeedCubit extends Cubit<FeedState> {
   Future<void> loadFeed({FeedFilter? filter}) async {
     emit(const FeedLoading());
     try {
+      await _syncService?.syncRemoteToLocal(postLimit: _pageSize * 3);
       final f = filter ?? const FeedFilter();
       final posts = await _postDao.getFeedPage(
         pageSize: _pageSize,

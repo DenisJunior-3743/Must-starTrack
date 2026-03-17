@@ -234,7 +234,7 @@ abstract final class AppStrings {
   static const String validationRequired = 'This field is required.';
   static const String validationEmailInvalid = 'Please enter a valid email address.';
   static const String validationEmailNotMust =
-      'Email must use a MUST domain (@std.must.ac.ug or @must.ac.ug).';
+      'Email must use a MUST domain (@must.ac.ug, @std.must.ac.ug, or @staff.must.ac.ug).';
   static const String validationRegNumFormat =
       'Format must be YYYY/XXX/NNN/PS or YYYY/XXX/NNN/GS (e.g. 2020/BSE/001/PS).';
   static const String validationRegNumYearMismatch =

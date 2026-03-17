@@ -3,7 +3,7 @@
 // MUST StarTrack — Lecturer / Staff Registration Screen
 //
 // Single-step form for staff accounts.
-// Validates @must.ac.ug email domain strictly.
+// Validates institutional email domains (@must, @staff.must, @std.must).
 // HCI: clear role context, same field components as student registration.
 
 import 'package:flutter/material.dart';
@@ -144,11 +144,12 @@ class _LecturerRegisterScreenState extends State<LecturerRegisterScreen> {
                     // Staff email
                     StTextField(
                       label: 'Staff Email',
-                      hint: 'username@must.ac.ug',
+                      hint: 'username@staff.must.ac.ug',
                       controller: _emailCtrl,
                       keyboardType: TextInputType.emailAddress,
                       prefixIcon: const Icon(Icons.mail_outline_rounded),
-                      helperText: 'Must be a valid @must.ac.ug domain email address.',
+                      helperText:
+                          'Allowed domains: @must.ac.ug, @staff.must.ac.ug, @std.must.ac.ug',
                       textInputAction: TextInputAction.next,
                       validator: MustValidators.validateStaffEmail,
                     ),
