@@ -20,12 +20,21 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
+import 'dart:ui';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/utils/media_path_utils.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:uuid/uuid.dart';
+
+import '../../../core/di/injection_container.dart';
 import '../../../data/local/dao/post_dao.dart';
+import '../../../data/local/dao/sync_queue_dao.dart';
+import '../../../data/local/database_helper.dart';
+import '../../../data/local/schema/database_schema.dart';
 import '../../../data/models/post_model.dart';
+import '../../../features/auth/bloc/auth_cubit.dart';
 import '../../shared/hci_components/post_card.dart';
 
 class ProjectDetailScreen extends StatefulWidget {
@@ -41,27 +50,196 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   bool _loading = true;
   String? _error;
   int _currentImageIndex = 0;
+  bool _appBarOpaque = false;
+  bool _isFollowing = false;
+  bool _followLoading = false;
   final _dao = PostDao();
+  final _syncQueue = SyncQueueDao();
+  final _uuid = const Uuid();
+  late final ScrollController _scrollCtrl;
+
+  String? get _currentUserId => sl<AuthCubit>().currentUser?.id;
+
+  // Hero height minus toolbar height = collapse threshold
+  static const double _collapseAt = 240 - kToolbarHeight;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _scrollCtrl = ScrollController()
+      ..addListener(() {
+        final opaque = _scrollCtrl.offset > _collapseAt;
+        if (opaque != _appBarOpaque) {
+          setState(() => _appBarOpaque = opaque);
+        }
+      });
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
     try {
       final post = await _dao.getPostById(widget.postId);
+      bool isFollowing = false;
       if (post != null) {
         await _dao.incrementViewCount(widget.postId);
+        final uid = _currentUserId;
+        if (uid != null) {
+          final db = await DatabaseHelper.instance.database;
+          final rows = await db.query(
+            DatabaseSchema.tableFollows,
+            where: 'follower_id = ? AND followee_id = ?',
+            whereArgs: [uid, post.authorId],
+            limit: 1,
+          );
+          isFollowing = rows.isNotEmpty;
+        }
       }
       setState(() {
         _post = post;
         _loading = false;
+        _isFollowing = isFollowing;
         _error = post == null ? 'Project not found.' : null;
       });
     } catch (e) {
       setState(() { _loading = false; _error = e.toString(); });
+    }
+  }
+
+  Future<void> _toggleFollow() async {
+    final uid = _currentUserId;
+    final post = _post;
+    if (uid == null || post == null || _followLoading) return;
+    setState(() => _followLoading = true);
+    final wasFollowing = _isFollowing;
+    setState(() => _isFollowing = !wasFollowing);
+    try {
+      final db = await DatabaseHelper.instance.database;
+      if (!wasFollowing) {
+        await db.insert(DatabaseSchema.tableFollows, {
+          'id': _uuid.v4(),
+          'follower_id': uid,
+          'followee_id': post.authorId,
+          'created_at': DateTime.now().millisecondsSinceEpoch.toString(),
+          'sync_status': 0,
+        });
+        await _syncQueue.enqueue(
+          operation: 'create',
+          entity: 'follows',
+          entityId: '${uid}_${post.authorId}',
+          payload: {'follower_id': uid, 'following_id': post.authorId},
+        );
+      } else {
+        await db.delete(
+          DatabaseSchema.tableFollows,
+          where: 'follower_id = ? AND followee_id = ?',
+          whereArgs: [uid, post.authorId],
+        );
+        await _syncQueue.enqueue(
+          operation: 'delete',
+          entity: 'follows',
+          entityId: '${uid}_${post.authorId}',
+          payload: {'follower_id': uid, 'following_id': post.authorId},
+        );
+      }
+    } catch (_) {
+      setState(() => _isFollowing = wasFollowing);
+    } finally {
+      setState(() => _followLoading = false);
+    }
+  }
+
+  void _sharePost() {
+    final post = _post;
+    if (post == null) return;
+    Share.share('${post.title}\n\nCheck out this project on MUST StarTrack!');
+  }
+
+  Future<void> _requestCollaborate() async {
+    final post = _post;
+    final uid = _currentUserId;
+    if (post == null || !mounted) return;
+    final messageCtrl = TextEditingController();
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SingleChildScrollView(
+        padding: EdgeInsets.only(
+          left: 20, right: 20, top: 24,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Request to Collaborate',
+              style: GoogleFonts.lexend(fontSize: 18, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text('Send a message to ${post.authorName ?? "the author"}',
+              style: GoogleFonts.lexend(
+                fontSize: 13, color: AppColors.textSecondaryLight)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: messageCtrl,
+              maxLines: 4,
+              decoration: InputDecoration(
+                hintText: 'Describe your skills and how you can contribute…',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(minimumSize: const Size(0, 48)),
+                child: const Text('Send Request'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    final message = messageCtrl.text.trim();
+    // Do NOT call messageCtrl.dispose() here — the bottom sheet widget tree
+    // is still unwinding (TextField animation listener) when the future
+    // resolves. The local variable will be GC'd naturally after this scope.
+    if (confirmed != true || uid == null) return;
+    try {
+      final db = await DatabaseHelper.instance.database;
+      await db.insert(DatabaseSchema.tableCollabRequests, {
+        'id': _uuid.v4(),
+        'sender_id': uid,
+        'receiver_id': post.authorId,
+        'post_id': post.id,
+        'message': message,
+        'status': 'pending',
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+        'sync_status': 0,
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Collaboration request sent!'),
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed to send request: $e'),
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
     }
   }
 
@@ -79,23 +257,77 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
     final post = _post!;
 
+    final Color barBg = _appBarOpaque
+        ? Theme.of(context).scaffoldBackgroundColor
+        : Colors.transparent;
+    final Color iconColor =
+        _appBarOpaque ? AppColors.primary : Colors.white;
+
     return Scaffold(
       body: CustomScrollView(
+        controller: _scrollCtrl,
         slivers: [
           // ── AppBar ──────────────────────────────────────────────────────
           SliverAppBar(
             expandedHeight: 240,
             pinned: true,
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_rounded),
-              onPressed: () => context.pop(),
+            backgroundColor: barBg,
+            surfaceTintColor: Colors.transparent,
+            elevation: _appBarOpaque ? 0 : 0,
+            scrolledUnderElevation: 1,
+            shadowColor: Colors.black12,
+            forceMaterialTransparency: !_appBarOpaque,
+            leading: Padding(
+              padding: const EdgeInsets.all(8),
+              child: _appBarOpaque
+                  ? _SolidIconButton(
+                      icon: Icons.arrow_back_rounded,
+                      color: iconColor,
+                      onPressed: () => context.pop(),
+                    )
+                  : _GlassIconButton(
+                      icon: Icons.arrow_back_rounded,
+                      onPressed: () => context.pop(),
+                    ),
             ),
-            title: const Text('Project Showcase'),
+            title: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: _appBarOpaque
+                  ? Text(
+                      'Project Showcase',
+                      key: const ValueKey('opaque'),
+                      style: GoogleFonts.lexend(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimaryLight,
+                      ),
+                    )
+                  : _GlassPill(
+                      key: const ValueKey('glass'),
+                      child: Text(
+                        'Project Showcase',
+                        style: GoogleFonts.lexend(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+            ),
+            centerTitle: true,
             actions: [
-              IconButton(
-                icon: const Icon(Icons.share_rounded),
-                onPressed: () {}, // Phase 4: share sheet
-                tooltip: 'Share',
+              Padding(
+                padding: const EdgeInsets.fromLTRB(0, 8, 8, 8),
+                child: _appBarOpaque
+                    ? _SolidIconButton(
+                        icon: Icons.share_rounded,
+                        color: iconColor,
+                        onPressed: _sharePost,
+                      )
+                    : _GlassIconButton(
+                        icon: Icons.share_rounded,
+                        onPressed: _sharePost,
+                      ),
               ),
             ],
             flexibleSpace: FlexibleSpaceBar(
@@ -130,7 +362,13 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                     fontSize: 26, fontWeight: FontWeight.w700,
                     letterSpacing: -0.4, height: 1.2)),
               ),
-              _AuthorSnippet(post: post),
+              _AuthorSnippet(
+                post: post,
+                isFollowing: _isFollowing,
+                followLoading: _followLoading,
+                onFollow: _toggleFollow,
+                onAuthorTap: () => context.go('/profile/${post.authorId}'),
+              ),
               const Divider(height: 1),
               if (post.description != null) ...[
                 Padding(
@@ -149,7 +387,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
               ],
               _StatsGrid(post: post),
               if (post.skillsUsed.isNotEmpty) _SkillsSection(post: post),
-              _CollabSection(post: post),
+              _CollabSection(post: post, onCollaborate: _requestCollaborate),
               if (post.externalLinks.isNotEmpty)
                 _ExternalLinks(links: post.externalLinks),
               const SizedBox(height: 100),
@@ -159,18 +397,31 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       ),
 
       // ── Sticky bottom bar ────────────────────────────────────────────────
-      bottomNavigationBar: _StickyBar(post: post, onLike: () async {
-        final dao = PostDao();
-        await dao.toggleLike(postId: post.id, userId: '');
-        setState(() {
-          _post = post.copyWith(
-            isLikedByMe: !post.isLikedByMe,
-            likeCount: post.isLikedByMe
-                ? post.likeCount - 1
-                : post.likeCount + 1,
-          );
-        });
-      }),
+      bottomNavigationBar: _StickyBar(
+        post: post,
+        onShare: _sharePost,
+        onCollaborate: _requestCollaborate,
+        onLike: () async {
+          final uid = _currentUserId ?? '';
+          await _dao.toggleLike(postId: post.id, userId: uid);
+          if (uid.isNotEmpty) {
+            await _syncQueue.enqueue(
+              operation: post.isLikedByMe ? 'delete' : 'create',
+              entity: 'likes',
+              entityId: '${uid}_${post.id}',
+              payload: {'user_id': uid, 'post_id': post.id},
+            );
+          }
+          setState(() {
+            _post = post.copyWith(
+              isLikedByMe: !post.isLikedByMe,
+              likeCount: post.isLikedByMe
+                  ? post.likeCount - 1
+                  : post.likeCount + 1,
+            );
+          });
+        },
+      ),
     );
   }
 }
@@ -236,29 +487,31 @@ class _HeroGallery extends StatelessWidget {
                       ),
                     ),
         ),
-        // Photo count badge
-        Positioned(
-          bottom: 16,
-          right: 16,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
-            ),
+        // Slideshow dot indicators
+        if (urls.length > 1)
+          Positioned(
+            bottom: 16,
+            left: 0,
+            right: 0,
             child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.photo_library_outlined,
-                    size: 14, color: Colors.white),
-                const SizedBox(width: 4),
-                Text('${currentIndex + 1}/${urls.length}',
-                  style: GoogleFonts.lexend(
-                    fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
-              ],
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                urls.length,
+                (i) => AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  width: i == currentIndex ? 20 : 7,
+                  height: 7,
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  decoration: BoxDecoration(
+                    color: i == currentIndex
+                        ? Colors.white
+                        : Colors.white.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
       ],
     );
   }
@@ -274,7 +527,18 @@ bool _isVideoUrl(String url) {
 
 class _AuthorSnippet extends StatelessWidget {
   final PostModel post;
-  const _AuthorSnippet({required this.post});
+  final bool isFollowing;
+  final bool followLoading;
+  final VoidCallback onFollow;
+  final VoidCallback onAuthorTap;
+
+  const _AuthorSnippet({
+    required this.post,
+    required this.isFollowing,
+    required this.followLoading,
+    required this.onFollow,
+    required this.onAuthorTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -282,50 +546,69 @@ class _AuthorSnippet extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: AppColors.primaryTint10,
-            backgroundImage: post.authorPhotoUrl != null
-                ? NetworkImage(post.authorPhotoUrl!)
-                : null,
-            child: post.authorPhotoUrl == null
-                ? Text(
-                    post.authorName?.isNotEmpty == true
-                        ? post.authorName![0].toUpperCase()
-                        : '?',
-                    style: GoogleFonts.lexend(
-                      fontSize: 18, fontWeight: FontWeight.w700,
-                      color: AppColors.primary))
-                : null,
+          GestureDetector(
+            onTap: onAuthorTap,
+            child: CircleAvatar(
+              radius: 24,
+              backgroundColor: AppColors.primaryTint10,
+              backgroundImage: post.authorPhotoUrl != null
+                  ? NetworkImage(post.authorPhotoUrl!)
+                  : null,
+              child: post.authorPhotoUrl == null
+                  ? Text(
+                      post.authorName?.isNotEmpty == true
+                          ? post.authorName![0].toUpperCase()
+                          : '?',
+                      style: GoogleFonts.lexend(
+                        fontSize: 18, fontWeight: FontWeight.w700,
+                        color: AppColors.primary))
+                  : null,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(post.authorName ?? 'Unknown',
-                  style: GoogleFonts.lexend(
-                    fontSize: 15, fontWeight: FontWeight.w700)),
-                Text(post.faculty ?? post.authorRole ?? '',
-                  style: GoogleFonts.lexend(
-                    fontSize: 12, color: AppColors.textSecondaryLight)),
-              ],
+            child: GestureDetector(
+              onTap: onAuthorTap,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(post.authorName ?? 'Unknown',
+                    style: GoogleFonts.lexend(
+                      fontSize: 15, fontWeight: FontWeight.w700)),
+                  Text(post.faculty ?? post.authorRole ?? '',
+                    style: GoogleFonts.lexend(
+                      fontSize: 12, color: AppColors.textSecondaryLight)),
+                ],
+              ),
             ),
           ),
-          ElevatedButton(
-            onPressed: () {},
-            style: ElevatedButton.styleFrom(
-              minimumSize: const Size(0, 36),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              textStyle: GoogleFonts.lexend(
-                fontSize: 13, fontWeight: FontWeight.w700),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppDimensions.radiusSm)),
+          if (followLoading)
+            const SizedBox(
+              width: 36, height: 36,
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            )
+          else
+            ElevatedButton(
+              onPressed: onFollow,
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(0, 36),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                textStyle: GoogleFonts.lexend(
+                  fontSize: 13, fontWeight: FontWeight.w700),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppDimensions.radiusSm)),
+                backgroundColor:
+                    isFollowing ? Colors.transparent : AppColors.primary,
+                foregroundColor:
+                    isFollowing ? AppColors.primary : Colors.white,
+                side: isFollowing
+                    ? const BorderSide(color: AppColors.primary)
+                    : null,
+              ),
+              child: Text(isFollowing ? 'Following' : 'Follow'),
             ),
-            child: const Text('Follow'),
-          ),
         ],
       ),
     );
@@ -443,7 +726,8 @@ class _SkillsSection extends StatelessWidget {
 
 class _CollabSection extends StatelessWidget {
   final PostModel post;
-  const _CollabSection({required this.post});
+  final VoidCallback onCollaborate;
+  const _CollabSection({required this.post, required this.onCollaborate});
 
   @override
   Widget build(BuildContext context) {
@@ -484,7 +768,7 @@ class _CollabSection extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () {},
+              onPressed: onCollaborate,
               icon: const Icon(Icons.group_add_rounded),
               label: const Text('Request to Collaborate'),
               style: ElevatedButton.styleFrom(
@@ -574,8 +858,15 @@ class _LinkRow extends StatelessWidget {
 class _StickyBar extends StatelessWidget {
   final PostModel post;
   final VoidCallback onLike;
+  final VoidCallback onShare;
+  final VoidCallback onCollaborate;
 
-  const _StickyBar({required this.post, required this.onLike});
+  const _StickyBar({
+    required this.post,
+    required this.onLike,
+    required this.onShare,
+    required this.onCollaborate,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -607,14 +898,14 @@ class _StickyBar extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               IconButton(
-                onPressed: () {},
+                onPressed: onShare,
                 icon: const Icon(Icons.share_outlined),
                 tooltip: 'Share',
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () {},
+                  onPressed: onCollaborate,
                   icon: const Icon(Icons.group_add_rounded, size: 18),
                   label: const Text('Collaborate'),
                   style: ElevatedButton.styleFrom(
@@ -628,6 +919,104 @@ class _StickyBar extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Glass UI helpers — AppBar overlays
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Plain icon button for the opaque/white AppBar state
+class _SolidIconButton extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final VoidCallback? onPressed;
+
+  const _SolidIconButton({
+    required this.icon,
+    required this.color,
+    this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 36,
+      height: 36,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(12),
+          child: Center(child: Icon(icon, size: 20, color: color)),
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  const _GlassIconButton({required this.icon, this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.28),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.35),
+            ),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onPressed,
+              borderRadius: BorderRadius.circular(12),
+              child: Center(
+                child: Icon(icon, size: 18, color: Colors.white),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GlassPill extends StatelessWidget {
+  final Widget child;
+
+  const _GlassPill({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.28),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.35),
+            ),
+          ),
+          child: child,
         ),
       ),
     );
