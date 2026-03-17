@@ -26,14 +26,17 @@
 // For collaborative posts (Phase 6), Operational Transformation is planned.
 
 import 'dart:async';
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../core/utils/media_path_utils.dart';
 import '../local/dao/sync_queue_dao.dart';
 import '../local/dao/user_dao.dart';
 import '../local/dao/post_dao.dart';
 import '../local/dao/message_dao.dart';
+import 'cloudinary_service.dart';
 import 'firestore_service.dart';
 import '../models/post_model.dart';
 
@@ -63,6 +66,7 @@ class SyncService {
   final UserDao _userDao;
   final PostDao _postDao;
   final Connectivity _connectivity;
+  final CloudinaryService _cloudinary;
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   bool _isSyncing = false;
@@ -72,11 +76,13 @@ class SyncService {
     required FirestoreService firestore,
     required UserDao userDao,
     required PostDao postDao,
+    required CloudinaryService cloudinary,
     Connectivity? connectivity,
   })  : _queueDao = queueDao,
         _firestore = firestore,
         _userDao = userDao,
         _postDao = postDao,
+      _cloudinary = cloudinary,
         _connectivity = connectivity ?? Connectivity();
 
   // ── Start listening for connectivity changes ───────────────────────────────
@@ -233,7 +239,8 @@ class SyncService {
                 : localPost;
 
         if (post == null) return true;
-        await _firestore.setPost(post);
+        final syncedPost = await _uploadPendingPostMedia(post);
+        await _firestore.setPost(syncedPost);
         return true;
       case 'archive':
         await _firestore.archivePost(job.entityId);
@@ -327,6 +334,48 @@ class SyncService {
   // ── Queue depth metric (for super admin dashboard) ────────────────────────
 
   Future<int> getQueueDepth() => _queueDao.getPendingCount();
+
+  Future<PostModel> _uploadPendingPostMedia(PostModel post) async {
+    final pendingPaths = post.mediaUrls.where(isLocalMediaPath).toList();
+    if (pendingPaths.isEmpty) {
+      return post;
+    }
+
+    if (!_cloudinary.isConfigured) {
+      throw Exception('Cloudinary is not configured for deferred media sync.');
+    }
+
+    final uploadedUrls = <String>[];
+    for (final mediaPath in post.mediaUrls) {
+      if (!isLocalMediaPath(mediaPath)) {
+        uploadedUrls.add(mediaPath);
+        continue;
+      }
+
+      final file = File(mediaPath);
+      if (!await file.exists()) {
+        throw Exception('Pending media file is missing: $mediaPath');
+      }
+
+      final uploadedUrl = await _cloudinary.uploadFile(file);
+      uploadedUrls.add(uploadedUrl);
+    }
+
+    final syncedPost = post.copyWith(
+      mediaUrls: uploadedUrls,
+      updatedAt: DateTime.now(),
+    );
+    await _postDao.updatePost(syncedPost);
+
+    for (final mediaPath in pendingPaths) {
+      final file = File(mediaPath);
+      if (await file.exists()) {
+        await file.delete().catchError((_) => file);
+      }
+    }
+
+    return syncedPost;
+  }
 
   /// Returns sync health as a map for the engineering metrics panel.
   Future<Map<String, dynamic>> getSyncMetrics() async {

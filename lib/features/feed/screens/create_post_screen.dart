@@ -16,6 +16,7 @@
 //   • Visibility of system status: compression % shown per file
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/services.dart';
@@ -30,10 +31,11 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/constants/app_enums.dart';
 import '../../../core/di/injection_container.dart';
+import '../../../core/network/connectivity_service.dart';
+import '../../../core/utils/media_path_utils.dart';
 import '../../../data/local/dao/user_dao.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/models/user_model.dart';
-import '../../../data/remote/cloudinary_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
 import '../../shared/hci_components/st_form_widgets.dart';
 import '../bloc/feed_cubit.dart';
@@ -72,13 +74,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     ('project', 'Project', Icons.rocket_launch_rounded),
     ('opportunity', 'Opportunity', Icons.work_outline_rounded),
   ];
-
-  CloudinaryService? get _cloudinaryServiceOrNull {
-    if (!sl.isRegistered<CloudinaryService>()) {
-      return null;
-    }
-    return sl<CloudinaryService>();
-  }
 
   @override
   void dispose() {
@@ -262,39 +257,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     }
   }
 
-  void _setUploadProgress(String id, double progress) {
-    if (!mounted) return;
-    setState(() {
-      final index = _uploads.indexWhere((item) => item.id == id);
-      if (index == -1) return;
-      _uploads[index] = _uploads[index].copyWith(
-        progress: progress.clamp(0, 1),
-      );
-    });
-  }
-
-  Future<List<String>> _uploadMediaToCloudinary() async {
-    final cloudinaryService = _cloudinaryServiceOrNull;
-    if (cloudinaryService == null) {
-      throw Exception('Cloudinary service is unavailable.');
-    }
-
-    final urls = <String>[];
-    for (final upload in _uploads) {
-      if (!await upload.file.exists()) {
-        throw Exception('Prepared upload file is missing: ${upload.file.path}');
-      }
-      _setUploadProgress(upload.id, 0);
-      final url = await cloudinaryService.uploadFile(
-        upload.file,
-        onProgress: (fraction) => _setUploadProgress(upload.id, fraction),
-      );
-      urls.add(url);
-      _setUploadProgress(upload.id, 1);
-    }
-    return urls;
-  }
-
   Future<UserModel?> _resolvePublishingUser() async {
     final currentUser = sl<AuthCubit>().currentUser;
     if (currentUser == null) {
@@ -309,6 +271,18 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
     await userDao.insertUser(currentUser);
     return currentUser;
+  }
+
+  Future<bool> _isOffline() async {
+    if (sl.isRegistered<ConnectivityService>()) {
+      return !(await sl<ConnectivityService>().checkConnectivity());
+    }
+
+    final result = await Connectivity().checkConnectivity();
+    return !result.any((item) =>
+        item == ConnectivityResult.wifi ||
+        item == ConnectivityResult.mobile ||
+        item == ConnectivityResult.ethernet);
   }
 
   Future<void> _publish() async {
@@ -327,43 +301,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       return;
     }
 
-    final cloudinaryService = _cloudinaryServiceOrNull;
-    if (_uploads.isNotEmpty &&
-        (cloudinaryService == null || !cloudinaryService.isConfigured)) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Media upload is not configured. Set Cloudinary values in cloudinary_config.dart.',
-          ),
-          backgroundColor: AppColors.warning,
-        ),
-      );
-      return;
-    }
-
     setState(() => _publishing = true);
 
-    List<String> mediaUrls = const [];
-    try {
-      if (_uploads.isNotEmpty) {
-        mediaUrls = await _uploadMediaToCloudinary();
-      }
-    } catch (error, stackTrace) {
-      debugPrint('[CreatePost] Media upload failed: $error');
-      debugPrintStack(
-        label: '[CreatePost] Media upload stack',
-        stackTrace: stackTrace,
-      );
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Could not upload media: $error'),
-          backgroundColor: AppColors.danger,
-        ),
-      );
-      setState(() => _publishing = false);
-      return;
-    }
+    final wasOffline = await _isOffline();
+    final mediaUrls = _uploads.map((upload) => upload.file.path).toList();
 
     final post = PostModel(
       id: _uuid.v4(),
@@ -393,7 +334,11 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
     messenger.showSnackBar(
       SnackBar(
-        content: Text(result.message),
+        content: Text(
+          wasOffline && _uploads.isNotEmpty
+              ? 'You are offline. Your post is saved on this device and will upload automatically when network returns.'
+              : result.message,
+        ),
         backgroundColor:
             result.syncedRemotely ? AppColors.success : AppColors.warning,
       ),
@@ -409,25 +354,19 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       return;
     }
 
-    for (final url in mediaUrls.where((url) => !_isVideoUrl(url))) {
+    for (final url in mediaUrls.where((url) => !isVideoMediaPath(url))) {
       try {
-        await precacheImage(CachedNetworkImageProvider(url), context);
+        if (isLocalMediaPath(url)) {
+          await precacheImage(FileImage(File(url)), context);
+        } else {
+          await precacheImage(CachedNetworkImageProvider(url), context);
+        }
       } catch (error) {
         debugPrint('[CreatePost] Failed to cache image $url: $error');
       }
     }
   }
 
-  bool _isVideoUrl(String url) {
-    final lower = url.toLowerCase();
-    return lower.contains('/video/upload/') ||
-        lower.endsWith('.mp4') ||
-        lower.endsWith('.mov') ||
-        lower.endsWith('.m4v') ||
-        lower.endsWith('.3gp') ||
-        lower.endsWith('.webm') ||
-        lower.endsWith('.mkv');
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -724,6 +663,7 @@ class _UploadRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isReady = item.progress <= 0;
     final isDone = item.progress >= 1.0;
 
     return Container(
@@ -765,10 +705,18 @@ class _UploadRow extends StatelessWidget {
                         overflow: TextOverflow.ellipsis),
                     ),
                     Text(
-                      isDone ? 'Uploaded' : 'Uploading…',
+                      isDone
+                          ? 'Uploaded'
+                          : isReady
+                              ? 'Ready to sync'
+                              : 'Uploading…',
                       style: GoogleFonts.lexend(
                         fontSize: 10, fontWeight: FontWeight.w700,
-                        color: isDone ? AppColors.success : AppColors.warning),
+                        color: isDone
+                            ? AppColors.success
+                            : isReady
+                                ? AppColors.info
+                                : AppColors.warning),
                     ),
                   ],
                 ),

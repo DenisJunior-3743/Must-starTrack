@@ -147,6 +147,7 @@ class InjectionContainer {
         firestore: sl<FirestoreService>(),
         userDao: sl<UserDao>(),
         postDao: sl<PostDao>(),
+        cloudinary: sl<CloudinaryService>(),
         connectivity: sl<Connectivity>(),
       ),
     );

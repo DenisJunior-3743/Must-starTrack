@@ -20,12 +20,14 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:timeago/timeago.dart' as timeago;
+import 'dart:io';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/router/route_guards.dart';
+import '../../../core/utils/media_path_utils.dart';
 import '../../../data/models/post_model.dart';
 import '../../auth/bloc/auth_cubit.dart';
 import '../bloc/feed_cubit.dart';
@@ -216,14 +218,7 @@ class _AuthorPostGroup {
 }
 
 bool _isVideoUrl(String url) {
-  final lower = url.toLowerCase();
-  return lower.contains('/video/upload/') ||
-      lower.endsWith('.mp4') ||
-      lower.endsWith('.mov') ||
-      lower.endsWith('.m4v') ||
-      lower.endsWith('.3gp') ||
-      lower.endsWith('.webm') ||
-      lower.endsWith('.mkv');
+  return isVideoMediaPath(url);
 }
 
 class _AuthorMediaShelf extends StatelessWidget {
@@ -431,15 +426,22 @@ class _MediaShelfTile extends StatelessWidget {
                 child: Container(
                   color: AppColors.primaryTint10,
                   child: previewUrl != null && mode != _MediaStripMode.videos
-                      ? CachedNetworkImage(
-                          imageUrl: previewUrl,
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                          errorWidget: (_, __, ___) => _MediaFallback(mode: mode),
-                          placeholder: (_, __) => Container(
-                            color: AppColors.primaryTint10,
-                          ),
-                        )
+                      ? isLocalMediaPath(previewUrl)
+                          ? Image.file(
+                              File(previewUrl),
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              errorBuilder: (_, __, ___) => _MediaFallback(mode: mode),
+                            )
+                          : CachedNetworkImage(
+                              imageUrl: previewUrl,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              errorWidget: (_, __, ___) => _MediaFallback(mode: mode),
+                              placeholder: (_, __) => Container(
+                                color: AppColors.primaryTint10,
+                              ),
+                            )
                       : _MediaFallback(mode: mode),
                 ),
               ),

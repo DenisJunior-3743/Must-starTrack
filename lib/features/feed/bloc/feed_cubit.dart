@@ -21,6 +21,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
+import '../../../core/utils/media_path_utils.dart';
 import '../../../data/local/dao/post_dao.dart';
 import '../../../data/local/dao/sync_queue_dao.dart';
 import '../../../data/models/post_model.dart';
@@ -276,6 +277,10 @@ class FeedCubit extends Cubit<FeedState> {
 
   // ── Publish new post ───────────────────────────────────────────────────────
 
+  bool _hasPendingLocalMedia(PostModel post) {
+    return post.mediaUrls.any(isLocalMediaPath);
+  }
+
   Future<PublishPostResult> publishPost(PostModel post) async {
     try {
       await _postDao.insertPost(post);
@@ -303,17 +308,21 @@ class FeedCubit extends Cubit<FeedState> {
       }
 
       if (syncResult != null && syncResult.failed > 0) {
-        return const PublishPostResult(
+        return PublishPostResult(
           savedLocally: true,
           syncedRemotely: false,
-          message: 'Post saved locally, but Firebase sync failed. It will retry automatically.',
+          message: _hasPendingLocalMedia(post)
+              ? 'Post saved offline. Media will upload and sync automatically when network is available.'
+              : 'Post saved locally, but Firebase sync is waiting for connection. It will retry automatically.',
         );
       }
 
-      return const PublishPostResult(
+      return PublishPostResult(
         savedLocally: true,
         syncedRemotely: false,
-        message: 'Post saved locally. Firebase sync is still pending.',
+        message: _hasPendingLocalMedia(post)
+            ? 'Post saved locally. Media will upload automatically once you are back online.'
+            : 'Post saved locally. Firebase sync is still pending.',
       );
     } catch (e) {
       debugPrint('Publish post error: $e');
