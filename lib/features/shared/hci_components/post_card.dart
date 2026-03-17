@@ -11,6 +11,7 @@
 //   • Chunking: author row → media → title → skills → actions (F-pattern)
 //   • Universal Design: semantic labels, min 48dp touch targets
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:timeago/timeago.dart' as timeago;
@@ -314,15 +315,26 @@ class _HeroImage extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              Image.network(
-                url,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
-                  color: AppColors.primaryTint10,
-                  child: const Icon(Icons.image_outlined,
-                      size: 48, color: AppColors.primary),
-                ),
-              ),
+              _isVideoUrl(url)
+                  ? Container(
+                      color: AppColors.primaryTint10,
+                      child: const Center(
+                        child: Icon(Icons.play_circle_outline_rounded,
+                            size: 52, color: AppColors.primary),
+                      ),
+                    )
+                  : CachedNetworkImage(
+                      imageUrl: url,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Container(
+                        color: AppColors.primaryTint10,
+                      ),
+                      errorWidget: (_, __, ___) => Container(
+                        color: AppColors.primaryTint10,
+                        child: const Icon(Icons.image_outlined,
+                            size: 48, color: AppColors.primary),
+                      ),
+                    ),
               // Gradient overlay (matches HTML prototype)
               const DecoratedBox(
                 decoration: BoxDecoration(
@@ -339,6 +351,17 @@ class _HeroImage extends StatelessWidget {
       ),
     );
   }
+}
+
+bool _isVideoUrl(String url) {
+  final lower = url.toLowerCase();
+  return lower.contains('/video/upload/') ||
+      lower.endsWith('.mp4') ||
+      lower.endsWith('.mov') ||
+      lower.endsWith('.m4v') ||
+      lower.endsWith('.3gp') ||
+      lower.endsWith('.webm') ||
+      lower.endsWith('.mkv');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

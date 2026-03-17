@@ -15,6 +15,7 @@
 //      error handling if post not found.
 
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -222,14 +223,25 @@ class _HeroGallery extends StatelessWidget {
         PageView.builder(
           itemCount: urls.length,
           onPageChanged: onPageChanged,
-          itemBuilder: (_, i) => Image.network(
-            urls[i],
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Container(
-              color: AppColors.primaryTint10,
-              child: const Icon(Icons.image_outlined, size: 60, color: AppColors.primary),
-            ),
-          ),
+          itemBuilder: (_, i) => _isVideoUrl(urls[i])
+              ? Container(
+                  color: AppColors.primaryTint10,
+                  child: const Center(
+                    child: Icon(Icons.play_circle_outline_rounded,
+                        size: 72, color: AppColors.primary),
+                  ),
+                )
+              : CachedNetworkImage(
+                  imageUrl: urls[i],
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) => Container(
+                    color: AppColors.primaryTint10,
+                  ),
+                  errorWidget: (_, __, ___) => Container(
+                    color: AppColors.primaryTint10,
+                    child: const Icon(Icons.image_outlined, size: 60, color: AppColors.primary),
+                  ),
+                ),
         ),
         // Photo count badge
         Positioned(
@@ -257,6 +269,17 @@ class _HeroGallery extends StatelessWidget {
       ],
     );
   }
+}
+
+bool _isVideoUrl(String url) {
+  final lower = url.toLowerCase();
+  return lower.contains('/video/upload/') ||
+      lower.endsWith('.mp4') ||
+      lower.endsWith('.mov') ||
+      lower.endsWith('.m4v') ||
+      lower.endsWith('.3gp') ||
+      lower.endsWith('.webm') ||
+      lower.endsWith('.mkv');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

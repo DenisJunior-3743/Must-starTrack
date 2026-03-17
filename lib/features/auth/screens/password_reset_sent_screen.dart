@@ -22,11 +22,14 @@ class PasswordResetSentScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppDimensions.spacingXl),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            padding: const EdgeInsets.all(AppDimensions.spacingXl),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
               // Animated success icon
               TweenAnimationBuilder<double>(
                 tween: Tween(begin: 0.5, end: 1.0),
@@ -50,9 +53,13 @@ class PasswordResetSentScreen extends StatelessWidget {
                   fontSize: 28, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
               const SizedBox(height: 12),
               Text(
-                'We\'ve sent an email to your MUST address.\n\n'
-                'Click the link in the email to continue. '
-                'If you don\'t see it, check your spam or junk folder.',
+                email == null || email!.isEmpty
+                    ? 'We\'ve sent an email to your MUST address.\n\n'
+                        'Click the link in the email to continue. '
+                        'If you don\'t see it, check your spam or junk folder.'
+                    : 'We\'ve sent an email to:\n$email\n\n'
+                        'Click the link in the email to continue. '
+                        'If you don\'t see it, check your spam or junk folder.',
                 style: GoogleFonts.lexend(
                   fontSize: 14, color: AppColors.textSecondaryLight, height: 1.6),
                 textAlign: TextAlign.center,
@@ -71,7 +78,9 @@ class PasswordResetSentScreen extends StatelessWidget {
                   style: GoogleFonts.lexend(
                     fontSize: 13, color: AppColors.textSecondaryLight)),
               ),
-            ],
+                ],
+              ),
+            ),
           ),
         ),
       ),

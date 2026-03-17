@@ -85,7 +85,8 @@ class _RegisterStep3ScreenState extends State<RegisterStep3Screen> {
       child: BlocConsumer<AuthCubit, AuthState>(
         listener: (ctx, state) {
           if (state is AuthEmailVerificationSent) {
-            ctx.go(RouteNames.passwordResetSent);
+            final encodedEmail = Uri.encodeComponent(state.email);
+            ctx.go('${RouteNames.passwordResetSent}?email=$encodedEmail');
           } else if (state is AuthAuthenticated) {
             ctx.go(requestedFrom ?? RouteNames.home);
           } else if (state is AuthError) {

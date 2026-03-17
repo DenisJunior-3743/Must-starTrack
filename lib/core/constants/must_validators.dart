@@ -4,7 +4,7 @@
 //
 // Registration number format: 2020/BSE/001/PS or 2020/BSE/001/GS
 // Student email format:       2020bse001@std.must.ac.ug
-// Staff email format:         firstname.lastname@must.ac.ug
+// Staff email format:         firstname.lastname@must.ac.ug or @staff.must.ac.ug
 //
 // The validator cross-checks that the year and student identifier
 // in the registration number match the email prefix — a critical
@@ -60,9 +60,9 @@ abstract final class MustValidators {
     caseSensitive: false,
   );
 
-  /// Matches staff/lecturer emails: jdoe@must.ac.ug
+  /// Matches staff/lecturer emails under institutional domains.
   static final RegExp _staffEmailRegex = RegExp(
-    r'^[a-zA-Z0-9._%+\-]+@must\.ac\.ug$',
+    r'^[a-zA-Z0-9._%+\-]+@(must\.ac\.ug|staff\.must\.ac\.ug|std\.must\.ac\.ug)$',
     caseSensitive: false,
   );
 
@@ -133,7 +133,8 @@ abstract final class MustValidators {
       return 'Staff email is required.';
     }
     if (!_staffEmailRegex.hasMatch(value.trim())) {
-      return 'Must be a valid MUST staff email.\nExample: jdoe@must.ac.ug';
+      return 'Must be a valid institutional email.\n'
+          'Allowed: @must.ac.ug, @staff.must.ac.ug, @std.must.ac.ug';
     }
     return null;
   }

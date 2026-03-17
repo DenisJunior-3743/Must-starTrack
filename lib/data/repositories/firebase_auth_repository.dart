@@ -5,7 +5,7 @@
 // Replaces StubAuthRepository.
 // Implements the AuthRepository contract using:
 //   • Firebase Authentication (email/password + Google Sign-In)
-//   • MUST domain restriction (@must.ac.ug / @mbarara.ac.ug)
+//   • Institutional domain restriction for registration
 //   • UserDao (SQLite) — local cache of the authenticated user
 //   • SyncQueueDao — queues new user Firestore writes offline
 //   • FlutterSecureStorage — encrypted token storage
@@ -23,6 +23,7 @@
 import 'package:dartz/dartz.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/errors/failures.dart';
@@ -41,8 +42,14 @@ class FirebaseAuthRepository implements AuthRepository {
   final SyncQueueDao _syncDao;
   final FlutterSecureStorage _secureStorage;
 
-  // Accepted MUST email domains
-  static const _mustDomains = ['must.ac.ug', 'mbarara.ac.ug'];
+  // Admin and Google path domains (kept as-is for current admin flow)
+
+  // Student/Lecturer registration domains
+  static const _registrationDomains = [
+    'must.ac.ug',
+    'std.must.ac.ug',
+    'staff.must.ac.ug',
+  ];
 
   FirebaseAuthRepository({
     required fb.FirebaseAuth firebaseAuth,
@@ -60,9 +67,10 @@ class FirebaseAuthRepository implements AuthRepository {
 
   // ── Domain enforcement ────────────────────────────────────────────────────
 
-  bool _isMustEmail(String email) {
+
+  bool _isAllowedRegistrationEmail(String email) {
     final domain = email.split('@').last.toLowerCase();
-    return _mustDomains.contains(domain);
+    return _registrationDomains.contains(domain);
   }
 
   // ── Get current user ──────────────────────────────────────────────────────
@@ -109,7 +117,7 @@ class FirebaseAuthRepository implements AuthRepository {
       if (fbUser == null) return const Left(UnexpectedFailure('No user returned'));
 
       // Email verification gate
-      if (!fbUser.emailVerified) {
+      if (!fbUser.emailVerified && !kDebugMode) {
         return const Left(EmailNotVerifiedFailure());
       }
 
@@ -131,10 +139,10 @@ class FirebaseAuthRepository implements AuthRepository {
       if (googleUser == null) return const Left(AuthCancelledFailure());
 
       // MUST domain restriction
-      if (!_isMustEmail(googleUser.email)) {
+        if (!_isAllowedRegistrationEmail(googleUser.email)) {
         await _googleSignIn.signOut();
         return const Left(DomainRestrictedFailure(
-            'Only @must.ac.ug and @mbarara.ac.ug accounts are allowed.'));
+          'Only @must.ac.ug, @std.must.ac.ug, and @staff.must.ac.ug accounts are allowed.'));
       }
 
       final googleAuth = await googleUser.authentication;
@@ -167,13 +175,24 @@ class FirebaseAuthRepository implements AuthRepository {
   Future<Either<Failure, UserModel>> registerStudent({
     required Map<String, dynamic> data,
   }) async {
+    String? email;
+    String? password;
     try {
-      final email = (data['email'] as String).trim();
-      final password = data['password'] as String;
+      final emailRaw = data['email'];
+      final passwordRaw = data['password'];
+      if (emailRaw is! String || emailRaw.trim().isEmpty) {
+        return const Left(ValidationFailure('Student email is required.'));
+      }
+      if (passwordRaw is! String || passwordRaw.isEmpty) {
+        return const Left(ValidationFailure('Password is required.'));
+      }
 
-      if (!_isMustEmail(email)) {
+      email = emailRaw.trim();
+      password = passwordRaw;
+
+      if (!_isAllowedRegistrationEmail(email)) {
         return const Left(DomainRestrictedFailure(
-            'Only @must.ac.ug email addresses are allowed.'));
+        'Only @must.ac.ug, @std.must.ac.ug, or @staff.must.ac.ug email addresses are allowed.'));
       }
 
       // Create Firebase Auth account
@@ -207,7 +226,8 @@ class FirebaseAuthRepository implements AuthRepository {
           phone: data['phone'] as String?,
           faculty: data['faculty'] as String?,
           department: data['department'] as String?,
-          programName: data['programme'] as String?,
+          programName: data['programName'] as String?,
+          courseName: data['courseName'] as String?,
           yearOfStudy: data['yearOfStudy'] as int?,
           admissionYear: data['admissionYear']?.toString(),
           skills: (data['skills'] as List?)?.cast<String>() ?? [],
@@ -220,19 +240,35 @@ class FirebaseAuthRepository implements AuthRepository {
       // Persist locally (offline-first)
       await _userDao.insertUser(user);
 
-      // Enqueue Firestore write (sync when online)
-      await _syncDao.enqueue(
-        entity: 'users',
-        entityId: user.id,
-        operation: 'create',
-        payload: user.toJson(),
-      );
+      // Try immediate Firestore write so the record appears instantly.
+      // If it fails (offline/transient), queue for background sync.
+      try {
+        await _firestore
+            .collection('users')
+            .doc(user.id)
+            .set(user.toJson(), SetOptions(merge: true));
+      } catch (_) {
+        await _syncDao.enqueue(
+          entity: 'users',
+          entityId: user.id,
+          operation: 'create',
+          payload: user.toJson(),
+        );
+      }
 
       // Send email verification
       await fbUser.sendEmailVerification();
 
       return Right(user);
     } on fb.FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use' && email != null && password != null) {
+        final recovered = await _recoverExistingAccountAndBootstrapProfile(
+          email: email,
+          password: password,
+          data: data,
+        );
+        if (recovered != null) return Right(recovered);
+      }
       return Left(_mapFirebaseAuthError(e));
     } catch (e) {
       return Left(UnexpectedFailure(e.toString()));
@@ -256,6 +292,22 @@ class FirebaseAuthRepository implements AuthRepository {
         // Update role in SQLite
         final updated = user.copyWith(role: UserRole.lecturer);
         await _userDao.updateUser(updated);
+
+        // Persist role update to Firestore immediately; queue on failure.
+        try {
+          await _firestore
+              .collection('users')
+              .doc(updated.id)
+              .set(updated.toJson(), SetOptions(merge: true));
+        } catch (_) {
+          await _syncDao.enqueue(
+            entity: 'users',
+            entityId: updated.id,
+            operation: 'update',
+            payload: updated.toJson(),
+          );
+        }
+
         return Right(updated);
       },
     );
@@ -361,16 +413,104 @@ class FirebaseAuthRepository implements AuthRepository {
       );
 
       await _userDao.insertUser(user);
-      await _syncDao.enqueue(
-        entity: 'users',
-        entityId: user.id,
-        operation: 'create',
-        payload: user.toJson(),
-      );
+      try {
+        await _firestore
+            .collection('users')
+            .doc(user.id)
+            .set(user.toJson(), SetOptions(merge: true));
+      } catch (_) {
+        await _syncDao.enqueue(
+          entity: 'users',
+          entityId: user.id,
+          operation: 'create',
+          payload: user.toJson(),
+        );
+      }
 
       return Right(user);
     } catch (e) {
       return Left(UnexpectedFailure(e.toString()));
+    }
+  }
+
+  Future<UserModel?> _recoverExistingAccountAndBootstrapProfile({
+    required String email,
+    required String password,
+    required Map<String, dynamic> data,
+  }) async {
+    try {
+      final credential = await _firebaseAuth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      final fbUser = credential.user;
+      if (fbUser == null) return null;
+
+      // If user doc already exists, resolve and return cached model.
+      final existing = await _resolveAndCacheUser(fbUser);
+      final existingUser = existing.fold((_) => null, (u) => u);
+      if (existingUser != null) {
+        if (!fbUser.emailVerified) {
+          await fbUser.sendEmailVerification();
+        }
+        return existingUser;
+      }
+
+      final now = DateTime.now();
+      final requestedRole = data['role'] == 'lecturer'
+          ? UserRole.lecturer
+          : UserRole.student;
+
+      final user = UserModel(
+        id: fbUser.uid,
+        firebaseUid: fbUser.uid,
+        email: email,
+        displayName: data['displayName'] as String? ?? fbUser.displayName ?? '',
+        role: requestedRole,
+        photoUrl: fbUser.photoURL,
+        createdAt: now,
+        updatedAt: now,
+        profile: ProfileModel(
+          id: fbUser.uid,
+          userId: fbUser.uid,
+          regNumber: data['regNumber'] as String?,
+          gender: data['gender'] as String?,
+          phone: data['phone'] as String?,
+          faculty: data['faculty'] as String?,
+          department: data['department'] as String?,
+          programName: data['programName'] as String?,
+          courseName: data['courseName'] as String?,
+          yearOfStudy: data['yearOfStudy'] as int?,
+          admissionYear: data['admissionYear']?.toString(),
+          skills: (data['skills'] as List?)?.cast<String>() ?? const [],
+          profileVisibility: 'public',
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+
+      await _userDao.insertUser(user);
+      try {
+        await _firestore
+            .collection('users')
+            .doc(user.id)
+            .set(user.toJson(), SetOptions(merge: true));
+      } catch (_) {
+        await _syncDao.enqueue(
+          entity: 'users',
+          entityId: user.id,
+          operation: 'create',
+          payload: user.toJson(),
+        );
+      }
+
+      if (!fbUser.emailVerified) {
+        await fbUser.sendEmailVerification();
+      }
+
+      return user;
+    } catch (_) {
+      return null;
     }
   }
 

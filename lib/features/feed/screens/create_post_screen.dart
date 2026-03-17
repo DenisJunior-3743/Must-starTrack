@@ -15,11 +15,14 @@
 //   • Affordance: dashed upload box signals droppable area
 //   • Visibility of system status: compression % shown per file
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:image_picker/image_picker.dart' hide PickedFile;
+import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:io';
 
@@ -55,7 +58,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   final List<_UploadItem> _uploads = [];
   bool _publishing = false;
 
-  final _picker = ImagePicker();
+  final _imagePicker = ImagePicker();
   final _uuid = const Uuid();
 
   static const int _maxFileSizeBytes = 50 * 1024 * 1024;
@@ -113,25 +116,77 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   }
 
   Future<void> _pickPhotos() async {
-    final files = await _picker.pickMultiImage(imageQuality: 80);
-    if (files.isEmpty) return;
-    await _addPickedFiles(files, isVideo: false);
+    try {
+      final files = await _imagePicker.pickMultiImage(imageQuality: 80);
+      if (files.isEmpty) return;
+      await _addPickedFiles(files, isVideo: false);
+    } on PlatformException {
+      await _pickSinglePhotoFallback();
+    }
   }
 
   Future<void> _pickVideo() async {
-    final file = await _picker.pickVideo(source: ImageSource.gallery);
-    if (file == null) return;
-    await _addPickedFiles([file], isVideo: true);
+    try {
+      final file = await _imagePicker.pickVideo(source: ImageSource.gallery);
+      if (file == null) return;
+      await _addPickedFiles([file], isVideo: true);
+    } on PlatformException {
+      await _pickVideoWithImagePickerFallback();
+    }
   }
 
-  Future<void> _addPickedFiles(List<XFile> files, {required bool isVideo}) async {
+  Future<void> _pickSinglePhotoFallback() async {
+    final file = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
+    );
+    if (file == null) return;
+
+    await _addPickedFiles([file], isVideo: false);
+    _showPickerMessage(
+      'Multi-photo selection is not supported on this device. Picked one photo instead.',
+    );
+  }
+
+  Future<void> _pickVideoWithImagePickerFallback() async {
+    final file = await _imagePicker.pickVideo(source: ImageSource.gallery);
+    if (file == null) return;
+    await _addPickedFiles([file], isVideo: true);
+    _showPickerMessage('Using compatibility video picker for this device.');
+  }
+
+  void _showPickerMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.info,
+      ),
+    );
+  }
+
+  Future<void> _addPickedFiles(
+    List<XFile> files, {
+    required bool isVideo,
+  }) async {
     final items = <_UploadItem>[];
     final rejected = <String>[];
+    final unsupported = <String>[];
 
     for (final picked in files) {
-      final local = File(picked.path);
+      if (!isVideo && _isUnsupportedImageFormat(picked.name)) {
+        unsupported.add(picked.name);
+        continue;
+      }
+
+      final local = await _persistPickedFile(picked);
+      if (local == null) {
+        rejected.add(picked.name);
+        continue;
+      }
       final fileSize = await local.length();
       if (fileSize > _maxFileSizeBytes) {
+        await local.delete().catchError((_) => local);
         rejected.add(picked.name);
         continue;
       }
@@ -148,15 +203,62 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     if (items.isNotEmpty) {
       setState(() => _uploads.addAll(items));
     }
-    if (rejected.isNotEmpty) {
+    if (unsupported.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${rejected.length} file(s) exceed 50MB and were skipped.',
+            '${unsupported.length} image(s) use HEIC/HEIF, which this build cannot preview. Use JPG or PNG instead.',
           ),
           backgroundColor: AppColors.warning,
         ),
       );
+    }
+    if (rejected.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${rejected.length} file(s) could not be prepared or exceeded 50MB and were skipped.',
+          ),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+    }
+  }
+
+  bool _isUnsupportedImageFormat(String fileName) {
+    final lower = fileName.toLowerCase();
+    return lower.endsWith('.heic') || lower.endsWith('.heif');
+  }
+
+  Future<File?> _persistPickedFile(XFile picked) async {
+    try {
+      final supportDir = await getApplicationSupportDirectory();
+      final uploadDir = Directory('${supportDir.path}/pending_uploads');
+      if (!await uploadDir.exists()) {
+        await uploadDir.create(recursive: true);
+      }
+
+      final originalName = picked.name.isNotEmpty ? picked.name : _uuid.v4();
+      final sanitizedName = originalName.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+      final targetPath = '${uploadDir.path}/${_uuid.v4()}_$sanitizedName';
+      final targetFile = File(targetPath);
+
+      final sourcePath = picked.path;
+      if (sourcePath.isNotEmpty) {
+        final sourceFile = File(sourcePath);
+        if (await sourceFile.exists()) {
+          return sourceFile.copy(targetPath);
+        }
+      }
+
+      final bytes = await picked.readAsBytes();
+      if (bytes.isEmpty) {
+        return null;
+      }
+      await targetFile.writeAsBytes(bytes, flush: true);
+      return targetFile;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -179,6 +281,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
     final urls = <String>[];
     for (final upload in _uploads) {
+      if (!await upload.file.exists()) {
+        throw Exception('Prepared upload file is missing: ${upload.file.path}');
+      }
       _setUploadProgress(upload.id, 0);
       final url = await cloudinaryService.uploadFile(
         upload.file,
@@ -243,11 +348,16 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       if (_uploads.isNotEmpty) {
         mediaUrls = await _uploadMediaToCloudinary();
       }
-    } catch (_) {
+    } catch (error, stackTrace) {
+      debugPrint('[CreatePost] Media upload failed: $error');
+      debugPrintStack(
+        label: '[CreatePost] Media upload stack',
+        stackTrace: stackTrace,
+      );
       if (!mounted) return;
       messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Could not upload media. Please try again.'),
+        SnackBar(
+          content: Text('Could not upload media: $error'),
           backgroundColor: AppColors.danger,
         ),
       );
@@ -274,6 +384,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       updatedAt: DateTime.now(),
     );
 
+    await _cacheUploadedImages(mediaUrls);
+
     final result = await feedCubit.publishPost(post);
     if (!mounted) return;
 
@@ -290,6 +402,31 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     if (result.savedLocally) {
       context.pop();
     }
+  }
+
+  Future<void> _cacheUploadedImages(List<String> mediaUrls) async {
+    if (!mounted || mediaUrls.isEmpty) {
+      return;
+    }
+
+    for (final url in mediaUrls.where((url) => !_isVideoUrl(url))) {
+      try {
+        await precacheImage(CachedNetworkImageProvider(url), context);
+      } catch (error) {
+        debugPrint('[CreatePost] Failed to cache image $url: $error');
+      }
+    }
+  }
+
+  bool _isVideoUrl(String url) {
+    final lower = url.toLowerCase();
+    return lower.contains('/video/upload/') ||
+        lower.endsWith('.mp4') ||
+        lower.endsWith('.mov') ||
+        lower.endsWith('.m4v') ||
+        lower.endsWith('.3gp') ||
+        lower.endsWith('.webm') ||
+        lower.endsWith('.mkv');
   }
 
   @override

@@ -8,6 +8,8 @@ service cloud.firestore {
     function isMustUser() {
       return request.auth != null
         && (request.auth.token.email.matches('.*@must\\.ac\\.ug')
+         || request.auth.token.email.matches('.*@std\\.must\\.ac\\.ug')
+         || request.auth.token.email.matches('.*@staff\\.must\\.ac\\.ug')
          || request.auth.token.email.matches('.*@mbarara\\.ac\\.ug'));
     }
 

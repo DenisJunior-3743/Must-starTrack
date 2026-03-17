@@ -3,7 +3,7 @@
 // MUST StarTrack — Registration Step 2: University Information
 //
 // Collects: registration number, admission year, faculty, program,
-//           course name, year of study, student email.
+//           year of study, student email.
 // Cross-validates reg number against email prefix.
 // The most important validation step — data matches official MUST records.
 //
@@ -38,23 +38,60 @@ class RegisterStep2Screen extends StatefulWidget {
 class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
   final _formKey = GlobalKey<FormState>();
   final _regNumCtrl = TextEditingController();
-  final _programCtrl = TextEditingController();
-  final _courseCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
+  String? _lastAutoEmail;
 
   String? _admissionYear;
   String? _faculty;
+  String? _selectedProgramCode;
   int? _yearOfStudy;
   String? _crossValidationError;
 
-  static const _faculties = [
-    'Computing and Informatics',
-    'Applied Sciences and Technology',
-    'Medicine',
-    'Business and Management Sciences',
-    'Science',
-    'Interdisciplinary Studies',
-  ];
+  static const Map<String, List<_ProgramOption>> _facultyPrograms = {
+    'Computing and Informatics': [
+      _ProgramOption(code: 'BSE', name: 'Bachelor of Software Engineering (BSE)'),
+      _ProgramOption(code: 'BCS', name: 'Bachelor of Computer Science (BCS)'),
+      _ProgramOption(code: 'BIT', name: 'Bachelor of Information Technology (BIT)'),
+    ],
+    'Applied Sciences and Technology': [
+      _ProgramOption(code: 'CVE', name: 'Civil Engineering (CVE)'),
+      _ProgramOption(
+          code: 'EEE', name: 'Electrical and Electronics Engineering (EEE)'),
+      _ProgramOption(code: 'BME', name: 'Biomedical Engineering (BME)'),
+    ],
+    'Business and Management Sciences': [
+      _ProgramOption(code: 'ECO', name: 'Bachelor of Science in Economics (ECO)'),
+      _ProgramOption(
+          code: 'BAE', name: 'Bachelor of Arts in Economics (BAE)'),
+      _ProgramOption(
+          code: 'BAF', name: 'Bachelor of Accounting and Finance (BAF)'),
+    ],
+  };
+
+  List<String> get _faculties => _facultyPrograms.keys.toList(growable: false);
+  List<_ProgramOption> get _programsForSelectedFaculty =>
+      _faculty == null ? const [] : (_facultyPrograms[_faculty] ?? const []);
+  _ProgramOption? get _selectedProgram {
+    if (_selectedProgramCode == null) return null;
+    for (final option in _programsForSelectedFaculty) {
+      if (option.code == _selectedProgramCode) return option;
+    }
+    return null;
+  }
+
+  _ProgramSelection? _findProgramByCode(String code) {
+    for (final entry in _facultyPrograms.entries) {
+      for (final option in entry.value) {
+        if (option.code == code) {
+          return _ProgramSelection(
+            faculty: entry.key,
+            program: option,
+          );
+        }
+      }
+    }
+    return null;
+  }
 
   List<String> get _admissionYears => List.generate(
     6, (i) => (DateTime.now().year - i).toString(),
@@ -63,33 +100,102 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
   @override
   void dispose() {
     _regNumCtrl.dispose();
-    _programCtrl.dispose();
-    _courseCtrl.dispose();
     _emailCtrl.dispose();
     super.dispose();
   }
 
   void _validateCrossFields() {
+    final regNumber = _regNumCtrl.text.trim();
+    final email = _emailCtrl.text.trim();
+    final admissionYear = _admissionYear;
+    final faculty = _faculty;
+    final selectedProgramCode = _selectedProgramCode;
+
     setState(() {
-      _crossValidationError = MustValidators.validateRegNumberEmailConsistency(
-        regNumber: _regNumCtrl.text.trim(),
-        email: _emailCtrl.text.trim(),
+      _crossValidationError = MustValidators.parseRegNumber(regNumber).fold(
+        (err) => err,
+        (parsedReg) {
+          final emailError = MustValidators.validateStudentEmail(email);
+          if (emailError != null) return emailError;
+
+          if (admissionYear != null && parsedReg.year != admissionYear) {
+            return 'Admission year must match your registration number year '
+                '(${parsedReg.year}).';
+          }
+
+          if (selectedProgramCode != null &&
+              parsedReg.programCode != selectedProgramCode) {
+            return 'Program code in registration number '
+                '(${parsedReg.programCode}) must match selected program '
+                '($selectedProgramCode).';
+          }
+
+          if (faculty != null) {
+            final allowedCodes =
+                (_facultyPrograms[faculty] ?? const []).map((p) => p.code);
+            if (!allowedCodes.contains(parsedReg.programCode)) {
+              return 'Program code ${parsedReg.programCode} does not belong to '
+                  'selected faculty $faculty.';
+            }
+          }
+
+          final expectedEmail =
+              '${parsedReg.expectedEmailPrefix.toLowerCase()}@std.must.ac.ug';
+          if (email.toLowerCase() != expectedEmail) {
+            return 'Institutional email must match registration number.\n'
+              'Expected: $expectedEmail';
+          }
+
+          return null;
+        },
       );
     });
   }
 
+  void _autoFillFromRegNumber() {
+    final parsed = MustValidators.parseRegNumber(_regNumCtrl.text.trim());
+    parsed.fold(
+      (_) {},
+      (reg) {
+        final selection = _findProgramByCode(reg.programCode);
+        final expectedEmail =
+            '${reg.expectedEmailPrefix.toLowerCase()}@std.must.ac.ug';
+
+        setState(() {
+          _admissionYear = reg.year;
+          if (selection != null) {
+            _faculty = selection.faculty;
+            _selectedProgramCode = selection.program.code;
+          }
+        });
+
+        final canOverwriteEmail = _emailCtrl.text.trim().isEmpty ||
+            _emailCtrl.text.trim().toLowerCase() ==
+                (_lastAutoEmail ?? '').toLowerCase();
+        if (canOverwriteEmail) {
+          _emailCtrl.text = expectedEmail;
+          _lastAutoEmail = expectedEmail;
+        }
+      },
+    );
+  }
+
   void _next(BuildContext context) {
-    _validateCrossFields();
     if (!_formKey.currentState!.validate()) return;
+    _validateCrossFields();
     if (_crossValidationError != null) return;
+
+    final selectedProgram = _selectedProgram;
+    if (selectedProgram == null) return;
 
     final data = {
       ...widget.step1Data,
       'regNumber': _regNumCtrl.text.trim(),
       'admissionYear': _admissionYear,
       'faculty': _faculty,
-      'programName': _programCtrl.text.trim(),
-      'courseName': _courseCtrl.text.trim(),
+      'programName': selectedProgram.name,
+      'programCode': selectedProgram.code,
+      'courseName': selectedProgram.name,
       'yearOfStudy': _yearOfStudy,
       'email': _emailCtrl.text.trim(),
     };
@@ -136,11 +242,13 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
                           hint: '2023/BCS/001/PS',
                           controller: _regNumCtrl,
                           prefixIcon: const Icon(Icons.badge_outlined),
-                          helperText: 'Format: YYYY/FacultyCode/Number/PS or GS',
+                          helperText:
+                              'Format: YYYY/FacultyCode/Number/PS or GS (auto-fills year/program)',
                           validator: MustValidators.validateRegNumber,
-                          onChanged: (_) => _crossValidationError != null
-                              ? _validateCrossFields()
-                              : null,
+                          onChanged: (_) {
+                            _autoFillFromRegNumber();
+                            if (_crossValidationError != null) _validateCrossFields();
+                          },
                         ),
                         const SizedBox(height: AppDimensions.spacingMd),
 
@@ -151,7 +259,10 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
                           hint: 'Select Year',
                           items: _admissionYears.map((y) =>
                             DropdownMenuItem(value: y, child: Text(y))).toList(),
-                          onChanged: (v) => setState(() => _admissionYear = v),
+                          onChanged: (v) {
+                            setState(() => _admissionYear = v);
+                            if (_crossValidationError != null) _validateCrossFields();
+                          },
                           validator: (v) => v == null ? 'Select admission year.' : null,
                         ),
                         const SizedBox(height: AppDimensions.spacingMd),
@@ -163,27 +274,42 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
                           hint: 'Select Faculty',
                           items: _faculties.map((f) =>
                             DropdownMenuItem(value: f, child: Text(f, overflow: TextOverflow.ellipsis))).toList(),
-                          onChanged: (v) => setState(() => _faculty = v),
+                          onChanged: (v) {
+                            setState(() {
+                              _faculty = v;
+                              _selectedProgramCode = null;
+                            });
+                            if (_crossValidationError != null) _validateCrossFields();
+                          },
                           validator: (v) => v == null ? 'Select your faculty.' : null,
                         ),
                         const SizedBox(height: AppDimensions.spacingMd),
 
-                        // ── Program & Course ───────────────────────────────
-                        StTextField(
+                        // ── Program ────────────────────────────────────────
+                        StDropdown<String>(
                           label: AppStrings.programName,
-                          hint: 'e.g. Bachelor of Computer Science',
-                          controller: _programCtrl,
-                          textInputAction: TextInputAction.next,
-                          validator: (v) => MustValidators.validateRequired(v, AppStrings.programName),
-                        ),
-                        const SizedBox(height: AppDimensions.spacingMd),
-
-                        StTextField(
-                          label: AppStrings.courseName,
-                          hint: 'e.g. BCS',
-                          controller: _courseCtrl,
-                          textInputAction: TextInputAction.next,
-                          validator: (v) => MustValidators.validateRequired(v, AppStrings.courseName),
+                          value: _selectedProgramCode,
+                          hint: _faculty == null
+                              ? 'Select faculty first'
+                              : 'Select Program',
+                          items: _programsForSelectedFaculty
+                              .map((p) => DropdownMenuItem<String>(
+                                    value: p.code,
+                                    child: Text(
+                                      p.name,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ))
+                              .toList(),
+                          onChanged: (v) {
+                            if (_faculty == null) return;
+                            setState(() => _selectedProgramCode = v);
+                            if (_crossValidationError != null) {
+                              _validateCrossFields();
+                            }
+                          },
+                          validator: (v) =>
+                              v == null ? 'Select your program.' : null,
                         ),
                         const SizedBox(height: AppDimensions.spacingMd),
 
@@ -207,9 +333,9 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
                           keyboardType: TextInputType.emailAddress,
                           prefixIcon: const Icon(Icons.verified_outlined, color: AppColors.primary),
                           helperText: 'Use your official MUST student email ending in @std.must.ac.ug',
-                          onChanged: (_) => _crossValidationError != null
-                              ? _validateCrossFields()
-                              : null,
+                          onChanged: (_) {
+                            if (_crossValidationError != null) _validateCrossFields();
+                          },
                           validator: MustValidators.validateStudentEmail,
                         ),
 
@@ -243,6 +369,20 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
       }),
     );
   }
+}
+
+class _ProgramOption {
+  final String code;
+  final String name;
+
+  const _ProgramOption({required this.code, required this.name});
+}
+
+class _ProgramSelection {
+  final String faculty;
+  final _ProgramOption program;
+
+  const _ProgramSelection({required this.faculty, required this.program});
 }
 
 class _StepFooter extends StatelessWidget {
