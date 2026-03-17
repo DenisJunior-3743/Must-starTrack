@@ -80,8 +80,39 @@ class DatabaseHelper {
   /// Future migrations go here — do NOT touch onCreate for existing tables.
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     debugPrint('🔄 Upgrading DB from v$oldVersion → v$newVersion');
-    // Example migration pattern for future phases:
-    // if (oldVersion < 2) { await db.execute('ALTER TABLE posts ADD COLUMN ...'); }
+    if (oldVersion < 2) {
+      await db.transaction((txn) async {
+        await txn.execute(DatabaseSchema.createConversations);
+
+        await txn.execute(
+            'ALTER TABLE ${DatabaseSchema.tableMessages} RENAME TO messages_legacy_v1');
+        await txn.execute(DatabaseSchema.createMessages);
+        await txn.execute('''
+          INSERT INTO ${DatabaseSchema.tableMessages}
+          (id, conversation_id, sender_id, content, message_type, file_url, file_name, file_size, created_at, is_read, is_deleted, sync_status)
+          SELECT
+            id,
+            COALESCE(thread_id, ''),
+            sender_id,
+            content,
+            CASE WHEN media_url IS NULL OR media_url = '' THEN 'text' ELSE 'file' END,
+            media_url,
+            NULL,
+            NULL,
+            CAST(strftime('%s', COALESCE(sent_at, created_at, 'now')) AS INTEGER) * 1000,
+            CASE WHEN read_at IS NULL THEN 0 ELSE 1 END,
+            0,
+            sync_status
+          FROM messages_legacy_v1
+        ''');
+        await txn.execute('DROP TABLE IF EXISTS messages_legacy_v1');
+        await txn.execute('DROP TABLE IF EXISTS message_threads');
+
+        for (final idx in DatabaseSchema.indexes) {
+          await txn.execute(idx);
+        }
+      });
+    }
   }
 
   // ── Utility ───────────────────────────────────────────────────────────────
@@ -118,7 +149,7 @@ class DatabaseHelper {
         DatabaseSchema.tableOpportunities,
         DatabaseSchema.tableNotifications,
         DatabaseSchema.tableMessages,
-        DatabaseSchema.tableMessageThreads,
+        DatabaseSchema.tableConversations,
         DatabaseSchema.tableCollabRequests,
         DatabaseSchema.tableFollows,
         DatabaseSchema.tableDislikes,

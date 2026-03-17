@@ -21,31 +21,31 @@
 
 abstract final class DatabaseSchema {
   static const String databaseName = 'must_startrack.db';
-  static const int databaseVersion = 1;
+  static const int databaseVersion = 2;
 
   // ── Table Names ────────────────────────────────────────────────────────────
-  static const String tableUsers             = 'users';
-  static const String tableProfiles          = 'profiles';
-  static const String tablePosts             = 'posts';
-  static const String tableComments          = 'comments';
-  static const String tableLikes             = 'likes';
-  static const String tableDislikes          = 'dislikes';
-  static const String tableFollows           = 'follows';
-  static const String tableCollabRequests    = 'collab_requests';
-  static const String tableMessages          = 'messages';
-  static const String tableMessageThreads    = 'message_threads';
-  static const String tableNotifications     = 'notifications';
-  static const String tableOpportunities     = 'opportunities';
-  static const String tableSyncQueue         = 'sync_queue';
-  static const String tableModerationQueue   = 'moderation_queue';
+  static const String tableUsers = 'users';
+  static const String tableProfiles = 'profiles';
+  static const String tablePosts = 'posts';
+  static const String tableComments = 'comments';
+  static const String tableLikes = 'likes';
+  static const String tableDislikes = 'dislikes';
+  static const String tableFollows = 'follows';
+  static const String tableCollabRequests = 'collab_requests';
+  static const String tableConversations = 'conversations';
+  static const String tableMessages = 'messages';
+  static const String tableNotifications = 'notifications';
+  static const String tableOpportunities = 'opportunities';
+  static const String tableSyncQueue = 'sync_queue';
+  static const String tableModerationQueue = 'moderation_queue';
   static const String tableProjectMilestones = 'project_milestones';
-  static const String tableTasks             = 'tasks';
-  static const String tableEndorsements      = 'endorsements';
-  static const String tableActivityLogs      = 'activity_logs';
-  static const String tableDeviceTokens      = 'device_tokens';
-  static const String tableSearchHistory     = 'search_history';
-  static const String tableDraftPosts        = 'draft_posts';
-  static const String tableAchievements      = 'achievements';
+  static const String tableTasks = 'tasks';
+  static const String tableEndorsements = 'endorsements';
+  static const String tableActivityLogs = 'activity_logs';
+  static const String tableDeviceTokens = 'device_tokens';
+  static const String tableSearchHistory = 'search_history';
+  static const String tableDraftPosts = 'draft_posts';
+  static const String tableAchievements = 'achievements';
 
   // ─────────────────────────────────────────────────────────────────────────
   // CREATE TABLE STATEMENTS
@@ -220,38 +220,41 @@ abstract final class DatabaseSchema {
     )
   ''';
 
-  /// Message Threads — one record per conversation pair.
-  static const String createMessageThreads = '''
-    CREATE TABLE IF NOT EXISTS $tableMessageThreads (
-      id                  TEXT PRIMARY KEY,
-      participant_ids     TEXT NOT NULL,
-      last_message_id     TEXT,
-      last_message_text   TEXT,
-      last_message_at     TEXT,
-      unread_count        INTEGER NOT NULL DEFAULT 0,
-      created_at          TEXT NOT NULL,
-      updated_at          TEXT NOT NULL,
-      sync_status         INTEGER NOT NULL DEFAULT 0
+  /// Conversations — one row per local inbox conversation for a user.
+  static const String createConversations = '''
+    CREATE TABLE IF NOT EXISTS $tableConversations (
+      id                TEXT PRIMARY KEY,
+      user_id           TEXT NOT NULL,
+      peer_id           TEXT NOT NULL,
+      peer_name         TEXT NOT NULL,
+      peer_photo_url    TEXT,
+      last_message      TEXT NOT NULL DEFAULT '',
+      last_message_at   INTEGER NOT NULL,
+      unread_count      INTEGER NOT NULL DEFAULT 0,
+      is_peer_lecturer  INTEGER NOT NULL DEFAULT 0,
+      created_at        TEXT NOT NULL,
+      updated_at        TEXT NOT NULL,
+      UNIQUE (user_id, peer_id)
     )
   ''';
 
-  /// Messages — individual messages within a thread.
-  /// status: 'sending' | 'sent' | 'delivered' | 'read' | 'failed'
+  /// Messages — individual messages inside a conversation.
+  /// sync_status: 0=pending, 1=synced, 2=failed
   static const String createMessages = '''
     CREATE TABLE IF NOT EXISTS $tableMessages (
-      id          TEXT PRIMARY KEY,
-      thread_id   TEXT NOT NULL,
-      sender_id   TEXT NOT NULL,
-      content     TEXT NOT NULL,
-      media_url   TEXT,
-      status      TEXT NOT NULL DEFAULT 'sending',
-      sent_at     TEXT NOT NULL,
-      delivered_at TEXT,
-      read_at     TEXT,
-      is_queued   INTEGER NOT NULL DEFAULT 0,
-      sync_status INTEGER NOT NULL DEFAULT 0,
-      FOREIGN KEY (thread_id)  REFERENCES $tableMessageThreads(id) ON DELETE CASCADE,
-      FOREIGN KEY (sender_id)  REFERENCES $tableUsers(id)          ON DELETE CASCADE
+      id              TEXT PRIMARY KEY,
+      conversation_id TEXT NOT NULL,
+      sender_id       TEXT NOT NULL,
+      content         TEXT NOT NULL,
+      message_type    TEXT NOT NULL DEFAULT 'text',
+      file_url        TEXT,
+      file_name       TEXT,
+      file_size       TEXT,
+      created_at      INTEGER NOT NULL,
+      is_read         INTEGER NOT NULL DEFAULT 0,
+      is_deleted      INTEGER NOT NULL DEFAULT 0,
+      sync_status     INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (conversation_id) REFERENCES $tableConversations(id) ON DELETE CASCADE
     )
   ''';
 
@@ -466,8 +469,8 @@ abstract final class DatabaseSchema {
     'CREATE INDEX IF NOT EXISTS idx_posts_status  ON $tablePosts(status)',
     'CREATE INDEX IF NOT EXISTS idx_posts_created ON $tablePosts(created_at DESC)',
     'CREATE INDEX IF NOT EXISTS idx_comments_post ON $tableComments(post_id)',
-    'CREATE INDEX IF NOT EXISTS idx_messages_thread ON $tableMessages(thread_id)',
-    'CREATE INDEX IF NOT EXISTS idx_messages_sent ON $tableMessages(sent_at DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_conversations_user_recent ON $tableConversations(user_id, last_message_at DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_messages_convo_created_deleted ON $tableMessages(conversation_id, created_at DESC, is_deleted)',
     'CREATE INDEX IF NOT EXISTS idx_notif_user ON $tableNotifications(user_id)',
     'CREATE INDEX IF NOT EXISTS idx_notif_read ON $tableNotifications(is_read)',
     'CREATE INDEX IF NOT EXISTS idx_sync_queue_retry ON $tableSyncQueue(next_retry_at)',
@@ -491,7 +494,7 @@ abstract final class DatabaseSchema {
     createDislikes,
     createFollows,
     createCollabRequests,
-    createMessageThreads,
+    createConversations,
     createMessages,
     createNotifications,
     createOpportunities,

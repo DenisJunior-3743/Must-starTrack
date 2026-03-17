@@ -1,39 +1,14 @@
-// lib/features/messaging/bloc/message_cubit.dart
-//
-// MUST StarTrack — Message Cubit (Phase 4)
-//
-// Manages two related but distinct state machines:
-//   A) ConversationList — the messages inbox screen
-//   B) MessageThread    — a single chat thread
-//
-// Both are driven by this one cubit to minimise DI boilerplate.
-// In Phase 5 a Firestore stream will replace the polling approach.
-//
-// States:
-//   MessageInitial          — idle
-//   ConversationsLoading    — loading inbox
-//   ConversationsLoaded     — inbox ready, paginated
-//   ThreadLoading           — loading chat messages
-//   ThreadLoaded            — thread ready, paginated
-//   MessageSending          — optimistic send in progress
-//   MessageError            — error with context
-//
-// Offline-first guarantee:
-//   sendMessage() writes to SQLite immediately → SyncQueueDao enqueues
-//   the Firestore write. If offline the message is visible instantly
-//   but marked with a pending sync indicator (extra_json: {"synced": false}).
+import 'dart:async';
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../../data/local/dao/message_dao.dart';
-import '../../../data/local/dao/sync_queue_dao.dart';
-
-// ── States ────────────────────────────────────────────────────────────────────
+import '../../../data/repositories/message_repository.dart';
 
 abstract class MessageState extends Equatable {
   const MessageState();
+
   @override
   List<Object?> get props => [];
 }
@@ -49,14 +24,28 @@ class ConversationsLoading extends MessageState {
 class ConversationsLoaded extends MessageState {
   final List<ConversationSummary> conversations;
   final bool hasMore;
+  final String query;
 
   const ConversationsLoaded({
     required this.conversations,
     this.hasMore = false,
+    this.query = '',
   });
 
+  ConversationsLoaded copyWith({
+    List<ConversationSummary>? conversations,
+    bool? hasMore,
+    String? query,
+  }) {
+    return ConversationsLoaded(
+      conversations: conversations ?? this.conversations,
+      hasMore: hasMore ?? this.hasMore,
+      query: query ?? this.query,
+    );
+  }
+
   @override
-  List<Object?> get props => [conversations, hasMore];
+  List<Object?> get props => [conversations, hasMore, query];
 }
 
 class ThreadLoading extends MessageState {
@@ -65,6 +54,7 @@ class ThreadLoading extends MessageState {
 
 class ThreadLoaded extends MessageState {
   final String conversationId;
+  final String currentUserId;
   final String peerName;
   final List<MessageModel> messages;
   final bool hasMore;
@@ -72,6 +62,7 @@ class ThreadLoaded extends MessageState {
 
   const ThreadLoaded({
     required this.conversationId,
+    required this.currentUserId,
     required this.peerName,
     required this.messages,
     this.hasMore = false,
@@ -82,53 +73,80 @@ class ThreadLoaded extends MessageState {
     List<MessageModel>? messages,
     bool? hasMore,
     bool? isLoadingMore,
-  }) => ThreadLoaded(
-    conversationId: conversationId,
-    peerName: peerName,
-    messages: messages ?? this.messages,
-    hasMore: hasMore ?? this.hasMore,
-    isLoadingMore: isLoadingMore ?? this.isLoadingMore,
-  );
+  }) {
+    return ThreadLoaded(
+      conversationId: conversationId,
+      currentUserId: currentUserId,
+      peerName: peerName,
+      messages: messages ?? this.messages,
+      hasMore: hasMore ?? this.hasMore,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+    );
+  }
 
   @override
-  List<Object?> get props => [conversationId, messages, hasMore, isLoadingMore];
+  List<Object?> get props => [
+        conversationId,
+        currentUserId,
+        peerName,
+        messages,
+        hasMore,
+        isLoadingMore
+      ];
 }
 
 class MessageError extends MessageState {
   final String message;
+
   const MessageError(this.message);
 
   @override
   List<Object?> get props => [message];
 }
 
-// ── Cubit ─────────────────────────────────────────────────────────────────────
-
 class MessageCubit extends Cubit<MessageState> {
-  final MessageDao _messageDao;
-  final SyncQueueDao _syncDao;
-
-  // inject from AuthCubit in Phase 5
-  static const _currentUserId = 'current_user';
   static const _pageSize = 40;
-  static const _uuid = Uuid();
+
+  final MessageRepository _repo;
+  final String? Function() _currentUserId;
+
+  StreamSubscription<List<ConversationSummary>>? _conversationSub;
+  StreamSubscription<List<MessageModel>>? _threadSub;
 
   MessageCubit({
-    required MessageDao messageDao,
-    required SyncQueueDao syncDao,
-  })  : _messageDao = messageDao,
-        _syncDao = syncDao,
+    required MessageRepository repository,
+    required String? Function() currentUserId,
+  })  : _repo = repository,
+        _currentUserId = currentUserId,
         super(const MessageInitial());
 
-  // ── Load conversations ────────────────────────────────────────────────────
+  String? get _userId => _currentUserId();
 
   Future<void> loadConversations() async {
+    final userId = _userId;
+    if (userId == null) {
+      emit(const MessageError('Please sign in to access inbox.'));
+      return;
+    }
+
     emit(const ConversationsLoading());
+
+    await _conversationSub?.cancel();
+    _conversationSub = _repo.watchConversations(userId).listen((conversations) {
+      final current = state;
+      if (current is ConversationsLoaded) {
+        emit(current.copyWith(conversations: conversations));
+        return;
+      }
+      emit(ConversationsLoaded(
+        conversations: conversations,
+        hasMore: conversations.length == _pageSize,
+      ));
+    });
+
     try {
-      final convos = await _messageDao.getConversations(
-        userId: _currentUserId,
-        pageSize: _pageSize,
-      );
+      final convos =
+          await _repo.loadConversations(userId: userId, pageSize: _pageSize);
       emit(ConversationsLoaded(
         conversations: convos,
         hasMore: convos.length == _pageSize,
@@ -138,64 +156,97 @@ class MessageCubit extends Cubit<MessageState> {
     }
   }
 
-  // ── Load a message thread ─────────────────────────────────────────────────
+  Future<void> searchConversations(String query) async {
+    final userId = _userId;
+    if (userId == null) {
+      emit(const MessageError('Please sign in to search inbox.'));
+      return;
+    }
+
+    if (query.trim().isEmpty) {
+      await loadConversations();
+      return;
+    }
+
+    try {
+      final results =
+          await _repo.searchConversations(userId: userId, query: query.trim());
+      emit(ConversationsLoaded(
+        conversations: results,
+        query: query,
+        hasMore: false,
+      ));
+    } catch (e) {
+      emit(MessageError('Search failed: $e'));
+    }
+  }
 
   Future<void> loadThread({
-    required String peerId,
+    required String threadOrPeerId,
     required String peerName,
     String? peerPhotoUrl,
     bool isPeerLecturer = false,
   }) async {
+    final userId = _userId;
+    if (userId == null) {
+      emit(const MessageError('Please sign in to open chats.'));
+      return;
+    }
+
     emit(const ThreadLoading());
 
     try {
-      // Ensure conversation exists (creates if first time)
-      final convoId = await _messageDao.ensureConversation(
-        userId: _currentUserId,
-        peerId: peerId,
+      final thread = await _repo.openThread(
+        userId: userId,
+        threadOrPeerId: threadOrPeerId,
         peerName: peerName,
         peerPhotoUrl: peerPhotoUrl,
         isPeerLecturer: isPeerLecturer,
-      );
-
-      final messages = await _messageDao.getMessages(
-        conversationId: convoId,
         pageSize: _pageSize,
       );
 
-      // Mark as read
-      await _messageDao.markConversationRead(
-        conversationId: convoId,
-        userId: _currentUserId,
-      );
+      await _threadSub?.cancel();
+      _threadSub = _repo
+          .watchMessages(userId: userId, conversationId: thread.conversationId)
+          .listen((messages) {
+        final current = state;
+        if (current is ThreadLoaded &&
+            current.conversationId == thread.conversationId) {
+          emit(current.copyWith(messages: messages));
+        }
+      });
 
       emit(ThreadLoaded(
-        conversationId: convoId,
-        peerName: peerName,
-        messages: messages,
-        hasMore: messages.length == _pageSize,
+        conversationId: thread.conversationId,
+        currentUserId: userId,
+        peerName: thread.peerName,
+        messages: thread.messages,
+        hasMore: thread.hasMore,
       ));
     } catch (e) {
       emit(MessageError('Failed to load messages: $e'));
     }
   }
 
-  // ── Load more messages (pagination) ──────────────────────────────────────
-
   Future<void> loadMoreMessages() async {
     final current = state;
-    if (current is! ThreadLoaded || current.isLoadingMore || !current.hasMore) return;
+    if (current is! ThreadLoaded || current.isLoadingMore || !current.hasMore) {
+      return;
+    }
 
     emit(current.copyWith(isLoadingMore: true));
-
     try {
-      final oldest = current.messages.isNotEmpty
-          ? current.messages.first.createdAt : null;
+      final oldest =
+          current.messages.isNotEmpty ? current.messages.first.createdAt : null;
+      if (oldest == null) {
+        emit(current.copyWith(isLoadingMore: false, hasMore: false));
+        return;
+      }
 
-      final older = await _messageDao.getMessages(
+      final older = await _repo.loadMoreMessages(
         conversationId: current.conversationId,
-        pageSize: _pageSize,
         before: oldest,
+        pageSize: _pageSize,
       );
 
       emit(current.copyWith(
@@ -208,89 +259,69 @@ class MessageCubit extends Cubit<MessageState> {
     }
   }
 
-  // ── Send a text message ───────────────────────────────────────────────────
-
-  /// Optimistic send:
-  ///   1. Build message object with generated ID
-  ///   2. Append to UI immediately
-  ///   3. Persist to SQLite
-  ///   4. Enqueue Firestore sync
   Future<void> sendMessage(String text) async {
     final current = state;
-    if (current is! ThreadLoaded) return;
+    final userId = _userId;
+    if (current is! ThreadLoaded || userId == null) return;
 
-    final msg = MessageModel(
-      id: _uuid.v4(),
-      conversationId: current.conversationId,
-      senderId: _currentUserId,
-      content: text.trim(),
-      messageType: 'text',
-      createdAt: DateTime.now(),
-      isRead: false,
-    );
-
-    // 1. Optimistic append
-    emit(current.copyWith(messages: [...current.messages, msg]));
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return;
 
     try {
-      // 2. Persist locally
-      await _messageDao.insertMessage(msg);
-
-      // 3. Enqueue remote sync
-      await _syncDao.enqueue(
-        entity: 'message',
-        entityId: msg.id,
-        operation: 'create',
-        payload: {
-          'conversation_id': msg.conversationId,
-          'sender_id': msg.senderId,
-          'content': msg.content,
-          'message_type': msg.messageType,
-          'created_at': msg.createdAt.toIso8601String(),
-        },
+      await _repo.sendMessage(
+        userId: userId,
+        conversationId: current.conversationId,
+        text: trimmed,
       );
     } catch (e) {
-      // Rollback optimistic message on failure
-      final rolled = (state as ThreadLoaded).messages
-          .where((m) => m.id != msg.id).toList();
-      emit((state as ThreadLoaded).copyWith(messages: rolled));
+      emit(MessageError('Could not send message: $e'));
     }
   }
-
-  // ── Delete a message ──────────────────────────────────────────────────────
 
   Future<void> deleteMessage(String messageId) async {
     final current = state;
     if (current is! ThreadLoaded) return;
 
-    // Optimistic remove
-    final updated = current.messages.where((m) => m.id != messageId).toList();
-    emit(current.copyWith(messages: updated));
+    try {
+      await _repo.deleteMessage(
+        messageId: messageId,
+        conversationId: current.conversationId,
+      );
+    } catch (e) {
+      emit(MessageError('Could not delete message: $e'));
+    }
+  }
 
-    await _messageDao.deleteMessage(messageId);
-    await _syncDao.enqueue(
-      entity: 'message',
-      entityId: messageId,
-      operation: 'delete',
-      payload: {},
+  Future<void> deleteConversation(String conversationId) async {
+    final userId = _userId;
+    if (userId == null) return;
+
+    try {
+      await _repo.deleteConversation(
+        userId: userId,
+        conversationId: conversationId,
+      );
+      await loadConversations();
+    } catch (e) {
+      emit(MessageError('Could not delete conversation: $e'));
+    }
+  }
+
+  Future<void> markThreadRead() async {
+    final current = state;
+    final userId = _userId;
+    if (current is! ThreadLoaded || userId == null) return;
+
+    await _repo.markConversationRead(
+      userId: userId,
+      conversationId: current.conversationId,
     );
   }
 
-  // ── Search conversations ──────────────────────────────────────────────────
-
-  Future<void> searchConversations(String query) async {
-    if (query.trim().isEmpty) {
-      await loadConversations();
-      return;
-    }
-    try {
-      final results = await _messageDao.searchConversations(
-        userId: _currentUserId,
-        query: query,
-      );
-      emit(ConversationsLoaded(conversations: results));
-    } catch (e) {
-      emit(MessageError('Search failed: $e'));
-    }
+  @override
+  Future<void> close() async {
+    await _conversationSub?.cancel();
+    await _threadSub?.cancel();
+    return super.close();
   }
 }

@@ -54,6 +54,7 @@ import '../../data/remote/cloudinary_service.dart';
 
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/firebase_auth_repository.dart';
+import '../../data/repositories/message_repository.dart';
 
 import '../../features/auth/bloc/auth_cubit.dart';
 import '../../features/feed/bloc/feed_cubit.dart';
@@ -135,7 +136,7 @@ class InjectionContainer {
 
     sl.registerSingleton<FcmService>(
       FcmService(
-        messaging: null,   // uses FirebaseMessaging.instance internally
+        messaging: null, // uses FirebaseMessaging.instance internally
         firestore: sl<FirebaseFirestore>(),
         localNotif: sl<FlutterLocalNotificationsPlugin>(),
       ),
@@ -147,7 +148,16 @@ class InjectionContainer {
         firestore: sl<FirestoreService>(),
         userDao: sl<UserDao>(),
         postDao: sl<PostDao>(),
+        messageDao: sl<MessageDao>(),
         connectivity: sl<Connectivity>(),
+      ),
+    );
+
+    sl.registerLazySingleton<MessageRepository>(
+      () => MessageRepositoryImpl(
+        dao: sl<MessageDao>(),
+        syncDao: sl<SyncQueueDao>(),
+        firestore: sl<FirestoreService>(),
       ),
     );
 
@@ -209,8 +219,8 @@ class InjectionContainer {
 
     sl.registerFactory<MessageCubit>(
       () => MessageCubit(
-        messageDao: sl<MessageDao>(),
-        syncDao: sl<SyncQueueDao>(),
+        repository: sl<MessageRepository>(),
+        currentUserId: () => sl<RouteGuards>().currentUserId,
       ),
     );
 

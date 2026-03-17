@@ -171,7 +171,6 @@ class AppRouter {
 
       // ── Route tree ───────────────────────────────────────────────────────
       routes: [
-
         // ── Splash ─────────────────────────────────────────────────────────
         GoRoute(
           path: Routes.splash,
@@ -334,12 +333,13 @@ class AppRouter {
             // Extra data passed via GoRouter extra parameter
             final extra = state.extra as Map<String, dynamic>? ?? {};
             return BlocProvider(
-              create: (_) => sl<MessageCubit>()..loadThread(
-                peerId: threadId,
-                peerName: extra['peerName'] as String? ?? '',
-                peerPhotoUrl: extra['peerPhotoUrl'] as String?,
-                isPeerLecturer: extra['isPeerLecturer'] as bool? ?? false,
-              ),
+              create: (_) => sl<MessageCubit>()
+                ..loadThread(
+                  threadOrPeerId: threadId,
+                  peerName: extra['peerName'] as String? ?? '',
+                  peerPhotoUrl: extra['peerPhotoUrl'] as String?,
+                  isPeerLecturer: extra['isPeerLecturer'] as bool? ?? false,
+                ),
               child: const ChatDetailScreen(),
             );
           },
@@ -383,7 +383,8 @@ class AppRouter {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline_rounded, size: 64, color: Colors.grey),
+              const Icon(Icons.error_outline_rounded,
+                  size: 64, color: Colors.grey),
               const SizedBox(height: 16),
               Text(
                 'Could not find: ${state.uri.path}',

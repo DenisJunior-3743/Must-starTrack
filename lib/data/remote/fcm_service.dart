@@ -78,12 +78,11 @@ class FcmService {
     await _requestPermission();
 
     // Subscribe to foreground messages
-    FirebaseMessaging.onMessage.listen(
-        (msg) => _handleForegroundMessage(msg));
+    FirebaseMessaging.onMessage.listen((msg) => _handleForegroundMessage(msg));
 
     // Handle notification taps when app is in background (not terminated)
-    FirebaseMessaging.onMessageOpenedApp.listen(
-        (msg) => _routeFromMessage(msg, router));
+    FirebaseMessaging.onMessageOpenedApp
+        .listen((msg) => _routeFromMessage(msg, router));
 
     // Handle notification tap when app was terminated
     final initial = await _messaging.getInitialMessage();
@@ -118,8 +117,7 @@ class FcmService {
     );
 
     await _localNotif.initialize(
-      const InitializationSettings(
-          android: androidSettings, iOS: iosSettings),
+      const InitializationSettings(android: androidSettings, iOS: iosSettings),
     );
 
     // Create high-importance channel for Android
@@ -225,20 +223,20 @@ class FcmService {
     switch (type) {
       case 'message':
         if (entityId != null) {
-          router.push('${RouteNames.chatDetail}/$entityId');
+          router.push(Routes.chat(entityId));
         }
         break;
       case 'opportunity':
       case 'collaboration':
         if (entityId != null) {
-          router.push('/project/$entityId');
+          router.push(Routes.postById(entityId));
         } else {
           router.push(RouteNames.notifications);
         }
         break;
       case 'endorsement':
         if (entityId != null) {
-          router.push('${RouteNames.profile}/$entityId');
+          router.push(Routes.profileById(entityId));
         }
         break;
       default:

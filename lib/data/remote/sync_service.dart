@@ -62,6 +62,7 @@ class SyncService {
   final FirestoreService _firestore;
   final UserDao _userDao;
   final PostDao _postDao;
+  final MessageDao _messageDao;
   final Connectivity _connectivity;
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
@@ -72,11 +73,13 @@ class SyncService {
     required FirestoreService firestore,
     required UserDao userDao,
     required PostDao postDao,
+    required MessageDao messageDao,
     Connectivity? connectivity,
   })  : _queueDao = queueDao,
         _firestore = firestore,
         _userDao = userDao,
         _postDao = postDao,
+        _messageDao = messageDao,
         _connectivity = connectivity ?? Connectivity();
 
   // ── Start listening for connectivity changes ───────────────────────────────
@@ -103,7 +106,9 @@ class SyncService {
 
   /// Main sync loop — drains ready jobs from the queue.
   Future<SyncResult> processPendingSync() async {
-    if (_isSyncing) return const SyncResult(processed: 0, failed: 0, remaining: 0);
+    if (_isSyncing) {
+      return const SyncResult(processed: 0, failed: 0, remaining: 0);
+    }
 
     _isSyncing = true;
     int processed = 0;
@@ -119,12 +124,20 @@ class SyncService {
           processed++;
         } else {
           await _queueDao.incrementAttempt(job.id);
+          if (job.entityType == 'message') {
+            final nextRetry = job.retryCount + 1;
+            await _messageDao.markMessageSyncStatus(
+              job.entityId,
+              nextRetry >= job.maxRetries ? 2 : 0,
+            );
+          }
           failed++;
         }
       }
 
       final remaining = await _queueDao.getPendingCount();
-      return SyncResult(processed: processed, failed: failed, remaining: remaining);
+      return SyncResult(
+          processed: processed, failed: failed, remaining: remaining);
     } finally {
       _isSyncing = false;
     }
@@ -195,7 +208,10 @@ class SyncService {
         await FirebaseFirestore.instance
             .collection('users')
             .doc(job.entityId)
-            .update({'is_deleted': true, 'deleted_at': FieldValue.serverTimestamp()});
+            .update({
+          'is_deleted': true,
+          'deleted_at': FieldValue.serverTimestamp()
+        });
         return true;
       default:
         return true;
@@ -255,7 +271,9 @@ class SyncService {
           .where('id', isEqualTo: job.entityId)
           .get()
           .then((snap) {
-        for (final doc in snap.docs) { doc.reference.delete(); }
+        for (final doc in snap.docs) {
+          doc.reference.delete();
+        }
       });
       return true;
     }
@@ -270,12 +288,12 @@ class SyncService {
       senderId: payload['sender_id'] as String,
       content: payload['content'] as String,
       messageType: payload['message_type'] as String? ?? 'text',
-      createdAt: DateTime.tryParse(
-              payload['created_at'] as String? ?? '') ??
+      createdAt: DateTime.tryParse(payload['created_at'] as String? ?? '') ??
           DateTime.now(),
     );
 
     await _firestore.sendMessage(msg);
+    await _messageDao.markMessageSyncStatus(job.entityId, 1);
     return true;
   }
 
@@ -289,8 +307,7 @@ class SyncService {
     if (followerId == null || followingId == null) return true;
 
     if (job.operation == 'create') {
-      await _firestore.follow(
-          followerId: followerId, followingId: followingId);
+      await _firestore.follow(followerId: followerId, followingId: followingId);
     } else if (job.operation == 'delete') {
       await _firestore.unfollow(
           followerId: followerId, followingId: followingId);

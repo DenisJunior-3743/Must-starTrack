@@ -54,8 +54,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   //  replace with AuthCubit.currentUser in Phase 5
   static const _currentUserId = 'current_user';
-  bool get _isOwn =>
-      widget.userId == null || widget.userId == _currentUserId;
+  bool get _isOwn => widget.userId == null || widget.userId == _currentUserId;
 
   @override
   void initState() {
@@ -75,7 +74,11 @@ class _ProfileScreenState extends State<ProfileScreen>
     try {
       final user = await _userDao.getUserById(uid);
       final posts = await _postDao.getPostsByAuthor(uid, pageSize: 30);
-      setState(() { _user = user; _posts = posts; _loading = false; });
+      setState(() {
+        _user = user;
+        _posts = posts;
+        _loading = false;
+      });
     } catch (_) {
       setState(() => _loading = false);
     }
@@ -88,15 +91,21 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
 
     // Fallback when SQLite has no user yet (Firestore hydration — Phase 5)
-    final user = _user ?? UserModel(
-      id: _currentUserId, firebaseUid: '', email: 'student@must.ac.ug',
-      displayName: 'Student User', role: UserRole.student,
-      createdAt: DateTime.now(), updatedAt: DateTime.now(),
-    );
-    final photoPosts = _posts.where((post) =>
-      post.mediaUrls.any((url) => !_isVideoUrl(url))).toList();
-    final videoPosts = _posts.where((post) =>
-      post.mediaUrls.any(_isVideoUrl)).toList();
+    final user = _user ??
+        UserModel(
+          id: _currentUserId,
+          firebaseUid: '',
+          email: 'student@must.ac.ug',
+          displayName: 'Student User',
+          role: UserRole.student,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+    final photoPosts = _posts
+        .where((post) => post.mediaUrls.any((url) => !_isVideoUrl(url)))
+        .toList();
+    final videoPosts =
+        _posts.where((post) => post.mediaUrls.any(_isVideoUrl)).toList();
 
     return Scaffold(
       body: NestedScrollView(
@@ -127,7 +136,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                 unselectedLabelColor: AppColors.textSecondaryLight,
                 tabs: const [
                   Tab(text: 'Photos', icon: Icon(Icons.photo_library_outlined)),
-                  Tab(text: 'Videos', icon: Icon(Icons.play_circle_outline_rounded)),
+                  Tab(
+                      text: 'Videos',
+                      icon: Icon(Icons.play_circle_outline_rounded)),
                   Tab(text: 'About', icon: Icon(Icons.person_outline_rounded)),
                 ],
               ),
@@ -187,21 +198,28 @@ class _Header extends StatelessWidget {
                 radius: 52,
                 backgroundColor: AppColors.primaryTint10,
                 backgroundImage: user.photoUrl != null
-                  ? CachedNetworkImageProvider(user.photoUrl!) : null,
+                    ? CachedNetworkImageProvider(user.photoUrl!)
+                    : null,
                 child: user.photoUrl == null
-                    ? Text((user.displayName?.isNotEmpty == true)
-                      ? user.displayName![0].toUpperCase() : '?',
+                    ? Text(
+                        (user.displayName?.isNotEmpty == true)
+                            ? user.displayName![0].toUpperCase()
+                            : '?',
                         style: GoogleFonts.lexend(
-                          fontSize: 40, fontWeight: FontWeight.w700,
-                          color: AppColors.primary))
+                            fontSize: 40,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary))
                     : null,
               ),
               Positioned(
-                bottom: 4, right: 4,
+                bottom: 4,
+                right: 4,
                 child: Container(
-                  width: 28, height: 28,
+                  width: 28,
+                  height: 28,
                   decoration: BoxDecoration(
-                    color: AppColors.primary, shape: BoxShape.circle,
+                    color: AppColors.primary,
+                    shape: BoxShape.circle,
                     border: Border.all(color: Colors.white, width: 2),
                   ),
                   child: const Icon(Icons.verified_rounded,
@@ -213,65 +231,83 @@ class _Header extends StatelessWidget {
           const SizedBox(height: 12),
 
           // Name
-           Text(user.displayName ?? 'Unknown',
-            style: GoogleFonts.lexend(
-              fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
+          Text(user.displayName ?? 'Unknown',
+              style: GoogleFonts.lexend(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.3)),
           const SizedBox(height: 2),
 
           // Student ID (derived from hash — real ID stored in profile)
           Text('ST-${DateTime.now().year}-${user.id.hashCode.abs() % 9999}',
-            style: GoogleFonts.lexend(
-              fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primary)),
+              style: GoogleFonts.lexend(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary)),
           const SizedBox(height: 2),
 
           // Faculty
-          Text(user.profile?.faculty ?? 'Mbarara University of Science & Technology',
-            style: GoogleFonts.lexend(
-              fontSize: 13, color: AppColors.textSecondaryLight),
-            textAlign: TextAlign.center,
-            maxLines: 2),
+          Text(
+              user.profile?.faculty ??
+                  'Mbarara University of Science & Technology',
+              style: GoogleFonts.lexend(
+                  fontSize: 13, color: AppColors.textSecondaryLight),
+              textAlign: TextAlign.center,
+              maxLines: 2),
           const SizedBox(height: 16),
 
           // Action buttons
           Row(
             children: isOwn
-              ? [
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => context.push(RouteNames.editProfile),
-                      child: Text('Edit Profile',
-                        style: GoogleFonts.lexend(fontWeight: FontWeight.w700)),
+                ? [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => context.push(RouteNames.editProfile),
+                        child: Text('Edit Profile',
+                            style: GoogleFonts.lexend(
+                                fontWeight: FontWeight.w700)),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  SizedBox(
-                    width: 40, height: 40,
-                    child: OutlinedButton(
-                      onPressed: () {},
-                      style: OutlinedButton.styleFrom(padding: EdgeInsets.zero),
-                      child: const Icon(Icons.settings_rounded, size: 20),
+                    const SizedBox(width: 10),
+                    SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: OutlinedButton(
+                        onPressed: () {},
+                        style:
+                            OutlinedButton.styleFrom(padding: EdgeInsets.zero),
+                        child: const Icon(Icons.settings_rounded, size: 20),
+                      ),
                     ),
-                  ),
-                ]
-              : [
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {},
-                      child: Text('Follow',
-                        style: GoogleFonts.lexend(fontWeight: FontWeight.w700)),
+                  ]
+                : [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {},
+                        child: Text('Follow',
+                            style: GoogleFonts.lexend(
+                                fontWeight: FontWeight.w700)),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => context.push(
-                          '${RouteNames.chatDetail}/${user.id}'),
-                      icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
-                      label: Text('Message',
-                        style: GoogleFonts.lexend(fontWeight: FontWeight.w600)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => context.push(
+                          Routes.chat(user.id),
+                          extra: {
+                            'peerName': user.displayName ?? user.email,
+                            'peerPhotoUrl': user.photoUrl,
+                            'isPeerLecturer': user.isLecturer,
+                          },
+                        ),
+                        icon: const Icon(Icons.chat_bubble_outline_rounded,
+                            size: 16),
+                        label: Text('Message',
+                            style: GoogleFonts.lexend(
+                                fontWeight: FontWeight.w600)),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
           ),
         ],
       ),
@@ -302,9 +338,9 @@ class _PortfolioLinks extends StatelessWidget {
 
     return Container(
       decoration: const BoxDecoration(
-        color: AppColors.surfaceLight,
-        border: Border.symmetric(
-          horizontal: BorderSide(color: AppColors.borderLight))),
+          color: AppColors.surfaceLight,
+          border: Border.symmetric(
+              horizontal: BorderSide(color: AppColors.borderLight))),
       child: Row(
         children: items.asMap().entries.expand((e) {
           final entry = e.value;
@@ -319,12 +355,13 @@ class _PortfolioLinks extends StatelessWidget {
                 },
                 icon: Icon(entry.icon, size: 18),
                 label: Text(entry.label.toUpperCase(),
-                  style: GoogleFonts.lexend(
-                    fontSize: 11, fontWeight: FontWeight.w700,
-                    letterSpacing: 0.1)),
+                    style: GoogleFonts.lexend(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.1)),
                 style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  foregroundColor: AppColors.textSecondaryLight),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    foregroundColor: AppColors.textSecondaryLight),
               ),
             ),
           ];
@@ -358,17 +395,22 @@ class _StatsRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16),
       child: Row(
-        children: stats.map((s) => Expanded(
-          child: Column(
-            children: [
-              Text(s.$1, style: GoogleFonts.lexend(
-                fontSize: 18, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 2),
-              Text(s.$2, style: GoogleFonts.lexend(
-                fontSize: 11, color: AppColors.textSecondaryLight)),
-            ],
-          ),
-        )).toList(),
+        children: stats
+            .map((s) => Expanded(
+                  child: Column(
+                    children: [
+                      Text(s.$1,
+                          style: GoogleFonts.lexend(
+                              fontSize: 18, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 2),
+                      Text(s.$2,
+                          style: GoogleFonts.lexend(
+                              fontSize: 11,
+                              color: AppColors.textSecondaryLight)),
+                    ],
+                  ),
+                ))
+            .toList(),
       ),
     );
   }
@@ -392,8 +434,8 @@ class _SkillsSection extends StatelessWidget {
           Row(
             children: [
               Text('Skills & Expertise',
-                style: GoogleFonts.lexend(
-                  fontSize: 17, fontWeight: FontWeight.w700)),
+                  style: GoogleFonts.lexend(
+                      fontSize: 17, fontWeight: FontWeight.w700)),
               const Spacer(),
               const Icon(Icons.psychology_rounded,
                   size: 22, color: AppColors.primary),
@@ -401,18 +443,24 @@ class _SkillsSection extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Wrap(
-            spacing: 8, runSpacing: 8,
-            children: skills.map((s) => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.primaryTint10,
-                borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
-              ),
-              child: Text(s,
-                style: GoogleFonts.lexend(
-                  fontSize: 12, fontWeight: FontWeight.w600,
-                  color: AppColors.primary)),
-            )).toList(),
+            spacing: 8,
+            runSpacing: 8,
+            children: skills
+                .map((s) => Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryTint10,
+                        borderRadius:
+                            BorderRadius.circular(AppDimensions.radiusSm),
+                      ),
+                      child: Text(s,
+                          style: GoogleFonts.lexend(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary)),
+                    ))
+                .toList(),
           ),
         ],
       ),
@@ -451,10 +499,12 @@ class _ProjectsGrid extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(emptyTitle,
-              style: GoogleFonts.lexend(fontSize: 16, fontWeight: FontWeight.w700)),
+                style: GoogleFonts.lexend(
+                    fontSize: 16, fontWeight: FontWeight.w700)),
             const SizedBox(height: 6),
             Text(emptySubtitle,
-              style: GoogleFonts.lexend(fontSize: 13, color: AppColors.textSecondaryLight)),
+                style: GoogleFonts.lexend(
+                    fontSize: 13, color: AppColors.textSecondaryLight)),
           ],
         ),
       );
@@ -462,10 +512,13 @@ class _ProjectsGrid extends StatelessWidget {
     return GridView.builder(
       padding: const EdgeInsets.all(2),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3, mainAxisSpacing: 2, crossAxisSpacing: 2,
+        crossAxisCount: 3,
+        mainAxisSpacing: 2,
+        crossAxisSpacing: 2,
       ),
       itemCount: posts.length,
-      itemBuilder: (ctx, i) => _GridTile(post: posts[i], preferVideoBadge: preferVideoBadge),
+      itemBuilder: (ctx, i) =>
+          _GridTile(post: posts[i], preferVideoBadge: preferVideoBadge),
     );
   }
 }
@@ -492,7 +545,8 @@ class _GridTile extends StatelessWidget {
                     color: AppColors.primaryTint10,
                   ),
                 )
-              : _GridPlaceholder(isVideo: preferVideoBadge || post.mediaUrls.any(_isVideoUrl)),
+              : _GridPlaceholder(
+                  isVideo: preferVideoBadge || post.mediaUrls.any(_isVideoUrl)),
           if (preferVideoBadge)
             Positioned(
               right: 6,
@@ -517,10 +571,13 @@ class _GridTile extends StatelessWidget {
               alignment: Alignment.center,
               padding: const EdgeInsets.all(4),
               child: Text(post.title,
-                style: GoogleFonts.lexend(fontSize: 9, fontWeight: FontWeight.w600,
-                    color: AppColors.primary),
-                maxLines: 3, overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center),
+                  style: GoogleFonts.lexend(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center),
             ),
         ],
       ),
@@ -529,10 +586,13 @@ class _GridTile extends StatelessWidget {
 
   String? _previewUrl(PostModel post) {
     if (!preferVideoBadge) {
-      final imageUrl = post.mediaUrls.where((url) => !_isVideoUrl(url)).cast<String?>().firstWhere(
-        (_) => true,
-        orElse: () => null,
-      );
+      final imageUrl = post.mediaUrls
+          .where((url) => !_isVideoUrl(url))
+          .cast<String?>()
+          .firstWhere(
+            (_) => true,
+            orElse: () => null,
+          );
       return imageUrl;
     }
     return null;
@@ -546,15 +606,17 @@ class _GridPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    color: AppColors.primaryTint10,
-    child: Center(
-      child: Icon(
-        isVideo ? Icons.play_circle_outline_rounded : Icons.rocket_launch_rounded,
-        color: AppColors.primary,
-        size: 28,
-      ),
-    ),
-  );
+        color: AppColors.primaryTint10,
+        child: Center(
+          child: Icon(
+            isVideo
+                ? Icons.play_circle_outline_rounded
+                : Icons.rocket_launch_rounded,
+            color: AppColors.primary,
+            size: 28,
+          ),
+        ),
+      );
 }
 
 // ── About tab ─────────────────────────────────────────────────────────────────
@@ -569,17 +631,23 @@ class _AboutTab extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: [
         if (user.profile?.bio != null) ...[
-          Text('Bio', style: GoogleFonts.lexend(
-            fontSize: 14, fontWeight: FontWeight.w700,
-            color: AppColors.textSecondaryLight)),
+          Text('Bio',
+              style: GoogleFonts.lexend(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textSecondaryLight)),
           const SizedBox(height: 6),
-          Text(user.profile!.bio!, style: GoogleFonts.lexend(fontSize: 14, height: 1.6)),
+          Text(user.profile!.bio!,
+              style: GoogleFonts.lexend(fontSize: 14, height: 1.6)),
           const SizedBox(height: 16),
         ],
         _Row('Faculty', user.profile?.faculty ?? '–'),
         _Row('Programme', user.profile?.programName ?? '–'),
-        _Row('Year of Study', user.profile?.yearOfStudy != null
-            ? 'Year ${user.profile!.yearOfStudy}' : '–'),
+        _Row(
+            'Year of Study',
+            user.profile?.yearOfStudy != null
+                ? 'Year ${user.profile!.yearOfStudy}'
+                : '–'),
         _Row('Email', user.email),
       ],
     );
@@ -600,9 +668,11 @@ class _Row extends StatelessWidget {
         children: [
           SizedBox(
             width: 120,
-            child: Text(label, style: GoogleFonts.lexend(
-              fontSize: 13, fontWeight: FontWeight.w600,
-              color: AppColors.textSecondaryLight)),
+            child: Text(label,
+                style: GoogleFonts.lexend(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondaryLight)),
           ),
           Expanded(child: Text(value, style: GoogleFonts.lexend(fontSize: 13))),
         ],
@@ -617,8 +687,10 @@ class _TabDelegate extends SliverPersistentHeaderDelegate {
   final TabBar tab;
   const _TabDelegate(this.tab);
 
-  @override double get minExtent => tab.preferredSize.height;
-  @override double get maxExtent => tab.preferredSize.height;
+  @override
+  double get minExtent => tab.preferredSize.height;
+  @override
+  double get maxExtent => tab.preferredSize.height;
 
   @override
   Widget build(BuildContext ctx, double shrink, bool overlaps) =>

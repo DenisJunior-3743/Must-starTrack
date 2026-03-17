@@ -37,18 +37,31 @@ class MainShell extends StatelessWidget {
     if (guards.isAuthenticated) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Project upload is currently available for student accounts only.'),
+          content: Text(
+              'Project upload is currently available for student accounts only.'),
         ),
       );
       return;
     }
 
-    _showAuthRequiredModal(context);
+    _showAuthRequiredModal(
+      context,
+      fromRoute: RouteNames.createPost,
+      description:
+          'To upload a project and showcase your competencies, please sign in or register first.',
+      primaryLabel: 'Register As Student',
+      secondaryLabel: 'I Already Have An Account',
+    );
   }
 
-  Future<void> _showAuthRequiredModal(BuildContext context) async {
-    final from = Uri.encodeComponent(RouteNames.createPost);
-
+  Future<void> _showAuthRequiredModal(
+    BuildContext context, {
+    required String fromRoute,
+    required String description,
+    required String primaryLabel,
+    required String secondaryLabel,
+  }) async {
+    final from = Uri.encodeComponent(fromRoute);
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -82,15 +95,16 @@ class MainShell extends StatelessWidget {
                     Expanded(
                       child: Text(
                         'Authentication Needed',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w700),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'To upload a project and showcase your competencies, please sign in or register first.',
-                  style: TextStyle(height: 1.35),
+                Text(
+                  description,
+                  style: const TextStyle(height: 1.35),
                 ),
                 const SizedBox(height: 16),
                 SizedBox(
@@ -100,7 +114,7 @@ class MainShell extends StatelessWidget {
                       Navigator.of(modalContext).pop();
                       context.push('${RouteNames.registerStep1}?from=$from');
                     },
-                    child: const Text('Register As Student'),
+                    child: Text(primaryLabel),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -111,7 +125,7 @@ class MainShell extends StatelessWidget {
                       Navigator.of(modalContext).pop();
                       context.push('${RouteNames.login}?from=$from');
                     },
-                    child: const Text('I Already Have An Account'),
+                    child: Text(secondaryLabel),
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -143,6 +157,23 @@ class MainShell extends StatelessWidget {
     return StarTrackNavTab.none;
   }
 
+  void _handleProjectsTap(BuildContext context) {
+    final guards = sl<RouteGuards>();
+    if (guards.isAuthenticated) {
+      context.go(RouteNames.projects);
+      return;
+    }
+
+    _showAuthRequiredModal(
+      context,
+      fromRoute: RouteNames.projects,
+      description:
+          'To access project updates and notifications, please sign in or register first.',
+      primaryLabel: 'Register',
+      secondaryLabel: 'Sign In',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
@@ -156,7 +187,7 @@ class MainShell extends StatelessWidget {
         onPeersTap: () => context.go(RouteNames.peers),
         onAddTap: () => _handleAddTap(context),
         onInboxTap: () => context.go(RouteNames.inbox),
-        onProjectsTap: () => context.go(RouteNames.projects),
+        onProjectsTap: () => _handleProjectsTap(context),
       ),
     );
   }
