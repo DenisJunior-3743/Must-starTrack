@@ -19,9 +19,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:io';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
+import '../../../core/utils/media_path_utils.dart';
 import '../../../data/local/dao/post_dao.dart';
 import '../../../data/models/post_model.dart';
 import '../../shared/hci_components/post_card.dart';
@@ -105,71 +107,53 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
             ),
           ),
 
-          SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Category badge + title ───────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.folder_rounded,
-                          size: 16, color: AppColors.primary),
-                      const SizedBox(width: 6),
-                      Text(post.category ?? post.type,
-                        style: GoogleFonts.lexend(
-                          fontSize: 13, fontWeight: FontWeight.w600,
-                          color: AppColors.primary)),
-                    ],
-                  ),
+          SliverList(
+            delegate: SliverChildListDelegate([
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+                child: Row(
+                  children: [
+                    const Icon(Icons.folder_rounded,
+                        size: 16, color: AppColors.primary),
+                    const SizedBox(width: 6),
+                    Text(post.category ?? post.type,
+                      style: GoogleFonts.lexend(
+                        fontSize: 13, fontWeight: FontWeight.w600,
+                        color: AppColors.primary)),
+                  ],
                 ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                child: Text(post.title,
+                  style: GoogleFonts.lexend(
+                    fontSize: 26, fontWeight: FontWeight.w700,
+                    letterSpacing: -0.4, height: 1.2)),
+              ),
+              _AuthorSnippet(post: post),
+              const Divider(height: 1),
+              if (post.description != null) ...[
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                  child: Text(post.title,
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: Text('Project Overview',
                     style: GoogleFonts.lexend(
-                      fontSize: 26, fontWeight: FontWeight.w700,
-                      letterSpacing: -0.4, height: 1.2)),
+                      fontSize: 17, fontWeight: FontWeight.w700)),
                 ),
-
-                // ── Author snippet ───────────────────────────────────────
-                _AuthorSnippet(post: post),
-                const Divider(height: 1),
-
-                // ── Project overview ─────────────────────────────────────
-                if (post.description != null) ...[
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                    child: Text('Project Overview',
-                      style: GoogleFonts.lexend(
-                        fontSize: 17, fontWeight: FontWeight.w700)),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    child: Text(post.description!,
-                      style: GoogleFonts.lexend(
-                        fontSize: 14, color: AppColors.textSecondaryLight,
-                        height: 1.6)),
-                  ),
-                ],
-
-                // ── Stats grid ───────────────────────────────────────────
-                _StatsGrid(post: post),
-
-                // ── Skills ───────────────────────────────────────────────
-                if (post.skillsUsed.isNotEmpty) _SkillsSection(post: post),
-
-                // ── Collaboration section ─────────────────────────────────
-                _CollabSection(post: post),
-
-                // ── External links ───────────────────────────────────────
-                if (post.externalLinks.isNotEmpty)
-                  _ExternalLinks(links: post.externalLinks),
-
-                // Bottom padding for sticky bar
-                const SizedBox(height: 100),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  child: Text(post.description!,
+                    style: GoogleFonts.lexend(
+                      fontSize: 14, color: AppColors.textSecondaryLight,
+                      height: 1.6)),
+                ),
               ],
-            ),
+              _StatsGrid(post: post),
+              if (post.skillsUsed.isNotEmpty) _SkillsSection(post: post),
+              _CollabSection(post: post),
+              if (post.externalLinks.isNotEmpty)
+                _ExternalLinks(links: post.externalLinks),
+              const SizedBox(height: 100),
+            ]),
           ),
         ],
       ),
@@ -231,17 +215,26 @@ class _HeroGallery extends StatelessWidget {
                         size: 72, color: AppColors.primary),
                   ),
                 )
-              : CachedNetworkImage(
-                  imageUrl: urls[i],
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) => Container(
-                    color: AppColors.primaryTint10,
-                  ),
-                  errorWidget: (_, __, ___) => Container(
-                    color: AppColors.primaryTint10,
-                    child: const Icon(Icons.image_outlined, size: 60, color: AppColors.primary),
-                  ),
-                ),
+              : isLocalMediaPath(urls[i])
+                  ? Image.file(
+                      File(urls[i]),
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        color: AppColors.primaryTint10,
+                        child: const Icon(Icons.image_outlined, size: 60, color: AppColors.primary),
+                      ),
+                    )
+                  : CachedNetworkImage(
+                      imageUrl: urls[i],
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Container(
+                        color: AppColors.primaryTint10,
+                      ),
+                      errorWidget: (_, __, ___) => Container(
+                        color: AppColors.primaryTint10,
+                        child: const Icon(Icons.image_outlined, size: 60, color: AppColors.primary),
+                      ),
+                    ),
         ),
         // Photo count badge
         Positioned(
@@ -272,14 +265,7 @@ class _HeroGallery extends StatelessWidget {
 }
 
 bool _isVideoUrl(String url) {
-  final lower = url.toLowerCase();
-  return lower.contains('/video/upload/') ||
-      lower.endsWith('.mp4') ||
-      lower.endsWith('.mov') ||
-      lower.endsWith('.m4v') ||
-      lower.endsWith('.3gp') ||
-      lower.endsWith('.webm') ||
-      lower.endsWith('.mkv');
+  return isVideoMediaPath(url);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -316,6 +302,7 @@ class _AuthorSnippet extends StatelessWidget {
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(post.authorName ?? 'Unknown',
                   style: GoogleFonts.lexend(
@@ -329,7 +316,9 @@ class _AuthorSnippet extends StatelessWidget {
           ElevatedButton(
             onPressed: () {},
             style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              minimumSize: const Size(0, 36),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
               textStyle: GoogleFonts.lexend(
                 fontSize: 13, fontWeight: FontWeight.w700),
               shape: RoundedRectangleBorder(
@@ -368,7 +357,7 @@ class _StatsGrid extends StatelessWidget {
         physics: const NeverScrollableScrollPhysics(),
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
-        childAspectRatio: 2.8,
+        childAspectRatio: 2.4,
         children: stats.map((s) {
           final (label, value, icon) = s;
           return Container(
@@ -382,19 +371,24 @@ class _StatsGrid extends StatelessWidget {
               children: [
                 Icon(icon, size: 18, color: AppColors.primary),
                 const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(value,
-                      style: GoogleFonts.lexend(
-                        fontSize: 15, fontWeight: FontWeight.w700,
-                        color: AppColors.primary)),
-                    Text(label,
-                      style: GoogleFonts.lexend(
-                        fontSize: 10, color: AppColors.textSecondaryLight,
-                        fontWeight: FontWeight.w600)),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(value,
+                        style: GoogleFonts.lexend(
+                          fontSize: 14, fontWeight: FontWeight.w700,
+                          color: AppColors.primary),
+                        overflow: TextOverflow.ellipsis),
+                      Text(label,
+                        style: GoogleFonts.lexend(
+                          fontSize: 10, color: AppColors.textSecondaryLight,
+                          fontWeight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -585,47 +579,55 @@ class _StickyBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).scaffoldBackgroundColor,
-        border: const Border(top: BorderSide(color: AppColors.borderLight)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          children: [
-            // Like count
-            IconButton(
-              onPressed: onLike,
-              icon: Icon(
-                post.isLikedByMe
-                    ? Icons.favorite_rounded
-                    : Icons.favorite_border_rounded,
-                color: post.isLikedByMe ? AppColors.danger : null,
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          border: const Border(top: BorderSide(color: AppColors.borderLight)),
+        ),
+        child: SizedBox(
+          width: double.infinity,
+          child: Row(
+            children: [
+              IconButton(
+                onPressed: onLike,
+                icon: Icon(
+                  post.isLikedByMe
+                      ? Icons.favorite_rounded
+                      : Icons.favorite_border_rounded,
+                  color: post.isLikedByMe ? AppColors.danger : null,
+                ),
+                tooltip: 'Like',
               ),
-              tooltip: 'Like',
-            ),
-            Text('${post.likeCount}',
-              style: GoogleFonts.lexend(fontWeight: FontWeight.w600)),
-            const Spacer(),
-            // Share
-            IconButton(
-              onPressed: () {},
-              icon: const Icon(Icons.share_outlined),
-              tooltip: 'Share',
-            ),
-            const SizedBox(width: 8),
-            // Apply / collaborate
-            ElevatedButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.group_add_rounded, size: 18),
-              label: const Text('Collaborate'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              Text(
+                '${post.likeCount}',
+                style: GoogleFonts.lexend(fontWeight: FontWeight.w600),
               ),
-            ),
-          ],
+              const SizedBox(width: 12),
+              IconButton(
+                onPressed: () {},
+                icon: const Icon(Icons.share_outlined),
+                tooltip: 'Share',
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(Icons.group_add_rounded, size: 18),
+                  label: const Text('Collaborate'),
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(0, 48),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

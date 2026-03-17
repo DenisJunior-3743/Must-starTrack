@@ -23,11 +23,13 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:io';
 
 import '../../../core/router/route_guards.dart' show UserRole;
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/router/route_names.dart';
+import '../../../core/utils/media_path_utils.dart';
 import '../../../data/local/dao/post_dao.dart';
 import '../../../data/local/dao/user_dao.dart';
 import '../../../data/models/post_model.dart';
@@ -157,14 +159,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 }
 
 bool _isVideoUrl(String url) {
-  final lower = url.toLowerCase();
-  return lower.contains('/video/upload/') ||
-      lower.endsWith('.mp4') ||
-      lower.endsWith('.mov') ||
-      lower.endsWith('.m4v') ||
-      lower.endsWith('.3gp') ||
-      lower.endsWith('.webm') ||
-      lower.endsWith('.mkv');
+  return isVideoMediaPath(url);
 }
 
 // ── Header ────────────────────────────────────────────────────────────────────
@@ -484,14 +479,20 @@ class _GridTile extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           previewUrl != null
-              ? CachedNetworkImage(
-                  imageUrl: previewUrl,
-                  fit: BoxFit.cover,
-                  errorWidget: (_, __, ___) => const _GridPlaceholder(),
-                  placeholder: (_, __) => Container(
-                    color: AppColors.primaryTint10,
-                  ),
-                )
+              ? isLocalMediaPath(previewUrl)
+                  ? Image.file(
+                      File(previewUrl),
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const _GridPlaceholder(),
+                    )
+                  : CachedNetworkImage(
+                      imageUrl: previewUrl,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => const _GridPlaceholder(),
+                      placeholder: (_, __) => Container(
+                        color: AppColors.primaryTint10,
+                      ),
+                    )
               : _GridPlaceholder(isVideo: preferVideoBadge || post.mediaUrls.any(_isVideoUrl)),
           if (preferVideoBadge)
             Positioned(
