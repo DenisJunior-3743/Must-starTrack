@@ -175,14 +175,18 @@ class FcmService {
     final token = await _messaging.getToken();
     if (token == null) return;
 
-    await _firestore
-        .collection('users')
-        .doc(userId)
-        .collection('tokens')
-        .doc(token)
-        .delete();
-
-    await _messaging.deleteToken();
+    try {
+      await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('tokens')
+          .doc(token)
+          .delete();
+    } catch (_) {
+      // Firestore cleanup is best-effort; still clear the device token locally.
+    } finally {
+      await _messaging.deleteToken();
+    }
   }
 
   // ── Handle foreground messages ────────────────────────────────────────────

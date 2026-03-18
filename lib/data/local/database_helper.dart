@@ -80,8 +80,17 @@ class DatabaseHelper {
   /// Future migrations go here — do NOT touch onCreate for existing tables.
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     debugPrint('🔄 Upgrading DB from v$oldVersion → v$newVersion');
-    // Example migration pattern for future phases:
-    // if (oldVersion < 2) { await db.execute('ALTER TABLE posts ADD COLUMN ...'); }
+    if (oldVersion < 2) {
+      // Notifications table was redesigned: drop old schema and recreate
+      // with the columns the DAO actually uses (sender_id, sender_name,
+      // sender_photo_url, detail, entity_id, extra_json).
+      await db.execute('DROP TABLE IF EXISTS ${DatabaseSchema.tableNotifications}');
+      await db.execute(DatabaseSchema.createNotifications);
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_notif_user ON ${DatabaseSchema.tableNotifications}(user_id)');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_notif_read ON ${DatabaseSchema.tableNotifications}(is_read)');
+    }
   }
 
   // ── Utility ───────────────────────────────────────────────────────────────

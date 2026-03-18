@@ -15,10 +15,14 @@
 //      error handling if post not found.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:timeago/timeago.dart' as timeago;
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
@@ -29,12 +33,16 @@ import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/di/injection_container.dart';
+import '../../../data/local/dao/comment_dao.dart';
+import '../../../data/local/dao/notification_dao.dart';
 import '../../../data/local/dao/post_dao.dart';
 import '../../../data/local/dao/sync_queue_dao.dart';
 import '../../../data/local/database_helper.dart';
 import '../../../data/local/schema/database_schema.dart';
 import '../../../data/models/post_model.dart';
+import '../../../data/remote/sync_service.dart';
 import '../../../features/auth/bloc/auth_cubit.dart';
+import '../../../features/notifications/bloc/notification_cubit.dart';
 import '../../shared/hci_components/post_card.dart';
 
 class ProjectDetailScreen extends StatefulWidget {
@@ -53,12 +61,19 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   bool _appBarOpaque = false;
   bool _isFollowing = false;
   bool _followLoading = false;
+  bool _commentSubmitting = false;
   final _dao = PostDao();
   final _syncQueue = SyncQueueDao();
   final _uuid = const Uuid();
+  final _commentCtrl = TextEditingController();
   late final ScrollController _scrollCtrl;
+  List<CommentRecord> _comments = const [];
 
   String? get _currentUserId => sl<AuthCubit>().currentUser?.id;
+  String get _currentUserName =>
+      sl<AuthCubit>().currentUser?.displayName
+      ?? sl<AuthCubit>().currentUser?.email
+      ?? 'Someone';
 
   // Hero height minus toolbar height = collapse threshold
   static const double _collapseAt = 240 - kToolbarHeight;
@@ -78,18 +93,41 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
   @override
   void dispose() {
+    _commentCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
     try {
-      final post = await _dao.getPostById(widget.postId);
+      var post = await _dao.getPostById(widget.postId);
       bool isFollowing = false;
+      var comments = const <CommentRecord>[];
       if (post != null) {
-        await _dao.incrementViewCount(widget.postId);
         final uid = _currentUserId;
         if (uid != null) {
+          final isNewView = await _dao.recordUniqueView(
+            postId: widget.postId,
+            userId: uid,
+          );
+          if (isNewView) {
+            await _dao.incrementViewCount(widget.postId);
+            post = post.copyWith(viewCount: post.viewCount + 1);
+            await _syncQueue.enqueue(
+              operation: 'create',
+              entity: 'post_views',
+              entityId: '${uid}_${post.id}',
+              payload: {
+                'viewer_id': uid,
+                'viewer_name': _currentUserName,
+                'author_id': post.authorId,
+                'post_id': post.id,
+                'post_title': post.title,
+              },
+            );
+            unawaited(sl<SyncService>().processPendingSync());
+          }
+
           final db = await DatabaseHelper.instance.database;
           final rows = await db.query(
             DatabaseSchema.tableFollows,
@@ -99,9 +137,15 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           );
           isFollowing = rows.isNotEmpty;
         }
+
+        if (FirebaseAuth.instance.currentUser != null) {
+          await sl<SyncService>().syncCommentsForPost(widget.postId);
+        }
+        comments = await sl<CommentDao>().getCommentsForPost(widget.postId);
       }
       setState(() {
         _post = post;
+        _comments = comments;
         _loading = false;
         _isFollowing = isFollowing;
         _error = post == null ? 'Project not found.' : null;
@@ -114,13 +158,20 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   Future<void> _toggleFollow() async {
     final uid = _currentUserId;
     final post = _post;
-    if (uid == null || post == null || _followLoading) return;
+    if (uid == null || post == null || _followLoading || _isFollowing || uid == post.authorId) {
+      return;
+    }
     setState(() => _followLoading = true);
-    final wasFollowing = _isFollowing;
-    setState(() => _isFollowing = !wasFollowing);
     try {
       final db = await DatabaseHelper.instance.database;
-      if (!wasFollowing) {
+      final existing = await db.query(
+        DatabaseSchema.tableFollows,
+        columns: ['id'],
+        where: 'follower_id = ? AND followee_id = ?',
+        whereArgs: [uid, post.authorId],
+        limit: 1,
+      );
+      if (existing.isEmpty) {
         await db.insert(DatabaseSchema.tableFollows, {
           'id': _uuid.v4(),
           'follower_id': uid,
@@ -132,25 +183,72 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           operation: 'create',
           entity: 'follows',
           entityId: '${uid}_${post.authorId}',
-          payload: {'follower_id': uid, 'following_id': post.authorId},
+          payload: {
+            'follower_id': uid,
+            'following_id': post.authorId,
+            'follower_name': _currentUserName,
+          },
         );
-      } else {
-        await db.delete(
-          DatabaseSchema.tableFollows,
-          where: 'follower_id = ? AND followee_id = ?',
-          whereArgs: [uid, post.authorId],
-        );
-        await _syncQueue.enqueue(
-          operation: 'delete',
-          entity: 'follows',
-          entityId: '${uid}_${post.authorId}',
-          payload: {'follower_id': uid, 'following_id': post.authorId},
-        );
+        setState(() => _isFollowing = true);
+        unawaited(sl<SyncService>().processPendingSync());
       }
     } catch (_) {
-      setState(() => _isFollowing = wasFollowing);
     } finally {
       setState(() => _followLoading = false);
+    }
+  }
+
+  Future<void> _submitComment() async {
+    final post = _post;
+    final user = sl<AuthCubit>().currentUser;
+    final content = _commentCtrl.text.trim();
+    if (post == null || user == null || content.isEmpty || _commentSubmitting) {
+      return;
+    }
+
+    setState(() => _commentSubmitting = true);
+    try {
+      final commentId = _uuid.v4();
+      await sl<CommentDao>().addLocalComment(
+        postId: post.id,
+        authorId: user.id,
+        content: content,
+        commentId: commentId,
+      );
+      await _syncQueue.enqueue(
+        operation: 'create',
+        entity: 'comments',
+        entityId: commentId,
+        payload: {
+          'post_id': post.id,
+          'author_id': user.id,
+          'receiver_id': post.authorId,
+          'commenter_name': _currentUserName,
+          'post_title': post.title,
+          'content': content,
+        },
+      );
+
+      _commentCtrl.clear();
+      setState(() {
+        _comments = [
+          CommentRecord(
+            id: commentId,
+            postId: post.id,
+            authorId: user.id,
+            content: content,
+            createdAt: DateTime.now(),
+            authorName: _currentUserName,
+          ),
+          ..._comments,
+        ];
+        _post = post.copyWith(commentCount: post.commentCount + 1);
+      });
+      unawaited(sl<SyncService>().processPendingSync());
+    } finally {
+      if (mounted) {
+        setState(() => _commentSubmitting = false);
+      }
     }
   }
 
@@ -213,11 +311,17 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     // Do NOT call messageCtrl.dispose() here — the bottom sheet widget tree
     // is still unwinding (TextField animation listener) when the future
     // resolves. The local variable will be GC'd naturally after this scope.
-    if (confirmed != true || uid == null) return;
+    debugPrint('[Collab] Sheet closed — confirmed=$confirmed uid=$uid message="$message"');
+    if (confirmed != true || uid == null) {
+      debugPrint('[Collab] Aborted: confirmed=$confirmed, uid=$uid');
+      return;
+    }
     try {
+      final collabId = _uuid.v4();
+      debugPrint('[Collab] Inserting SQLite row — id=$collabId sender=$uid receiver=${_post?.authorId} postId=${_post?.id}');
       final db = await DatabaseHelper.instance.database;
       await db.insert(DatabaseSchema.tableCollabRequests, {
-        'id': _uuid.v4(),
+        'id': collabId,
         'sender_id': uid,
         'receiver_id': post.authorId,
         'post_id': post.id,
@@ -227,13 +331,60 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         'updated_at': DateTime.now().toIso8601String(),
         'sync_status': 0,
       });
+
+      debugPrint('[Collab] ✅ SQLite insert OK — collabId=$collabId');
+
+      // Push the collab request to Firestore via the sync queue.
+      debugPrint('[Collab] Enqueuing sync job for collabId=$collabId');
+      final senderName = sl<AuthCubit>().currentUser?.displayName
+          ?? sl<AuthCubit>().currentUser?.email
+          ?? 'Someone';
+      await _syncQueue.enqueue(
+        operation: 'create',
+        entity: 'collab_requests',
+        entityId: collabId,
+        payload: {
+          'sender_id': uid,
+          'sender_name': senderName,
+          'receiver_id': post.authorId,
+          'post_id': post.id,
+          'post_title': post.title,
+          'message': message,
+          'status': 'pending',
+        },
+      );
+      debugPrint('[Collab] ✅ Sync job enqueued for collabId=$collabId');
+      // Trigger immediate sync so the collab request reaches Firestore now.
+      unawaited(sl<SyncService>().processPendingSync());
+
+      // Insert a local confirmation notification for the sender (current user).
+      // The receiver's notification is written to Firestore by _syncCollabRequest
+      // and pulled into their SQLite on next syncRemoteToLocal.
+      await sl<NotificationDao>().insertNotification(NotificationModel(
+        id: _uuid.v4(),
+        userId: uid,
+        type: 'collaboration',
+        body: 'Collaboration request sent to ${post.authorName ?? "the author"} for "${post.title}"',
+        detail: message.isNotEmpty ? message : null,
+        entityId: collabId,
+        createdAt: DateTime.now(),
+      ));
+
+      if (mounted) {
+        unawaited(context.read<NotificationCubit>().loadNotifications());
+      }
+
+      debugPrint('[Collab] ✅ Notification inserted for author=${post.authorId}');
+      debugPrint('[Collab] ✅ All steps complete for collabId=$collabId');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Collaboration request sent!'),
           behavior: SnackBarBehavior.floating,
         ));
       }
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('[Collab] ❌ Error: $e');
+      debugPrint('[Collab] ❌ Stacktrace: $st');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Failed to send request: $e'),
@@ -366,6 +517,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 post: post,
                 isFollowing: _isFollowing,
                 followLoading: _followLoading,
+                canFollow: _currentUserId != post.authorId && !_isFollowing,
                 onFollow: _toggleFollow,
                 onAuthorTap: () => context.go('/profile/${post.authorId}'),
               ),
@@ -386,6 +538,12 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 ),
               ],
               _StatsGrid(post: post),
+              _CommentsSection(
+                comments: _comments,
+                controller: _commentCtrl,
+                isSubmitting: _commentSubmitting,
+                onSubmit: _submitComment,
+              ),
               if (post.skillsUsed.isNotEmpty) _SkillsSection(post: post),
               _CollabSection(post: post, onCollaborate: _requestCollaborate),
               if (post.externalLinks.isNotEmpty)
@@ -402,16 +560,31 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         onShare: _sharePost,
         onCollaborate: _requestCollaborate,
         onLike: () async {
-          final uid = _currentUserId ?? '';
-          await _dao.toggleLike(postId: post.id, userId: uid);
-          if (uid.isNotEmpty) {
-            await _syncQueue.enqueue(
-              operation: post.isLikedByMe ? 'delete' : 'create',
-              entity: 'likes',
-              entityId: '${uid}_${post.id}',
-              payload: {'user_id': uid, 'post_id': post.id},
-            );
+          final uid = _currentUserId;
+          if (uid == null || uid.isEmpty) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('Log in to like posts'),
+                behavior: SnackBarBehavior.floating,
+              ));
+            }
+            return;
           }
+          await _dao.toggleLike(postId: post.id, userId: uid);
+          await _syncQueue.enqueue(
+            operation: post.isLikedByMe ? 'delete' : 'create',
+            entity: 'likes',
+            entityId: '${uid}_${post.id}',
+            payload: {
+              'user_id': uid,
+              'post_id': post.id,
+              'is_liking': !post.isLikedByMe,
+              'author_id': post.authorId,
+              'actor_name': _currentUserName,
+              'post_title': post.title,
+            },
+          );
+          unawaited(sl<SyncService>().processPendingSync());
           setState(() {
             _post = post.copyWith(
               isLikedByMe: !post.isLikedByMe,
@@ -529,6 +702,7 @@ class _AuthorSnippet extends StatelessWidget {
   final PostModel post;
   final bool isFollowing;
   final bool followLoading;
+  final bool canFollow;
   final VoidCallback onFollow;
   final VoidCallback onAuthorTap;
 
@@ -536,6 +710,7 @@ class _AuthorSnippet extends StatelessWidget {
     required this.post,
     required this.isFollowing,
     required this.followLoading,
+    required this.canFollow,
     required this.onFollow,
     required this.onAuthorTap,
   });
@@ -590,7 +765,7 @@ class _AuthorSnippet extends StatelessWidget {
             )
           else
             ElevatedButton(
-              onPressed: onFollow,
+              onPressed: canFollow ? onFollow : null,
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size(0, 36),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -600,7 +775,7 @@ class _AuthorSnippet extends StatelessWidget {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppDimensions.radiusSm)),
                 backgroundColor:
-                    isFollowing ? Colors.transparent : AppColors.primary,
+                  isFollowing ? Colors.transparent : AppColors.primary,
                 foregroundColor:
                     isFollowing ? AppColors.primary : Colors.white,
                 side: isFollowing
@@ -608,6 +783,129 @@ class _AuthorSnippet extends StatelessWidget {
                     : null,
               ),
               child: Text(isFollowing ? 'Following' : 'Follow'),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CommentsSection extends StatelessWidget {
+  final List<CommentRecord> comments;
+  final TextEditingController controller;
+  final bool isSubmitting;
+  final VoidCallback onSubmit;
+
+  const _CommentsSection({
+    required this.comments,
+    required this.controller,
+    required this.isSubmitting,
+    required this.onSubmit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Comments',
+            style: GoogleFonts.lexend(
+              fontSize: 17, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  minLines: 1,
+                  maxLines: 4,
+                  decoration: InputDecoration(
+                    hintText: 'Write a comment',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton(
+                onPressed: isSubmitting ? null : onSubmit,
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(0, 48),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                ),
+                child: isSubmitting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Post'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (comments.isEmpty)
+            Text(
+              'No comments yet. Start the discussion.',
+              style: GoogleFonts.lexend(
+                fontSize: 13,
+                color: AppColors.textSecondaryLight,
+              ),
+            )
+          else
+            Column(
+              children: comments.map((comment) {
+                return Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceLight,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppColors.borderLight,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              comment.authorName ?? 'Unknown',
+                              style: GoogleFonts.lexend(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            timeago.format(comment.createdAt),
+                            style: GoogleFonts.lexend(
+                              fontSize: 11,
+                              color: AppColors.textSecondaryLight,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        comment.content,
+                        style: GoogleFonts.lexend(
+                          fontSize: 13,
+                          height: 1.5,
+                          color: AppColors.textPrimaryLight,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
             ),
         ],
       ),

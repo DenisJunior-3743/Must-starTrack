@@ -101,26 +101,18 @@ class FirestoreService {
     required String userId,
     required bool isLiking,
   }) async {
-    final postRef = _posts.doc(postId);
-    final likeRef = _posts.doc(postId)
-        .collection('likes').doc(userId);
+    final likeRef = _posts.doc(postId).collection('likes').doc(userId);
 
-    await _db.runTransaction((txn) async {
-      if (isLiking) {
-        txn.set(likeRef, {
-          'user_id': userId,
-          'created_at': FieldValue.serverTimestamp(),
-        });
-        txn.update(postRef, {
-          'like_count': FieldValue.increment(1),
-        });
-      } else {
-        txn.delete(likeRef);
-        txn.update(postRef, {
-          'like_count': FieldValue.increment(-1),
-        });
-      }
-    });
+    if (isLiking) {
+      await likeRef.set({
+        'user_id': userId,
+        'created_at': FieldValue.serverTimestamp(),
+      });
+    } else {
+      await likeRef.delete();
+    }
+    // like_count is maintained by a Firestore Cloud Function trigger
+    // on posts/{postId}/likes — same pattern as follower/following counts.
   }
 
   /// Paginated feed query — returns [pageSize] posts before [lastDoc].
@@ -296,14 +288,9 @@ class FirestoreService {
       'following_id': followingId,
       'created_at': FieldValue.serverTimestamp(),
     });
-
-    // Increment follower/following counts
-    await Future.wait([
-      _users.doc(followingId).update(
-          {'followers_count': FieldValue.increment(1)}),
-      _users.doc(followerId).update(
-          {'following_count': FieldValue.increment(1)}),
-    ]);
+    // Note: follower/following counts are maintained by a Firestore
+    // Cloud Function trigger on the follows collection, not by the client,
+    // because a client cannot update another user's document.
   }
 
   Future<void> unfollow({
@@ -312,13 +299,7 @@ class FirestoreService {
   }) async {
     final docId = '${followerId}_$followingId';
     await _follows.doc(docId).delete();
-
-    await Future.wait([
-      _users.doc(followingId).update(
-          {'followers_count': FieldValue.increment(-1)}),
-      _users.doc(followerId).update(
-          {'following_count': FieldValue.increment(-1)}),
-    ]);
+    // Count decrement handled by Cloud Function trigger (see above).
   }
 
   // ── Search ────────────────────────────────────────────────────────────────

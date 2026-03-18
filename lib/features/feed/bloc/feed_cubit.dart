@@ -144,12 +144,19 @@ class FeedCubit extends Cubit<FeedState> {
         _currentUserId = currentUserId,
         super(const FeedInitial());
 
+  void _emitIfOpen(FeedState nextState) {
+    if (!isClosed) {
+      emit(nextState);
+    }
+  }
+
   // ── Load first page ────────────────────────────────────────────────────────
 
   Future<void> loadFeed({FeedFilter? filter}) async {
-    emit(const FeedLoading());
+    _emitIfOpen(const FeedLoading());
     try {
       await _syncService?.syncRemoteToLocal(postLimit: _pageSize * 3);
+      if (isClosed) return;
       final f = filter ?? const FeedFilter();
       final posts = await _postDao.getFeedPage(
         pageSize: _pageSize,
@@ -158,14 +165,14 @@ class FeedCubit extends Cubit<FeedState> {
         filterType: f.type,
         currentUserId: _currentUserId,
       );
-      emit(FeedLoaded(
+      _emitIfOpen(FeedLoaded(
         posts: posts,
         hasMore: posts.length == _pageSize,
         filter: f,
       ));
     } catch (e) {
       debugPrint('Feed load error: $e');
-      emit(const FeedError(
+      _emitIfOpen(const FeedError(
         'Could not load your feed right now. Please try again.',
       ));
     }
@@ -178,7 +185,7 @@ class FeedCubit extends Cubit<FeedState> {
     if (current is! FeedLoaded) return;
     if (!current.hasMore || current.isLoadingMore) return;
 
-    emit(current.copyWith(isLoadingMore: true));
+    _emitIfOpen(current.copyWith(isLoadingMore: true));
 
     try {
       final cursor = current.posts.isNotEmpty
@@ -194,13 +201,13 @@ class FeedCubit extends Cubit<FeedState> {
         currentUserId: _currentUserId,
       );
 
-      emit(current.copyWith(
+      _emitIfOpen(current.copyWith(
         posts: [...current.posts, ...newPosts],
         hasMore: newPosts.length == _pageSize,
         isLoadingMore: false,
       ));
     } catch (e) {
-      emit(current.copyWith(isLoadingMore: false));
+      _emitIfOpen(current.copyWith(isLoadingMore: false));
     }
   }
 
@@ -237,7 +244,7 @@ class FeedCubit extends Cubit<FeedState> {
       ..[index] = optimistic;
 
     // 2. Emit immediately → user sees feedback in <16ms
-    emit(current.copyWith(posts: updatedPosts));
+    _emitIfOpen(current.copyWith(posts: updatedPosts));
 
     try {
       // 3. Persist locally
@@ -263,14 +270,14 @@ class FeedCubit extends Cubit<FeedState> {
       final confirmed = current.posts.toList()
         ..[index] = optimistic.copyWith(likeCount: newCount);
       if (state is FeedLoaded) {
-        emit((state as FeedLoaded).copyWith(posts: confirmed));
+        _emitIfOpen((state as FeedLoaded).copyWith(posts: confirmed));
       }
     } catch (_) {
       // 6. Rollback on failure
       if (state is FeedLoaded) {
         final rolled = (state as FeedLoaded).posts.toList()
           ..[index] = original;
-        emit((state as FeedLoaded).copyWith(posts: rolled));
+        _emitIfOpen((state as FeedLoaded).copyWith(posts: rolled));
       }
     }
   }
@@ -293,7 +300,7 @@ class FeedCubit extends Cubit<FeedState> {
       // Prepend to current feed for instant visibility
       if (state is FeedLoaded) {
         final current = state as FeedLoaded;
-        emit(current.copyWith(posts: [post, ...current.posts]));
+        _emitIfOpen(current.copyWith(posts: [post, ...current.posts]));
       } else {
         await loadFeed();
       }
@@ -326,7 +333,7 @@ class FeedCubit extends Cubit<FeedState> {
       );
     } catch (e) {
       debugPrint('Publish post error: $e');
-      emit(const FeedError(
+      _emitIfOpen(const FeedError(
         'Could not publish your post right now. Please try again.',
       ));
       return const PublishPostResult(

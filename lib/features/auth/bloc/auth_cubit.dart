@@ -35,10 +35,13 @@
 //    GoRouter listens to it via refreshListenable to trigger
 //    automatic redirects on login/logout."
 
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 
 import '../../../data/models/user_model.dart';
+import '../../../data/remote/fcm_service.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../core/router/route_guards.dart';
 
@@ -116,12 +119,15 @@ class AuthError extends AuthState {
 class AuthCubit extends Cubit<AuthState> {
   final AuthRepository _repo;
   final RouteGuards _guards;
+  final FcmService? _fcmService;
 
   AuthCubit({
     required AuthRepository authRepository,
     required RouteGuards guards,
+    FcmService? fcmService,
   })  : _repo = authRepository,
         _guards = guards,
+        _fcmService = fcmService,
         super(const AuthInitial());
 
   // ── Check persisted session on app launch ─────────────────────────────────
@@ -257,7 +263,15 @@ class AuthCubit extends Cubit<AuthState> {
   // ── Logout ────────────────────────────────────────────────────────────────
 
   Future<void> logout() async {
+    final currentUid = currentUser?.id;
     try {
+      if (currentUid != null && currentUid.isNotEmpty) {
+        try {
+          await _fcmService?.removeTokenForUser(currentUid);
+        } catch (_) {
+          // Token cleanup should not block logout.
+        }
+      }
       await _repo.logout();
     } catch (_) {
       // Even if logout fails remotely, clear local state
@@ -275,6 +289,7 @@ class AuthCubit extends Cubit<AuthState> {
       isAuthenticated: true,
       userId: user.id,
     );
+    unawaited(_fcmService?.saveTokenForUser(user.id));
     emit(AuthAuthenticated(user));
   }
 

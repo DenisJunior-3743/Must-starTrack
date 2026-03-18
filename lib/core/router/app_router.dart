@@ -84,7 +84,6 @@ import '../../features/auth/bloc/auth_cubit.dart';
 import '../../features/feed/bloc/feed_cubit.dart';
 import '../../features/profile/bloc/profile_cubit.dart';
 import '../../features/messaging/bloc/message_cubit.dart';
-import '../../features/notifications/bloc/notification_cubit.dart';
 import '../../features/admin/bloc/admin_cubit.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -277,10 +276,7 @@ class AppRouter {
             // Notifications (mapped to /projects slot as 5th tab)
             GoRoute(
               path: Routes.projects,
-              builder: (_, __) => BlocProvider(
-                create: (_) => sl<NotificationCubit>()..loadNotifications(),
-                child: const NotificationCenterScreen(),
-              ),
+              builder: (_, __) => const NotificationCenterScreen(),
             ),
           ],
         ),
@@ -348,10 +344,7 @@ class AppRouter {
         // ── Notifications ──────────────────────────────────────────────────
         GoRoute(
           path: Routes.notifications,
-          builder: (_, __) => BlocProvider(
-            create: (_) => sl<NotificationCubit>()..loadNotifications(),
-            child: const NotificationCenterScreen(),
-          ),
+          builder: (_, __) => const NotificationCenterScreen(),
         ),
 
         // ── Screen hub (newly added module screens) ──────────────────────

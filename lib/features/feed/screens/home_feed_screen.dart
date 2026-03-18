@@ -31,6 +31,7 @@ import '../../../core/utils/media_path_utils.dart';
 import '../../../data/models/post_model.dart';
 import '../../auth/bloc/auth_cubit.dart';
 import '../bloc/feed_cubit.dart';
+import '../../notifications/bloc/notification_cubit.dart';
 
 class HomeFeedScreen extends StatefulWidget {
   const HomeFeedScreen({super.key});
@@ -638,6 +639,48 @@ class _FeedAppBar extends StatelessWidget {
                       child: const Text('Continue'),
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        Navigator.of(modalContext).pop();
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Log out?'),
+                            content: const Text(
+                                'You will be returned to the login screen.'),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                child: const Text('Cancel'),
+                              ),
+                              FilledButton(
+                                onPressed: () => Navigator.pop(ctx, true),
+                                style: FilledButton.styleFrom(
+                                    backgroundColor: AppColors.danger),
+                                child: const Text('Log out'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed == true) {
+                          await sl<AuthCubit>().logout();
+                          if (context.mounted) context.go(RouteNames.login);
+                        }
+                      },
+                      icon: const Icon(Icons.logout_rounded, size: 18,
+                          color: AppColors.danger),
+                      label: Text('Log out',
+                        style: GoogleFonts.lexend(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.danger)),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppColors.danger),
+                      ),
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -694,7 +737,47 @@ class _FeedAppBar extends StatelessWidget {
                       ),
                       padding: EdgeInsets.zero,
                       iconSize: 19,
-                      icon: const Icon(Icons.notifications_outlined),
+                      icon: BlocBuilder<NotificationCubit, NotificationState>(
+                        builder: (_, state) {
+                          final unread = state is NotificationsLoaded
+                              ? state.unreadCount
+                              : 0;
+                          return Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              const Icon(Icons.notifications_outlined),
+                              if (unread > 0)
+                                Positioned(
+                                  right: -4,
+                                  top: -4,
+                                  child: Container(
+                                    constraints: const BoxConstraints(
+                                      minWidth: 16,
+                                      minHeight: 16,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                      vertical: 1,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.danger,
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      unread > 99 ? '99+' : '$unread',
+                                      textAlign: TextAlign.center,
+                                      style: GoogleFonts.lexend(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
                       onPressed: () => context.push(RouteNames.notifications),
                       tooltip: 'Notifications',
                     ),

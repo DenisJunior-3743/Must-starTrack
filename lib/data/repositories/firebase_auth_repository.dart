@@ -73,6 +73,20 @@ class FirebaseAuthRepository implements AuthRepository {
     return _registrationDomains.contains(domain);
   }
 
+  UserRole _inferRoleFromEmail(String email) {
+    final normalized = email.trim().toLowerCase();
+    if (normalized.endsWith('@std.must.ac.ug')) {
+      return UserRole.student;
+    }
+    if (normalized.endsWith('@staff.must.ac.ug')) {
+      return UserRole.lecturer;
+    }
+    if (normalized.endsWith('@must.ac.ug')) {
+      return UserRole.admin;
+    }
+    return UserRole.guest;
+  }
+
   // ── Get current user ──────────────────────────────────────────────────────
 
   @override
@@ -83,7 +97,10 @@ class FirebaseAuthRepository implements AuthRepository {
 
       // Try local cache first (offline-first)
       final cached = await _userDao.getUserById(fbUser.uid);
-      if (cached != null) return Right(cached);
+      if (cached != null) {
+        final reconciled = await _reconcileUserRole(cached, fbUser.email);
+        return Right(reconciled);
+      }
 
       // Fallback: fetch from Firestore
       final doc =
@@ -91,8 +108,8 @@ class FirebaseAuthRepository implements AuthRepository {
       if (!doc.exists) return const Left(UserNotFoundFailure());
 
       final user = UserModel.fromJson({'id': doc.id, ...doc.data()!});
-      await _userDao.insertUser(user);
-      return Right(user);
+      final reconciled = await _reconcileUserRole(user, fbUser.email);
+      return Right(reconciled);
     } on fb.FirebaseAuthException catch (e) {
       return Left(_mapFirebaseAuthError(e));
     } catch (e) {
@@ -209,12 +226,13 @@ class FirebaseAuthRepository implements AuthRepository {
 
       // Build UserModel
       final now = DateTime.now();
+      final inferredRole = _inferRoleFromEmail(email);
       final user = UserModel(
         id: fbUser.uid,
         firebaseUid: fbUser.uid,
         email: email,
         displayName: data['displayName'] as String? ?? '',
-        role: UserRole.student,
+        role: inferredRole == UserRole.guest ? UserRole.student : inferredRole,
         photoUrl: fbUser.photoURL,
         createdAt: now,
         updatedAt: now,
@@ -365,7 +383,10 @@ class FirebaseAuthRepository implements AuthRepository {
     try {
       // Try SQLite cache first
       final cached = await _userDao.getUserById(fbUser.uid);
-      if (cached != null) return Right(cached);
+      if (cached != null) {
+        final reconciled = await _reconcileUserRole(cached, fbUser.email);
+        return Right(reconciled);
+      }
 
       // Fetch from Firestore
       final doc = await _firestore
@@ -377,10 +398,10 @@ class FirebaseAuthRepository implements AuthRepository {
         return const Left(UserNotFoundFailure());
       }
 
-      final user =
+        final user =
           UserModel.fromJson({'id': doc.id, ...doc.data()!});
-      await _userDao.insertUser(user);
-      return Right(user);
+        final reconciled = await _reconcileUserRole(user, fbUser.email);
+        return Right(reconciled);
     } catch (e) {
       return Left(UnexpectedFailure(e.toString()));
     }
@@ -398,7 +419,7 @@ class FirebaseAuthRepository implements AuthRepository {
         firebaseUid: fbUser.uid,
         email: fbUser.email ?? googleUser.email,
         displayName: fbUser.displayName ?? googleUser.displayName ?? '',
-        role: UserRole.student,
+        role: _inferRoleFromEmail(fbUser.email ?? googleUser.email),
         photoUrl: fbUser.photoURL ?? googleUser.photoUrl,
         createdAt: now,
         updatedAt: now,
@@ -457,16 +478,20 @@ class FirebaseAuthRepository implements AuthRepository {
       }
 
       final now = DateTime.now();
+      final inferredRole = _inferRoleFromEmail(email);
       final requestedRole = data['role'] == 'lecturer'
           ? UserRole.lecturer
           : UserRole.student;
+      final resolvedRole = inferredRole == UserRole.guest
+          ? requestedRole
+          : inferredRole;
 
       final user = UserModel(
         id: fbUser.uid,
         firebaseUid: fbUser.uid,
         email: email,
         displayName: data['displayName'] as String? ?? fbUser.displayName ?? '',
-        role: requestedRole,
+        role: resolvedRole,
         photoUrl: fbUser.photoURL,
         createdAt: now,
         updatedAt: now,
@@ -512,6 +537,40 @@ class FirebaseAuthRepository implements AuthRepository {
     } catch (_) {
       return null;
     }
+  }
+
+  Future<UserModel> _reconcileUserRole(UserModel user, String? authEmail) async {
+    final email = (authEmail ?? user.email).trim();
+    final inferredRole = _inferRoleFromEmail(email);
+
+    if (inferredRole == UserRole.guest || inferredRole == user.role) {
+      await _userDao.insertUser(user);
+      return user;
+    }
+
+    final updated = user.copyWith(
+      email: email,
+      role: inferredRole,
+      updatedAt: DateTime.now(),
+    );
+
+    await _userDao.insertUser(updated);
+
+    try {
+      await _firestore
+          .collection('users')
+          .doc(updated.id)
+          .set(updated.toJson(), SetOptions(merge: true));
+    } catch (_) {
+      await _syncDao.enqueue(
+        entity: 'users',
+        entityId: updated.id,
+        operation: 'update',
+        payload: updated.toJson(),
+      );
+    }
+
+    return updated;
   }
 
   // ── Firebase error mapping ────────────────────────────────────────────────

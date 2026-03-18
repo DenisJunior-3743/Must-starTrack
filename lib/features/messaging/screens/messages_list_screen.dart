@@ -15,6 +15,7 @@
 //   • Recognition: avatar initial when no photo
 
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:timeago/timeago.dart' as timeago;
@@ -22,31 +23,8 @@ import 'package:timeago/timeago.dart' as timeago;
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/router/route_names.dart';
-
-// ── Mock conversation model (Phase 5: replace with MessageDao) ────────────────
-
-class _Conversation {
-  final String id;
-  final String name;
-  final String? photoUrl;
-  final String lastMessage;
-  final DateTime lastMessageAt;
-  final int unreadCount;
-  final bool isOnline;
-  final bool isLecturer;
-
-  const _Conversation({
-    required this.id,
-    required this.name,
-    // ignore: unused_element_parameter
-    this.photoUrl,
-    required this.lastMessage,
-    required this.lastMessageAt,
-    this.unreadCount = 0,
-    this.isOnline = false,
-    this.isLecturer = false,
-  });
-}
+import '../../../data/local/dao/message_dao.dart';
+import '../bloc/message_cubit.dart';
 
 class MessagesListScreen extends StatefulWidget {
   const MessagesListScreen({super.key});
@@ -57,46 +35,14 @@ class MessagesListScreen extends StatefulWidget {
 
 class _MessagesListScreenState extends State<MessagesListScreen> {
   final _searchCtrl = TextEditingController();
-  String _query = '';
 
-  // Sample data — Phase 5 replaces with MessageDao stream
-  final _conversations = [
-    _Conversation(
-      id: 'c1', name: 'Dr. Jane Smith',
-      lastMessage: 'I reviewed your abstract and have some feedback...',
-      lastMessageAt: DateTime.now().subtract(const Duration(minutes: 15)),
-      unreadCount: 2, isOnline: true, isLecturer: true,
-    ),
-    _Conversation(
-      id: 'c2', name: 'Marcus Chen',
-      lastMessage: 'Great project! Can we collaborate on the ML module?',
-      lastMessageAt: DateTime.now().subtract(const Duration(hours: 2)),
-      unreadCount: 1, isOnline: false,
-    ),
-    _Conversation(
-      id: 'c3', name: 'Elena Vance',
-      lastMessage: 'Sent you the dataset. Check your email!',
-      lastMessageAt: DateTime.now().subtract(const Duration(hours: 5)),
-      unreadCount: 0, isOnline: true,
-    ),
-    _Conversation(
-      id: 'c4', name: 'Prof. Omar Kizza',
-      lastMessage: 'Your thesis proposal has been approved.',
-      lastMessageAt: DateTime.now().subtract(const Duration(days: 1)),
-      unreadCount: 0, isOnline: false, isLecturer: true,
-    ),
-    _Conversation(
-      id: 'c5', name: 'Julian Hart',
-      lastMessage: 'See you at the hackathon! 🚀',
-      lastMessageAt: DateTime.now().subtract(const Duration(days: 2)),
-      unreadCount: 0, isOnline: false,
-    ),
-  ];
-
-  List<_Conversation> get _filtered => _query.isEmpty
-      ? _conversations
-      : _conversations.where((c) =>
-          c.name.toLowerCase().contains(_query.toLowerCase())).toList();
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<MessageCubit>().loadConversations();
+    });
+  }
 
   @override
   void dispose() {
@@ -125,7 +71,13 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: TextField(
               controller: _searchCtrl,
-              onChanged: (v) => setState(() => _query = v),
+              onChanged: (v) {
+                if (v.trim().isEmpty) {
+                  context.read<MessageCubit>().loadConversations();
+                } else {
+                  context.read<MessageCubit>().searchConversations(v.trim());
+                }
+              },
               decoration: InputDecoration(
                 hintText: 'Search conversations…',
                 hintStyle: GoogleFonts.lexend(fontSize: 13),
@@ -137,18 +89,44 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
 
           // Conversation list
           Expanded(
-            child: _filtered.isEmpty
-                ? Center(
-                    child: Text('No conversations found.',
-                      style: GoogleFonts.lexend(color: AppColors.textSecondaryLight)))
-                : ListView.builder(
-                    itemCount: _filtered.length,
-                    itemBuilder: (_, i) => _ConversationTile(
-                      convo: _filtered[i],
-                      onTap: () => context.push(
-                        '${RouteNames.chatDetail}/${_filtered[i].id}'),
+            child: BlocBuilder<MessageCubit, MessageState>(
+              builder: (context, state) {
+                if (state is ConversationsLoading) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (state is MessageError) {
+                  return Center(
+                    child: Text(state.message,
+                      style: GoogleFonts.lexend(color: AppColors.danger)));
+                }
+                final convos = state is ConversationsLoaded
+                    ? state.conversations : <ConversationSummary>[];
+
+                if (convos.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.chat_bubble_outline_rounded,
+                            size: 56, color: AppColors.primary),
+                        const SizedBox(height: 12),
+                        Text('No conversations yet.',
+                          style: GoogleFonts.lexend(
+                            color: AppColors.textSecondaryLight)),
+                      ],
                     ),
+                  );
+                }
+                return ListView.builder(
+                  itemCount: convos.length,
+                  itemBuilder: (_, i) => _ConversationTile(
+                    convo: convos[i],
+                    onTap: () => context.push(
+                      '${RouteNames.chatDetail}/${convos[i].id}'),
                   ),
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -157,7 +135,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
 }
 
 class _ConversationTile extends StatelessWidget {
-  final _Conversation convo;
+  final ConversationSummary convo;
   final VoidCallback onTap;
 
   const _ConversationTile({required this.convo, required this.onTap});
@@ -179,42 +157,28 @@ class _ConversationTile extends StatelessWidget {
       onDismissed: (_) {}, // Phase 5: delete conversation
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        leading: Stack(
-          children: [
-            CircleAvatar(
-              radius: 26,
-              backgroundColor: AppColors.primaryTint10,
-              backgroundImage: convo.photoUrl != null
-                  ? NetworkImage(convo.photoUrl!) : null,
-              child: convo.photoUrl == null
-                  ? Text(convo.name[0].toUpperCase(),
-                      style: GoogleFonts.lexend(
-                        fontSize: 18, fontWeight: FontWeight.w700,
-                        color: AppColors.primary))
-                  : null,
-            ),
-            if (convo.isOnline)
-              Positioned(
-                bottom: 2, right: 2,
-                child: Container(
-                  width: 12, height: 12,
-                  decoration: BoxDecoration(
-                    color: AppColors.success, shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2)),
-                ),
-              ),
-          ],
+        leading: CircleAvatar(
+          radius: 26,
+          backgroundColor: AppColors.primaryTint10,
+          backgroundImage: convo.peerPhotoUrl != null
+              ? NetworkImage(convo.peerPhotoUrl!) : null,
+          child: convo.peerPhotoUrl == null
+              ? Text(convo.peerName[0].toUpperCase(),
+                  style: GoogleFonts.lexend(
+                    fontSize: 18, fontWeight: FontWeight.w700,
+                    color: AppColors.primary))
+              : null,
         ),
         title: Row(
           children: [
             Expanded(
-              child: Text(convo.name,
+              child: Text(convo.peerName,
                 style: GoogleFonts.lexend(
                   fontSize: 14,
                   fontWeight: isUnread ? FontWeight.w700 : FontWeight.w600),
               ),
             ),
-            if (convo.isLecturer)
+            if (convo.isPeerLecturer)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(

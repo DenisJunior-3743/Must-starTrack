@@ -21,7 +21,7 @@
 
 abstract final class DatabaseSchema {
   static const String databaseName = 'must_startrack.db';
-  static const int databaseVersion = 1;
+  static const int databaseVersion = 2;
 
   // ── Table Names ────────────────────────────────────────────────────────────
   static const String tableUsers             = 'users';
@@ -261,16 +261,18 @@ abstract final class DatabaseSchema {
   ///        'ai_streak' | 'system'
   static const String createNotifications = '''
     CREATE TABLE IF NOT EXISTS $tableNotifications (
-      id          TEXT PRIMARY KEY,
-      user_id     TEXT NOT NULL,
-      actor_id    TEXT,
-      type        TEXT NOT NULL,
-      title       TEXT NOT NULL,
-      body        TEXT NOT NULL,
-      payload     TEXT DEFAULT '{}',
-      is_read     INTEGER NOT NULL DEFAULT 0,
-      created_at  TEXT NOT NULL,
-      sync_status INTEGER NOT NULL DEFAULT 0,
+      id                TEXT PRIMARY KEY,
+      user_id           TEXT NOT NULL,
+      type              TEXT NOT NULL,
+      sender_id         TEXT,
+      sender_name       TEXT,
+      sender_photo_url  TEXT,
+      body              TEXT NOT NULL,
+      detail            TEXT,
+      entity_id         TEXT,
+      created_at        INTEGER NOT NULL,
+      is_read           INTEGER NOT NULL DEFAULT 0,
+      extra_json        TEXT,
       FOREIGN KEY (user_id) REFERENCES $tableUsers(id) ON DELETE CASCADE
     )
   ''';

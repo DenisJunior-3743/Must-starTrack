@@ -42,6 +42,7 @@ import '../core/constants/app_strings.dart';
 
 import '../features/auth/bloc/auth_cubit.dart';
 import '../features/notifications/bloc/notification_cubit.dart';
+import '../features/messaging/bloc/message_cubit.dart';
 import '../data/remote/fcm_service.dart';
 
 class StarTrackApp extends StatefulWidget {
@@ -82,6 +83,11 @@ class _StarTrackAppState extends State<StarTrackApp> {
         // ── Global: notification badge count ───────────────────────────────
         BlocProvider<NotificationCubit>(
           create: (_) => sl<NotificationCubit>()..loadNotifications(),
+        ),
+
+        // ── Global: message conversations (inbox badge + list) ─────────────
+        BlocProvider<MessageCubit>(
+          create: (_) => sl<MessageCubit>()..loadConversations(),
         ),
       ],
       child: MaterialApp.router(

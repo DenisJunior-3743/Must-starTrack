@@ -12,7 +12,20 @@
           "package_name": "ug.ac.must.must_startrack"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "417190454074-idb99cl199mbijrco4m7l322u7pa9j0t.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "ug.ac.must.must_startrack",
+            "certificate_hash": "44995db451f7ad7af7fbd2a4aa5449013dc9bea4"
+          }
+        },
+        {
+          "client_id": "417190454074-aavobcmgvfvlfemcensdmh726p6sqjqg.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAq4duSPB5AC5TEgz2-NjT1cMu0DQ-eCp0"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "417190454074-aavobcmgvfvlfemcensdmh726p6sqjqg.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "417190454074-8919codgjf2k7bve4gn815dkr4mp24ab.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "ug.ac.must.mustStartrack"
+              }
+            }
+          ]
         }
       }
     }
