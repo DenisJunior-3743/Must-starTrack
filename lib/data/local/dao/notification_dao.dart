@@ -20,6 +20,7 @@
 //                 created_at, is_read, extra_json)
 
 import 'dart:convert';
+import 'dart:async';
 import 'package:sqflite/sqflite.dart';
 
 import '../database_helper.dart';
@@ -99,6 +100,15 @@ class NotificationModel {
 
 class NotificationDao {
   final _db = DatabaseHelper.instance;
+  final StreamController<void> _changes = StreamController<void>.broadcast();
+
+  Stream<void> get changes => _changes.stream;
+
+  void _notifyChanged() {
+    if (!_changes.isClosed) {
+      _changes.add(null);
+    }
+  }
 
   // ── Insert ───────────────────────────────────────────────────────────────
 
@@ -111,6 +121,7 @@ class NotificationDao {
       notification.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    _notifyChanged();
   }
 
   // ── Paginated query ──────────────────────────────────────────────────────
@@ -161,6 +172,7 @@ class NotificationDao {
       where: 'id = ?',
       whereArgs: [notificationId],
     );
+    _notifyChanged();
   }
 
   // ── Mark all as read ─────────────────────────────────────────────────────
@@ -173,6 +185,7 @@ class NotificationDao {
       where: 'user_id = ? AND is_read = 0',
       whereArgs: [userId],
     );
+    _notifyChanged();
   }
 
   // ── Respond to collaboration request ────────────────────────────────────
@@ -208,6 +221,7 @@ class NotificationDao {
       where: 'id = ?',
       whereArgs: [notificationId],
     );
+    _notifyChanged();
   }
 
   // ── Delete one ───────────────────────────────────────────────────────────
@@ -219,6 +233,7 @@ class NotificationDao {
       where: 'id = ?',
       whereArgs: [notificationId],
     );
+    _notifyChanged();
   }
 
   // ── Housekeeping ─────────────────────────────────────────────────────────
@@ -231,11 +246,19 @@ class NotificationDao {
         .subtract(Duration(days: days))
         .millisecondsSinceEpoch;
 
-    return db.delete(
+    final deleted = await db.delete(
       'notifications',
       where: 'user_id = ? AND is_read = 1 AND created_at < ?',
       whereArgs: [userId, cutoff],
     );
+    if (deleted > 0) {
+      _notifyChanged();
+    }
+    return deleted;
+  }
+
+  Future<void> dispose() async {
+    await _changes.close();
   }
 
   // ── Unread count (nav badge) ─────────────────────────────────────────────

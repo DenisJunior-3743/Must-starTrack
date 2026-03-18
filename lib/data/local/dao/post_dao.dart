@@ -399,6 +399,35 @@ class PostDao {
     ''', [postId]);
   }
 
+  Future<bool> recordUniqueView({
+    required String postId,
+    required String userId,
+  }) async {
+    final db = await _db.database;
+    final existing = await db.query(
+      DatabaseSchema.tableActivityLogs,
+      columns: ['id'],
+      where: 'user_id = ? AND action = ? AND entity_type = ? AND entity_id = ?',
+      whereArgs: [userId, 'view_post', DatabaseSchema.tablePosts, postId],
+      limit: 1,
+    );
+
+    if (existing.isNotEmpty) {
+      return false;
+    }
+
+    await db.insert(DatabaseSchema.tableActivityLogs, {
+      'id': _uuid.v4(),
+      'user_id': userId,
+      'action': 'view_post',
+      'entity_type': DatabaseSchema.tablePosts,
+      'entity_id': postId,
+      'metadata': '{}',
+      'created_at': DateTime.now().toIso8601String(),
+    });
+    return true;
+  }
+
   // ── Stats for admin ────────────────────────────────────────────────────────
 
   Future<Map<String, int>> getPostStats() async {

@@ -5,12 +5,30 @@ service cloud.firestore {
 
     // Helper functions
 
+    function authEmail() {
+      return request.auth.token.get('email', '');
+    }
+
+    function isStudentRole() {
+      return userRole() == 'student';
+    }
+
+    function isStaffRole() {
+      return userRole() == 'staff' || userRole() == 'lecturer';
+    }
+
+    function isAdminRole() {
+      return userRole() == 'admin' || userRole() == 'super_admin';
+    }
+
+    function hasAllowedDomainForRole() {
+      return (isStudentRole() && authEmail().matches('.*@std\\.must\\.ac\\.ug'))
+        || (isStaffRole() && authEmail().matches('.*@staff\\.must\\.ac\\.ug'))
+        || (isAdminRole() && authEmail().matches('.*@must\\.ac\\.ug'));
+    }
+
     function isMustUser() {
-      return request.auth != null
-        && (request.auth.token.email.matches('.*@must\\.ac\\.ug')
-         || request.auth.token.email.matches('.*@std\\.must\\.ac\\.ug')
-         || request.auth.token.email.matches('.*@staff\\.must\\.ac\\.ug')
-         || request.auth.token.email.matches('.*@mbarara\\.ac\\.ug'));
+      return request.auth != null && hasAllowedDomainForRole();
     }
 
     function uid() {
@@ -37,7 +55,7 @@ service cloud.firestore {
 
       allow create: if isMustUser()
         && userId == uid()
-        && request.resource.data.role in ['student', 'lecturer'];
+        && request.resource.data.role in ['student', 'lecturer', 'staff', 'admin', 'super_admin'];
 
       allow update: if isMustUser()
         && (userId == uid() || isAdmin());
@@ -111,10 +129,33 @@ service cloud.firestore {
 
       allow read: if isMustUser() && resource.data.user_id == uid();
 
+      // Any authenticated user may create a notification for another user
+      // as long as they are the declared sender (prevents impersonation).
+      allow create: if isMustUser()
+        && request.resource.data.sender_id == uid();
+
       allow update: if isMustUser()
-        && resource.data.user_id == uid()
-        && request.resource.data.diff(resource.data).affectedKeys()
-           .hasOnly(['is_read', 'extra']);
+        && (
+          (
+            resource.data.user_id == uid()
+            && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['is_read', 'extra'])
+          )
+          || (
+            resource.data.sender_id == uid()
+            && request.resource.data.sender_id == uid()
+            && request.resource.data.user_id == resource.data.user_id
+            && request.resource.data.type == resource.data.type
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'sender_name',
+              'body',
+              'detail',
+              'entity_id',
+              'is_read',
+              'created_at'
+            ])
+          )
+        );
 
       allow delete: if isMustUser() && resource.data.user_id == uid();
     }
@@ -125,11 +166,67 @@ service cloud.firestore {
 
       allow read: if isMustUser();
 
-      allow create: if isMustUser()
+      // create AND update needed: FirestoreService.follow() uses .set() which
+      // fires an 'update' permission check when the document already exists
+      // (e.g. sync retries after a partial write).
+      allow create, update: if isMustUser()
         && request.resource.data.follower_id == uid();
 
       allow delete: if isMustUser()
         && resource.data.follower_id == uid();
+    }
+
+
+    // COLLAB REQUESTS
+    match /collab_requests/{requestId} {
+
+      // Sender and receiver can read their own requests.
+      allow read: if isMustUser()
+        && (resource.data.sender_id == uid()
+         || resource.data.receiver_id == uid());
+
+      // Only the sender can create a request (and set/retry via sync).
+      allow create, update: if isMustUser()
+        && request.resource.data.sender_id == uid();
+
+      // Receiver can update only the status field (accept/decline).
+      allow update: if isMustUser()
+        && resource.data.receiver_id == uid()
+        && request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['status', 'updated_at', 'responded_at']);
+
+      allow delete: if isMustUser()
+        && resource.data.sender_id == uid();
+    }
+
+
+    // COMMENTS
+    match /comments/{commentId} {
+
+      allow read: if isMustUser();
+
+      allow create, update: if isMustUser()
+        && request.resource.data.author_id == uid();
+
+      allow delete: if isMustUser()
+        && (resource.data.author_id == uid() || isAdmin());
+    }
+
+
+    // UNIQUE POST VIEWS
+    match /post_views/{viewId} {
+
+      allow read: if isMustUser()
+        && (
+          resource.data.viewer_id == uid()
+          || resource.data.author_id == uid()
+          || isAdmin()
+        );
+
+      allow create, update: if isMustUser()
+        && request.resource.data.viewer_id == uid();
+
+      allow delete: if isAdmin();
     }
 
 

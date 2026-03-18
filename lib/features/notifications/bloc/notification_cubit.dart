@@ -22,8 +22,10 @@
 
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'dart:async';
 
 import '../../../data/local/dao/notification_dao.dart';
+import '../../auth/bloc/auth_cubit.dart';
 
 // ── States ────────────────────────────────────────────────────────────────────
 
@@ -78,23 +80,48 @@ class NotificationError extends NotificationState {
 
 class NotificationCubit extends Cubit<NotificationState> {
   final NotificationDao _dao;
+  final AuthCubit _authCubit;
+  late final StreamSubscription _authSub;
+  late final StreamSubscription _daoSub;
 
-  //  inject from AuthCubit in Phase 5
-  static const _currentUserId = 'current_user';
+  String? get _currentUserId => _authCubit.currentUser?.id;
 
-  NotificationCubit({required NotificationDao dao})
+  NotificationCubit({required NotificationDao dao, required AuthCubit authCubit})
       : _dao = dao,
-        super(const NotificationInitial());
+        _authCubit = authCubit,
+        super(const NotificationInitial()) {
+    _authSub = _authCubit.stream.listen((state) {
+      if (state is AuthAuthenticated) {
+        unawaited(loadNotifications());
+      } else if (state is AuthUnauthenticated) {
+        emit(const NotificationsLoaded(notifications: [], unreadCount: 0));
+      }
+    });
+    _daoSub = _dao.changes.listen((_) {
+      if (_currentUserId != null && !isClosed) {
+        unawaited(loadNotifications(
+          type: state is NotificationsLoaded
+              ? (state as NotificationsLoaded).activeFilter
+              : null,
+        ));
+      }
+    });
+  }
 
   // ── Load ──────────────────────────────────────────────────────────────────
 
   Future<void> loadNotifications({String? type}) async {
+    final uid = _currentUserId;
+    if (uid == null || uid.isEmpty) {
+      emit(const NotificationsLoaded(notifications: [], unreadCount: 0));
+      return;
+    }
     emit(const NotificationsLoading());
 
     try {
       final results = await Future.wait([
-        _dao.getNotifications(userId: _currentUserId, type: type),
-        _dao.getUnreadCount(_currentUserId),
+        _dao.getNotifications(userId: uid, type: type),
+        _dao.getUnreadCount(uid),
       ]);
 
       emit(NotificationsLoaded(
@@ -146,7 +173,10 @@ class NotificationCubit extends Cubit<NotificationState> {
     )).toList();
 
     emit(current.copyWith(notifications: updated, unreadCount: 0));
-    await _dao.markAllRead(_currentUserId);
+    final uid = _currentUserId;
+    if (uid != null && uid.isNotEmpty) {
+      await _dao.markAllRead(uid);
+    }
   }
 
   // ── Respond to collaboration request ─────────────────────────────────────
@@ -194,6 +224,15 @@ class NotificationCubit extends Cubit<NotificationState> {
   // ── Unread badge count only (for nav shell) ───────────────────────────────
 
   Future<int> fetchBadgeCount() async {
-    return _dao.getUnreadCount(_currentUserId);
+    final uid = _currentUserId;
+    if (uid == null || uid.isEmpty) return 0;
+    return _dao.getUnreadCount(uid);
+  }
+
+  @override
+  Future<void> close() async {
+    await _authSub.cancel();
+    await _daoSub.cancel();
+    return super.close();
   }
 }

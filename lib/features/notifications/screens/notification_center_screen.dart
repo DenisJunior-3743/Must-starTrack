@@ -20,41 +20,15 @@
 //   • Visibility: unread dot + tinted row for unread items
 
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
+import '../../../data/local/dao/notification_dao.dart';
+import '../bloc/notification_cubit.dart';
 
-// ── Notification model ────────────────────────────────────────────────────────
-
-enum _NType { collaboration, message, opportunity, achievement, endorsement, system }
-
-class _Notif {
-  final String id;
-  final _NType type;
-  final String? senderName;
-  final String? senderPhoto;
-  final String body;
-  final String? detail;
-  final DateTime createdAt;
-  bool isRead;
-  bool? accepted; // for collab requests: null=pending, true=accepted, false=declined
-
-  _Notif({
-    required this.id,
-    required this.type,
-    this.senderName,
-    // ignore: unused_element_parameter
-    this.senderPhoto,
-    required this.body,
-    this.detail,
-    required this.createdAt,
-    this.isRead = false,
-    // ignore: unused_element_parameter
-    this.accepted,
-  });
-}
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -69,49 +43,17 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabCtrl;
 
-  final _notifications = [
-    _Notif(
-      id: 'n1', type: _NType.collaboration, senderName: 'Marcus Chen',
-      body: 'sent you a collaboration request for Neural Diagnostic Tools',
-      createdAt: DateTime.now().subtract(const Duration(minutes: 2)),
-    ),
-    _Notif(
-      id: 'n2', type: _NType.message, senderName: 'Dr. Sarah Smith',
-      body: 'sent you a message: "I reviewed your abstract and have some feedback..."',
-      createdAt: DateTime.now().subtract(const Duration(minutes: 15)),
-    ),
-    _Notif(
-      id: 'n3', type: _NType.opportunity,
-      body: 'New Internship: Quantum Algorithms posted in your faculty.',
-      detail: 'Faculty of Advanced Computing',
-      createdAt: DateTime.now().subtract(const Duration(hours: 1)),
-      isRead: true,
-    ),
-    _Notif(
-      id: 'n4', type: _NType.achievement,
-      body: "You've reached a 7-day streak! Keep it up!",
-      detail: 'Complete one more task to hit 8 days.',
-      createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-      isRead: true,
-    ),
-    _Notif(
-      id: 'n5', type: _NType.endorsement, senderName: 'Alex Rivera',
-      body: 'endorsed your Python skill.',
-      createdAt: DateTime.now().subtract(const Duration(hours: 5)),
-      isRead: true,
-    ),
-    _Notif(
-      id: 'n6', type: _NType.system,
-      body: 'Your account security review is complete.',
-      createdAt: DateTime.now().subtract(const Duration(days: 1)),
-      isRead: true,
-    ),
-  ];
+  // Tab index → notification type filter (null = all)
+  static const _tabFilters = <String?>[null, 'collaboration', 'opportunity', 'system'];
 
   @override
   void initState() {
     super.initState();
     _tabCtrl = TabController(length: 4, vsync: this);
+    // Reload each time the user opens this screen so it stays fresh.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<NotificationCubit>().loadNotifications();
+    });
   }
 
   @override
@@ -120,89 +62,88 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     super.dispose();
   }
 
-  List<_Notif> _filtered(_NType? filter) {
-    if (filter == null) return _notifications;
-    return _notifications.where((n) => n.type == filter).toList();
-  }
-
-  void _markAllRead() {
-    setState(() {
-      for (final n in _notifications) { n.isRead = true; }
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    final unread = _notifications.where((n) => !n.isRead).length;
+    return BlocBuilder<NotificationCubit, NotificationState>(
+      builder: (context, state) {
+        final notifs = state is NotificationsLoaded ? state.notifications : <NotificationModel>[];
+        final unread  = state is NotificationsLoaded ? state.unreadCount : 0;
+        final loading = state is NotificationsLoading;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: [
-            const Icon(Icons.star_rate_rounded, color: AppColors.primary, size: 22),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Notifications',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.lexend(fontWeight: FontWeight.w700),
-              ),
+        List<NotificationModel> filtered(String? type) {
+          if (type == null) return notifs;
+          return notifs.where((n) => n.type == type).toList();
+        }
+
+        return Scaffold(
+          appBar: AppBar(
+            title: Row(
+              children: [
+                const Icon(Icons.star_rate_rounded, color: AppColors.primary, size: 22),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Notifications',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.lexend(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                if (unread > 0) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    constraints: const BoxConstraints(minWidth: 22),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(AppDimensions.radiusFull)),
+                    child: Text('$unread',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.lexend(
+                        fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white)),
+                  ),
+                ],
+              ],
             ),
-            if (unread > 0) ...[
-              const SizedBox(width: 6),
-              Container(
-                constraints: const BoxConstraints(minWidth: 22),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(AppDimensions.radiusFull)),
-                child: Text('$unread',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.lexend(
-                    fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white)),
+            actions: [
+              if (unread > 0)
+                TextButton(
+                  onPressed: () => context.read<NotificationCubit>().markAllRead(),
+                  child: Text('Mark all read',
+                    style: GoogleFonts.lexend(
+                      fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary)),
+                ),
+              IconButton(
+                icon: const Icon(Icons.settings_outlined),
+                onPressed: () {},
+                tooltip: 'Notification settings',
               ),
             ],
-          ],
-        ),
-        actions: [
-          if (unread > 0)
-            TextButton(
-              onPressed: _markAllRead,
-              child: Text('Mark all read',
-                style: GoogleFonts.lexend(
-                  fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary)),
+            bottom: TabBar(
+              controller: _tabCtrl,
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              indicatorColor: AppColors.primary,
+              labelColor: AppColors.primary,
+              unselectedLabelColor: AppColors.textSecondaryLight,
+              tabs: const [
+                Tab(text: 'All'),
+                Tab(text: 'Requests'),
+                Tab(text: 'Opportunities'),
+                Tab(text: 'System'),
+              ],
             ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () {},
-            tooltip: 'Notification settings',
           ),
-        ],
-        bottom: TabBar(
-          controller: _tabCtrl,
-          isScrollable: true,
-          tabAlignment: TabAlignment.start,
-          indicatorColor: AppColors.primary,
-          labelColor: AppColors.primary,
-          unselectedLabelColor: AppColors.textSecondaryLight,
-          tabs: const [
-            Tab(text: 'All'),
-            Tab(text: 'Requests'),
-            Tab(text: 'Opportunities'),
-            Tab(text: 'System'),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabCtrl,
-        children: [
-          _NotifList(notifs: _filtered(null), onUpdate: () => setState(() {})),
-          _NotifList(notifs: _filtered(_NType.collaboration), onUpdate: () => setState(() {})),
-          _NotifList(notifs: _filtered(_NType.opportunity), onUpdate: () => setState(() {})),
-          _NotifList(notifs: _filtered(_NType.system), onUpdate: () => setState(() {})),
-        ],
-      ),
+          body: loading
+              ? const Center(child: CircularProgressIndicator())
+              : TabBarView(
+                  controller: _tabCtrl,
+                  children: _tabFilters.map((filter) =>
+                    _NotifList(notifs: filtered(filter)),
+                  ).toList(),
+                ),
+        );
+      },
     );
   }
 }
@@ -210,10 +151,9 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
 // ── Notification list ─────────────────────────────────────────────────────────
 
 class _NotifList extends StatelessWidget {
-  final List<_Notif> notifs;
-  final VoidCallback onUpdate;
+  final List<NotificationModel> notifs;
 
-  const _NotifList({required this.notifs, required this.onUpdate});
+  const _NotifList({required this.notifs});
 
   @override
   Widget build(BuildContext context) {
@@ -234,7 +174,7 @@ class _NotifList extends StatelessWidget {
     }
     return ListView.builder(
       itemCount: notifs.length,
-      itemBuilder: (_, i) => _NotifTile(notif: notifs[i], onUpdate: onUpdate),
+      itemBuilder: (_, i) => _NotifTile(notif: notifs[i]),
     );
   }
 }
@@ -242,17 +182,23 @@ class _NotifList extends StatelessWidget {
 // ── Notification tile ─────────────────────────────────────────────────────────
 
 class _NotifTile extends StatelessWidget {
-  final _Notif notif;
-  final VoidCallback onUpdate;
+  final NotificationModel notif;
 
-  const _NotifTile({required this.notif, required this.onUpdate});
+  const _NotifTile({required this.notif});
+
+  bool? get _accepted {
+    final v = notif.extra['accepted'];
+    if (v == null) return null;
+    return v as bool;
+  }
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       onTap: () {
-        notif.isRead = true;
-        onUpdate();
+        if (!notif.isRead) {
+          context.read<NotificationCubit>().markRead(notif.id);
+        }
       },
       child: Container(
         color: notif.isRead
@@ -300,13 +246,13 @@ class _NotifTile extends StatelessWidget {
                         fontSize: 12, color: AppColors.textSecondaryLight)),
                   ],
                   // Accept / Decline for collaboration requests
-                  if (notif.type == _NType.collaboration &&
-                      notif.accepted == null) ...[
+                  if (notif.type == 'collaboration' && _accepted == null) ...[
                     const SizedBox(height: 10),
                     Row(
                       children: [
                         ElevatedButton(
-                          onPressed: () { notif.accepted = true; onUpdate(); },
+                          onPressed: () => context.read<NotificationCubit>()
+                              .respondToCollab(notificationId: notif.id, accepted: true),
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 16, vertical: 8),
@@ -317,7 +263,8 @@ class _NotifTile extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         OutlinedButton(
-                          onPressed: () { notif.accepted = false; onUpdate(); },
+                          onPressed: () => context.read<NotificationCubit>()
+                              .respondToCollab(notificationId: notif.id, accepted: false),
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 16, vertical: 8),
@@ -329,22 +276,21 @@ class _NotifTile extends StatelessWidget {
                       ],
                     ),
                   ],
-                  if (notif.type == _NType.collaboration &&
-                      notif.accepted != null) ...[
+                  if (notif.type == 'collaboration' && _accepted != null) ...[
                     const SizedBox(height: 6),
                     Row(
                       children: [
                         Icon(
-                          notif.accepted!
+                          _accepted!
                               ? Icons.check_circle_rounded
                               : Icons.cancel_rounded,
                           size: 14,
-                          color: notif.accepted! ? AppColors.success : AppColors.danger),
+                          color: _accepted! ? AppColors.success : AppColors.danger),
                         const SizedBox(width: 4),
-                        Text(notif.accepted! ? 'Request accepted' : 'Request declined',
+                        Text(_accepted! ? 'Request accepted' : 'Request declined',
                           style: GoogleFonts.lexend(
                             fontSize: 12, fontWeight: FontWeight.w600,
-                            color: notif.accepted! ? AppColors.success : AppColors.danger)),
+                            color: _accepted! ? AppColors.success : AppColors.danger)),
                       ],
                     ),
                   ],
@@ -359,7 +305,7 @@ class _NotifTile extends StatelessWidget {
 }
 
 class _Leading extends StatelessWidget {
-  final _Notif notif;
+  final NotificationModel notif;
   const _Leading({required this.notif});
 
   @override
@@ -368,9 +314,9 @@ class _Leading extends StatelessWidget {
       return CircleAvatar(
         radius: 24,
         backgroundColor: AppColors.primaryTint10,
-        backgroundImage: notif.senderPhoto != null
-            ? NetworkImage(notif.senderPhoto!) : null,
-        child: notif.senderPhoto == null
+        backgroundImage: notif.senderPhotoUrl != null
+            ? NetworkImage(notif.senderPhotoUrl!) : null,
+        child: notif.senderPhotoUrl == null
             ? Text(notif.senderName![0].toUpperCase(),
                 style: GoogleFonts.lexend(
                   fontSize: 18, fontWeight: FontWeight.w700,
@@ -380,10 +326,10 @@ class _Leading extends StatelessWidget {
     }
 
     final (icon, color, bg) = switch (notif.type) {
-      _NType.opportunity => (Icons.work_outline_rounded, AppColors.primary, AppColors.primaryTint10),
-      _NType.achievement => (Icons.local_fire_department_rounded, const Color(0xFFF97316), const Color(0xFFFFF7ED)),
-      _NType.system => (Icons.info_outline_rounded, AppColors.textSecondaryLight, AppColors.surfaceLight),
-      _ => (Icons.notifications_rounded, AppColors.primary, AppColors.primaryTint10),
+      'opportunity' => (Icons.work_outline_rounded, AppColors.primary, AppColors.primaryTint10),
+      'achievement' => (Icons.local_fire_department_rounded, const Color(0xFFF97316), const Color(0xFFFFF7ED)),
+      'system'      => (Icons.info_outline_rounded, AppColors.textSecondaryLight, AppColors.surfaceLight),
+      _             => (Icons.notifications_rounded, AppColors.primary, AppColors.primaryTint10),
     };
 
     return Container(
@@ -397,7 +343,7 @@ class _Leading extends StatelessWidget {
 }
 
 class _BodyText extends StatelessWidget {
-  final _Notif notif;
+  final NotificationModel notif;
   const _BodyText({required this.notif});
 
   @override
@@ -405,7 +351,6 @@ class _BodyText extends StatelessWidget {
     final base = GoogleFonts.lexend(fontSize: 13, height: 1.4);
     final bold = base.copyWith(fontWeight: FontWeight.w700);
 
-    // Simple rich text: senderName bold + rest normal
     if (notif.senderName != null) {
       return RichText(
         text: TextSpan(

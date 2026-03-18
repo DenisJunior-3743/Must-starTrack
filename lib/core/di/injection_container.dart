@@ -41,6 +41,7 @@ import '../router/route_guards.dart';
 import '../../data/local/database_helper.dart';
 import '../../data/local/dao/user_dao.dart';
 import '../../data/local/dao/post_dao.dart';
+import '../../data/local/dao/comment_dao.dart';
 import '../../data/local/dao/message_dao.dart';
 import '../../data/local/dao/notification_dao.dart';
 import '../../data/local/dao/sync_queue_dao.dart';
@@ -110,6 +111,7 @@ class InjectionContainer {
 
     sl.registerSingleton<UserDao>(UserDao());
     sl.registerSingleton<PostDao>(PostDao());
+    sl.registerSingleton<CommentDao>(CommentDao());
     sl.registerSingleton<MessageDao>(MessageDao());
     sl.registerSingleton<NotificationDao>(NotificationDao());
     sl.registerSingleton<SyncQueueDao>(SyncQueueDao());
@@ -147,8 +149,10 @@ class InjectionContainer {
         firestore: sl<FirestoreService>(),
         userDao: sl<UserDao>(),
         postDao: sl<PostDao>(),
+        commentDao: sl<CommentDao>(),
         cloudinary: sl<CloudinaryService>(),
         connectivity: sl<Connectivity>(),
+        localNotif: sl<FlutterLocalNotificationsPlugin>(),
       ),
     );
 
@@ -188,6 +192,7 @@ class InjectionContainer {
       AuthCubit(
         authRepository: sl<AuthRepository>(),
         guards: sl<RouteGuards>(),
+        fcmService: sl<FcmService>(),
       ),
     );
 
@@ -212,11 +217,12 @@ class InjectionContainer {
       () => MessageCubit(
         messageDao: sl<MessageDao>(),
         syncDao: sl<SyncQueueDao>(),
+        authCubit: sl<AuthCubit>(),
       ),
     );
 
     sl.registerFactory<NotificationCubit>(
-      () => NotificationCubit(dao: sl<NotificationDao>()),
+      () => NotificationCubit(dao: sl<NotificationDao>(), authCubit: sl<AuthCubit>()),
     );
 
     sl.registerFactory<AdminCubit>(

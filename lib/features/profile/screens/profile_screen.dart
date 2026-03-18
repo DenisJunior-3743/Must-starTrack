@@ -28,12 +28,14 @@ import 'dart:io';
 import '../../../core/router/route_guards.dart' show UserRole;
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
+import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/utils/media_path_utils.dart';
 import '../../../data/local/dao/post_dao.dart';
 import '../../../data/local/dao/user_dao.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/models/user_model.dart';
+import '../../auth/bloc/auth_cubit.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String? userId; // null = own profile
@@ -268,6 +270,47 @@ class _Header extends StatelessWidget {
                   ),
                 ],
           ),
+          if (isOwn) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Log out?'),
+                      content: const Text('You will be returned to the login screen.'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('Cancel'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: AppColors.danger),
+                          child: const Text('Log out'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    await sl<AuthCubit>().logout();
+                    if (context.mounted) context.go(RouteNames.login);
+                  }
+                },
+                icon: const Icon(Icons.logout_rounded, size: 18,
+                    color: AppColors.danger),
+                label: Text('Log out',
+                  style: GoogleFonts.lexend(
+                    fontWeight: FontWeight.w600, color: AppColors.danger)),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.danger),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

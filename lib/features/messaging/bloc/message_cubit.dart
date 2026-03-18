@@ -29,6 +29,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../data/local/dao/message_dao.dart';
 import '../../../data/local/dao/sync_queue_dao.dart';
+import '../../auth/bloc/auth_cubit.dart';
 
 // ── States ────────────────────────────────────────────────────────────────────
 
@@ -107,26 +108,34 @@ class MessageError extends MessageState {
 class MessageCubit extends Cubit<MessageState> {
   final MessageDao _messageDao;
   final SyncQueueDao _syncDao;
+  final AuthCubit _authCubit;
 
-  // inject from AuthCubit in Phase 5
-  static const _currentUserId = 'current_user';
+  String? get _currentUserId => _authCubit.currentUser?.id;
+
   static const _pageSize = 40;
   static const _uuid = Uuid();
 
   MessageCubit({
     required MessageDao messageDao,
     required SyncQueueDao syncDao,
+    required AuthCubit authCubit,
   })  : _messageDao = messageDao,
         _syncDao = syncDao,
+        _authCubit = authCubit,
         super(const MessageInitial());
 
   // ── Load conversations ────────────────────────────────────────────────────
 
   Future<void> loadConversations() async {
+    final uid = _currentUserId;
+    if (uid == null || uid.isEmpty) {
+      emit(const ConversationsLoaded(conversations: []));
+      return;
+    }
     emit(const ConversationsLoading());
     try {
       final convos = await _messageDao.getConversations(
-        userId: _currentUserId,
+        userId: uid,
         pageSize: _pageSize,
       );
       emit(ConversationsLoaded(
@@ -149,9 +158,15 @@ class MessageCubit extends Cubit<MessageState> {
     emit(const ThreadLoading());
 
     try {
+      final uid = _currentUserId;
+      if (uid == null || uid.isEmpty) {
+        emit(const MessageError('Not logged in'));
+        return;
+      }
+
       // Ensure conversation exists (creates if first time)
       final convoId = await _messageDao.ensureConversation(
-        userId: _currentUserId,
+        userId: uid,
         peerId: peerId,
         peerName: peerName,
         peerPhotoUrl: peerPhotoUrl,
@@ -166,7 +181,7 @@ class MessageCubit extends Cubit<MessageState> {
       // Mark as read
       await _messageDao.markConversationRead(
         conversationId: convoId,
-        userId: _currentUserId,
+        userId: uid,
       );
 
       emit(ThreadLoaded(
@@ -218,11 +233,13 @@ class MessageCubit extends Cubit<MessageState> {
   Future<void> sendMessage(String text) async {
     final current = state;
     if (current is! ThreadLoaded) return;
+    final uid = _currentUserId;
+    if (uid == null || uid.isEmpty) return;
 
     final msg = MessageModel(
       id: _uuid.v4(),
       conversationId: current.conversationId,
-      senderId: _currentUserId,
+      senderId: uid,
       content: text.trim(),
       messageType: 'text',
       createdAt: DateTime.now(),
@@ -284,8 +301,9 @@ class MessageCubit extends Cubit<MessageState> {
       return;
     }
     try {
+      final uid = _currentUserId;
       final results = await _messageDao.searchConversations(
-        userId: _currentUserId,
+        userId: uid ?? '',
         query: query,
       );
       emit(ConversationsLoaded(conversations: results));
