@@ -30,6 +30,7 @@ import '../../../core/router/route_guards.dart';
 import '../../../core/utils/media_path_utils.dart';
 import '../../../data/models/post_model.dart';
 import '../../auth/bloc/auth_cubit.dart';
+import '../../shared/screens/offline_video_player_screen.dart';
 import '../bloc/feed_cubit.dart';
 import '../../notifications/bloc/notification_cubit.dart';
 
@@ -386,11 +387,33 @@ class _MediaStrip extends StatelessWidget {
     return ListView.separated(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-      itemBuilder: (_, index) => _MediaShelfTile(
-        post: posts[index],
-        onTap: () => onOpenPost(posts[index]),
-        mode: mode,
-      ),
+      itemBuilder: (context, index) {
+        final post = posts[index];
+        return _MediaShelfTile(
+          post: post,
+          onTap: () {
+            if (mode == _MediaStripMode.videos) {
+              final videoUrl = post.mediaUrls.where(_isVideoUrl).cast<String?>().firstWhere(
+                (_) => true,
+                orElse: () => null,
+              );
+              if (videoUrl != null) {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => OfflineVideoPlayerScreen(
+                      source: videoUrl,
+                      title: post.title,
+                    ),
+                  ),
+                );
+                return;
+              }
+            }
+            onOpenPost(post);
+          },
+          mode: mode,
+        );
+      },
       separatorBuilder: (_, __) => const SizedBox(width: 12),
       itemCount: posts.length,
     );

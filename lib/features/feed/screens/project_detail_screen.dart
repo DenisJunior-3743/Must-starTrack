@@ -43,6 +43,7 @@ import '../../../data/models/post_model.dart';
 import '../../../data/remote/sync_service.dart';
 import '../../../features/auth/bloc/auth_cubit.dart';
 import '../../../features/notifications/bloc/notification_cubit.dart';
+import '../../shared/screens/offline_video_player_screen.dart';
 import '../../shared/hci_components/post_card.dart';
 
 class ProjectDetailScreen extends StatefulWidget {
@@ -486,6 +487,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 urls: post.mediaUrls,
                 currentIndex: _currentImageIndex,
                 onPageChanged: (i) => setState(() => _currentImageIndex = i),
+                title: post.title,
               ),
             ),
           ),
@@ -607,11 +609,13 @@ class _HeroGallery extends StatelessWidget {
   final List<String> urls;
   final int currentIndex;
   final ValueChanged<int> onPageChanged;
+  final String title;
 
   const _HeroGallery({
     required this.urls,
     required this.currentIndex,
     required this.onPageChanged,
+    required this.title,
   });
 
   @override
@@ -631,34 +635,48 @@ class _HeroGallery extends StatelessWidget {
         PageView.builder(
           itemCount: urls.length,
           onPageChanged: onPageChanged,
-          itemBuilder: (_, i) => _isVideoUrl(urls[i])
-              ? Container(
-                  color: AppColors.primaryTint10,
-                  child: const Center(
-                    child: Icon(Icons.play_circle_outline_rounded,
-                        size: 72, color: AppColors.primary),
-                  ),
-                )
-              : isLocalMediaPath(urls[i])
-                  ? Image.file(
-                      File(urls[i]),
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        color: AppColors.primaryTint10,
-                        child: const Icon(Icons.image_outlined, size: 60, color: AppColors.primary),
-                      ),
-                    )
-                  : CachedNetworkImage(
-                      imageUrl: urls[i],
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) => Container(
-                        color: AppColors.primaryTint10,
-                      ),
-                      errorWidget: (_, __, ___) => Container(
-                        color: AppColors.primaryTint10,
-                        child: const Icon(Icons.image_outlined, size: 60, color: AppColors.primary),
-                      ),
+          itemBuilder: (context, i) => GestureDetector(
+            onTap: () {
+              if (_isVideoUrl(urls[i])) {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => OfflineVideoPlayerScreen(
+                      source: urls[i],
+                      title: title,
                     ),
+                  ),
+                );
+              }
+            },
+            child: _isVideoUrl(urls[i])
+                ? Container(
+                    color: AppColors.primaryTint10,
+                    child: const Center(
+                      child: Icon(Icons.play_circle_outline_rounded,
+                          size: 72, color: AppColors.primary),
+                    ),
+                  )
+                : isLocalMediaPath(urls[i])
+                    ? Image.file(
+                        File(urls[i]),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: AppColors.primaryTint10,
+                          child: const Icon(Icons.image_outlined, size: 60, color: AppColors.primary),
+                        ),
+                      )
+                    : CachedNetworkImage(
+                        imageUrl: urls[i],
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Container(
+                          color: AppColors.primaryTint10,
+                        ),
+                        errorWidget: (_, __, ___) => Container(
+                          color: AppColors.primaryTint10,
+                          child: const Icon(Icons.image_outlined, size: 60, color: AppColors.primary),
+                        ),
+                      ),
+          ),
         ),
         // Slideshow dot indicators
         if (urls.length > 1)
