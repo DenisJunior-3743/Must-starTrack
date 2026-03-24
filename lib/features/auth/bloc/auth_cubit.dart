@@ -213,7 +213,7 @@ class AuthCubit extends Cubit<AuthState> {
       final result = await _repo.registerStudent(data: allData);
       result.fold(
         (failure) => emit(AuthError(failure.message)),
-        (user) => emit(AuthEmailVerificationSent(user.email)),
+        (user) => _emitAuthenticated(user), // skip email gate — SMTP pending
       );
     } catch (e) {
       emit(const AuthError('Registration failed. Please try again.'));
@@ -230,7 +230,7 @@ class AuthCubit extends Cubit<AuthState> {
       final result = await _repo.registerLecturer(data: formData);
       result.fold(
         (failure) => emit(AuthError(failure.message)),
-        (user) => emit(AuthEmailVerificationSent(user.email)),
+        (user) => _emitAuthenticated(user), // skip email gate — SMTP pending
       );
     } catch (e) {
       emit(const AuthError('Registration failed. Please try again.'));
@@ -319,5 +319,18 @@ class AuthCubit extends Cubit<AuthState> {
     final u = currentUser;
     if (u == null) return false;
     return u.role == UserRole.admin || u.role == UserRole.superAdmin;
+  }
+
+  /// Updates the in-memory authenticated user (e.g. after a profile save).
+  /// Only acts when the current state is AuthAuthenticated.
+  void updateCurrentUser(UserModel updatedUser) {
+    if (state is AuthAuthenticated) {
+      _guards.updateAuthState(
+        role: updatedUser.role,
+        isAuthenticated: true,
+        userId: updatedUser.id,
+      );
+      emit(AuthAuthenticated(updatedUser));
+    }
   }
 }

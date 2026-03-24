@@ -23,6 +23,7 @@ abstract final class RouteNames {
   static const String peers              = '/peers';
   static const String inbox              = '/inbox';
   static const String notifications      = '/notifications';
+  static const String notificationSettings = '/notifications/settings';
   static const String screenHub          = '/screen-hub';
   static const String projectDetail      = '/project/:postId';
   static const String postDetail         = '/project/:postId';
@@ -32,7 +33,7 @@ abstract final class RouteNames {
   static const String chat               = '/chat/:threadId';
   static const String chatDetail         = '/chat/:threadId';
   static const String createPost         = '/create-post';
-  static const String projects           = '/notifications';
+  static const String projects           = '/my-projects';
   static const String adminDashboard     = '/admin';
   static const String adminModeration    = '/admin/moderation';
   static const String adminUsers         = '/admin/users';
@@ -43,6 +44,12 @@ abstract final class RouteNames {
   static const String superAdminSettings = '/super-admin/settings';
   static const String superAdminUsers    = '/super-admin/users';
   static const String superAdminAnalytics = '/super-admin/analytics';
+
+  // ── Lecturer Routes ───────────────────────────────────────────────────────
+  static const String lecturerDashboard  = '/lecturer';
+  static const String lecturerApplicants = '/lecturer/applicants';
+  static const String lecturerRanking    = '/lecturer/ranking';
+  static const String lecturerSearch     = '/lecturer/search';
 
   // ── Named Route Keys ──────────────────────────────────────────────────────
   static const String splashName              = 'splash';
@@ -59,6 +66,7 @@ abstract final class RouteNames {
   static const String peersName               = 'peers';
   static const String inboxName               = 'inbox';
   static const String notificationsName       = 'notifications';
+  static const String notificationSettingsName = 'notificationSettings';
   static const String screenHubName           = 'screenHub';
   static const String projectDetailName       = 'projectDetail';
   static const String profileName             = 'profile';
@@ -67,6 +75,12 @@ abstract final class RouteNames {
   static const String createPostName          = 'createPost';
   static const String adminDashboardName      = 'adminDashboard';
   static const String superAdminDashboardName = 'superAdminDashboard';
+
+  // Lecturer named routes
+  static const String lecturerDashboardName   = 'lecturerDashboard';
+  static const String lecturerApplicantsName  = 'lecturerApplicants';
+  static const String lecturerRankingName     = 'lecturerRanking';
+  static const String lecturerSearchName      = 'lecturerSearch';
 }
 
 abstract final class Routes {
@@ -85,6 +99,7 @@ abstract final class Routes {
   static const String inbox = RouteNames.inbox;
   static const String projects = RouteNames.projects;
   static const String notifications = RouteNames.notifications;
+  static const String notificationSettings = RouteNames.notificationSettings;
   static const String screenHub = RouteNames.screenHub;
   static const String postDetail = RouteNames.postDetail;
   static const String createPost = RouteNames.createPost;
@@ -102,4 +117,10 @@ abstract final class Routes {
   static const String superAdminSettings = RouteNames.superAdminSettings;
   static const String superAdminUsers = RouteNames.superAdminUsers;
   static const String superAdminAnalytics = RouteNames.superAdminAnalytics;
+
+  // Lecturer
+  static const String lecturerDashboard = RouteNames.lecturerDashboard;
+  static const String lecturerApplicants = RouteNames.lecturerApplicants;
+  static const String lecturerRanking = RouteNames.lecturerRanking;
+  static const String lecturerSearch = RouteNames.lecturerSearch;
 }

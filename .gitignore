@@ -8,6 +8,8 @@ scripts/node_modules/
 *.pyc
 *.swp
 .DS_Store
+# Windows reserved device name — cannot be committed
+nul
 .atom/
 .build/
 .buildlog/

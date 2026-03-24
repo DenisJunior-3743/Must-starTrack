@@ -24,6 +24,7 @@ import 'dart:async';
 import 'package:sqflite/sqflite.dart';
 
 import '../database_helper.dart';
+import '../schema/database_schema.dart';
 
 // ── Notification model ────────────────────────────────────────────────────────
 
@@ -191,7 +192,7 @@ class NotificationDao {
   // ── Respond to collaboration request ────────────────────────────────────
 
   /// Sets extra_json.accepted = true/false so the UI can show the resolved state.
-  Future<void> respondToCollabRequest({
+  Future<String?> respondToCollabRequest({
     required String notificationId,
     required bool accepted,
   }) async {
@@ -200,12 +201,14 @@ class NotificationDao {
     // Read current extra, update, write back
     final rows = await db.query(
       'notifications',
-      columns: ['extra_json'],
+      columns: ['extra_json', 'entity_id'],
       where: 'id = ?',
       whereArgs: [notificationId],
     );
 
-    if (rows.isEmpty) return;
+    if (rows.isEmpty) return null;
+
+    final collabRequestId = rows.first['entity_id'] as String?;
 
     Map<String, dynamic> extra = {};
     try {
@@ -221,7 +224,23 @@ class NotificationDao {
       where: 'id = ?',
       whereArgs: [notificationId],
     );
+
+    if (collabRequestId != null && collabRequestId.isNotEmpty) {
+      final now = DateTime.now().toIso8601String();
+      await db.update(
+        DatabaseSchema.tableCollabRequests,
+        {
+          'status': accepted ? 'accepted' : 'rejected',
+          'responded_at': now,
+          'updated_at': now,
+          'sync_status': 0,
+        },
+        where: 'id = ?',
+        whereArgs: [collabRequestId],
+      );
+    }
     _notifyChanged();
+    return collabRequestId;
   }
 
   // ── Delete one ───────────────────────────────────────────────────────────

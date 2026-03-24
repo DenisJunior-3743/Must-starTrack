@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -202,7 +202,7 @@ class _OfflineVideoPlayerScreenState extends State<OfflineVideoPlayerScreen> {
           widget.title ?? 'Video',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.lexend(fontWeight: FontWeight.w700),
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
         ),
         actions: [
           IconButton(
@@ -294,7 +294,7 @@ class _OfflineVideoPlayerScreenState extends State<OfflineVideoPlayerScreen> {
                               : _initializedFromNetwork
                                   ? 'Streaming now, saving offline in background'
                                   : 'Downloading video...',
-                          style: GoogleFonts.lexend(
+                          style: GoogleFonts.plusJakartaSans(
                             color: Colors.white70,
                             fontSize: 12,
                           ),
@@ -305,7 +305,7 @@ class _OfflineVideoPlayerScreenState extends State<OfflineVideoPlayerScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             child: Text(
                               _debugContext!,
-                              style: GoogleFonts.lexend(
+                              style: GoogleFonts.plusJakartaSans(
                                 color: Colors.white54,
                                 fontSize: 10,
                               ),
@@ -398,7 +398,7 @@ class _VideoLoadingView extends StatelessWidget {
                   ? 'Downloading video...'
                   : 'Downloading video... $percent%'
               : 'Preparing video...',
-          style: GoogleFonts.lexend(color: Colors.white),
+          style: GoogleFonts.plusJakartaSans(color: Colors.white),
         ),
       ],
     );
@@ -426,7 +426,7 @@ class _VideoErrorView extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             'Video could not be opened',
-            style: GoogleFonts.lexend(
+            style: GoogleFonts.plusJakartaSans(
               color: Colors.white,
               fontSize: 18,
               fontWeight: FontWeight.w700,
@@ -436,14 +436,14 @@ class _VideoErrorView extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             message,
-            style: GoogleFonts.lexend(color: Colors.white70, fontSize: 12),
+            style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 12),
             textAlign: TextAlign.center,
           ),
           if (debugContext != null) ...[
             const SizedBox(height: 8),
             Text(
               debugContext!,
-              style: GoogleFonts.lexend(color: Colors.white54, fontSize: 10),
+              style: GoogleFonts.plusJakartaSans(color: Colors.white54, fontSize: 10),
               textAlign: TextAlign.center,
             ),
           ],

@@ -52,6 +52,7 @@ import '../../features/auth/screens/password_reset_sent_screen.dart';
 import '../../features/feed/screens/home_feed_screen.dart';
 import '../../features/feed/screens/project_detail_screen.dart';
 import '../../features/feed/screens/create_post_screen.dart';
+import '../../features/feed/screens/my_projects_screen.dart';
 
 // ── Discover screens ──────────────────────────────────────────────────────────
 import '../../features/discover/screens/discover_screen.dart';
@@ -70,12 +71,18 @@ import '../../features/messaging/screens/chat_detail_screen.dart';
 
 // ── Notifications screen ──────────────────────────────────────────────────────
 import '../../features/notifications/screens/notification_center_screen.dart';
+import '../../features/notifications/screens/notification_settings_screen.dart';
 import '../../features/shared/screens/screen_hub_screen.dart';
 
 // ── Admin screens ─────────────────────────────────────────────────────────────
 import '../../features/admin/screens/admin_dashboard_screen.dart';
 import '../../features/super_admin/screens/super_admin_dashboard_screen.dart';
-
+// ── Lecturer screens ──────────────────────────────────────────────────────
+import '../../features/lecturer/screens/lecturer_dashboard_screen.dart';
+import '../../features/lecturer/screens/opportunity_applicants_screen.dart';
+import '../../features/lecturer/screens/lecturer_ranking_screen.dart';
+import '../../features/lecturer/screens/advanced_search_screen.dart';
+import '../../features/lecturer/bloc/lecturer_cubit.dart';
 // ── Shell ─────────────────────────────────────────────────────────────────────
 import '../../features/shared/widgets/main_shell.dart';
 
@@ -85,6 +92,7 @@ import '../../features/feed/bloc/feed_cubit.dart';
 import '../../features/profile/bloc/profile_cubit.dart';
 import '../../features/messaging/bloc/message_cubit.dart';
 import '../../features/admin/bloc/admin_cubit.dart';
+import '../../data/models/post_model.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -99,7 +107,7 @@ class AppRouter {
     final listenable = _AuthListenable(authCubit);
 
     return GoRouter(
-      initialLocation: Routes.home,
+      initialLocation: Routes.splash,
       debugLogDiagnostics: false,
       refreshListenable: listenable,
 
@@ -150,6 +158,22 @@ class AppRouter {
           (r) => location.startsWith(r.split(':').first),
         );
         if (isAdminRoute && !role.isAdmin) return Routes.home;
+
+        // Lecturer-only routes (applicants route is open to any
+        // authenticated user so post authors can view their own applicants)
+        final lecturerOnly = [
+          Routes.lecturerDashboard,
+          Routes.lecturerRanking,
+          Routes.lecturerSearch,
+        ];
+        final isLecturerRoute = lecturerOnly.any(
+          (r) => location.startsWith(r.split(':').first),
+        );
+        if (isLecturerRoute &&
+            role != UserRole.lecturer &&
+            !role.isAdmin) {
+          return Routes.home;
+        }
 
         // Super-admin-only routes
         final superAdminOnly = [
@@ -276,7 +300,44 @@ class AppRouter {
             // Notifications (mapped to /projects slot as 5th tab)
             GoRoute(
               path: Routes.projects,
-              builder: (_, __) => const NotificationCenterScreen(),
+              builder: (_, __) => const MyProjectsScreen(),
+            ),
+
+            // ── Lecturer screens (inside shell so nav persists) ───────────
+            GoRoute(
+              path: Routes.lecturerDashboard,
+              name: RouteNames.lecturerDashboardName,
+              builder: (_, __) => BlocProvider(
+                create: (_) => sl<LecturerCubit>(),
+                child: const LecturerDashboardScreen(),
+              ),
+            ),
+            GoRoute(
+              path: Routes.lecturerApplicants,
+              name: RouteNames.lecturerApplicantsName,
+              builder: (_, state) {
+                final opportunity = state.extra as PostModel;
+                return BlocProvider(
+                  create: (_) => sl<LecturerCubit>(),
+                  child: OpportunityApplicantsScreen(opportunity: opportunity),
+                );
+              },
+            ),
+            GoRoute(
+              path: Routes.lecturerRanking,
+              name: RouteNames.lecturerRankingName,
+              builder: (_, __) => BlocProvider(
+                create: (_) => sl<LecturerCubit>(),
+                child: const LecturerRankingScreen(),
+              ),
+            ),
+            GoRoute(
+              path: Routes.lecturerSearch,
+              name: RouteNames.lecturerSearchName,
+              builder: (_, __) => BlocProvider(
+                create: (_) => sl<LecturerCubit>(),
+                child: const AdvancedSearchScreen(),
+              ),
             ),
           ],
         ),
@@ -290,9 +351,11 @@ class AppRouter {
         ),
         GoRoute(
           path: Routes.createPost,
-          builder: (_, __) => BlocProvider(
+          builder: (_, state) => BlocProvider(
             create: (_) => sl<FeedCubit>(),
-            child: const CreatePostScreen(),
+            child: CreatePostScreen(
+              existingPost: state.extra is PostModel ? state.extra as PostModel : null,
+            ),
           ),
         ),
 
@@ -345,6 +408,10 @@ class AppRouter {
         GoRoute(
           path: Routes.notifications,
           builder: (_, __) => const NotificationCenterScreen(),
+        ),
+        GoRoute(
+          path: Routes.notificationSettings,
+          builder: (_, __) => const NotificationSettingsScreen(),
         ),
 
         // ── Screen hub (newly added module screens) ──────────────────────

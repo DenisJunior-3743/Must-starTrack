@@ -21,6 +21,15 @@ service cloud.firestore {
       return userRole() == 'admin' || userRole() == 'super_admin';
     }
 
+    // Same as hasAllowedDomainForRole but uses a role value passed as
+    // an argument instead of reading from the (possibly missing) user doc.
+    // Used for the users/create rule where the document doesn't exist yet.
+    function domainMatchesRole(role) {
+      return (role == 'student'   && authEmail().matches('.*@std\\.must\\.ac\\.ug'))
+          || (role in ['lecturer', 'staff'] && authEmail().matches('.*@staff\\.must\\.ac\\.ug'))
+          || (role in ['admin', 'super_admin'] && authEmail().matches('.*@must\\.ac\\.ug'));
+    }
+
     function hasAllowedDomainForRole() {
       return (isStudentRole() && authEmail().matches('.*@std\\.must\\.ac\\.ug'))
         || (isStaffRole() && authEmail().matches('.*@staff\\.must\\.ac\\.ug'))
@@ -51,11 +60,19 @@ service cloud.firestore {
     // USERS
     match /users/{userId} {
 
-      allow read: if isMustUser();
+      // User profiles are publicly readable — name, avatar, faculty, and role
+      // are shown on feed cards and project detail pages for all visitors.
+      // The tokens sub-collection (FCM tokens) is separately guarded below.
+      allow read: if true;
 
-      allow create: if isMustUser()
+      // CREATE: the user document does not exist yet, so we cannot call
+      // userRole() (which does a get() on the same doc — circular).  
+      // Instead, validate the role from the incoming data and match it
+      // against the authenticated email domain directly.
+      allow create: if request.auth != null
         && userId == uid()
-        && request.resource.data.role in ['student', 'lecturer', 'staff', 'admin', 'super_admin'];
+        && request.resource.data.role in ['student', 'lecturer', 'staff', 'admin', 'super_admin']
+        && domainMatchesRole(request.resource.data.role);
 
       allow update: if isMustUser()
         && (userId == uid() || isAdmin());
@@ -71,8 +88,13 @@ service cloud.firestore {
     // POSTS
     match /posts/{postId} {
 
-      allow read: if isMustUser()
-        && resource.data.is_archived == false;
+      // Non-archived posts are publicly readable so guests see the feed
+      // immediately (TikTok-style open discovery).
+      // Anonymous visitors are further limited to approved / unmoderated
+      // posts so flagged content is never served to unauthenticated clients.
+      allow read: if resource.data.is_archived == false
+        && (request.auth != null
+            || resource.data.get('moderation_status', null) in [null, 'approved']);
 
       allow create: if isMustUser()
         && request.resource.data.author_id == uid();
@@ -80,12 +102,18 @@ service cloud.firestore {
       allow update: if isMustUser()
         && (resource.data.author_id == uid() || isAdmin());
 
-      allow delete: if isAdmin();
+      allow delete: if isMustUser()
+        && (resource.data.author_id == uid() || isAdmin());
 
 
       match /likes/{likerId} {
-        allow read: if isMustUser();
+        allow read: if true;  // public like counts
         allow write: if isMustUser() && likerId == uid();
+      }
+
+      match /dislikes/{dislikerId} {
+        allow read: if true;  // public dislike counts
+        allow write: if isMustUser() && dislikerId == uid();
       }
     }
 
@@ -119,7 +147,19 @@ service cloud.firestore {
         allow create: if isMustUser()
           && request.resource.data.sender_id == uid();
 
-        allow delete: if isAdmin();
+        allow update: if isMustUser()
+          && (
+            get(/databases/$(database)/documents/conversations/$(convoId)).data.user_id == uid()
+            || get(/databases/$(database)/documents/conversations/$(convoId)).data.peer_id == uid()
+          )
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['is_read']);
+
+        allow delete: if isMustUser()
+          && (
+            resource.data.sender_id == uid()
+            || get(/databases/$(database)/documents/conversations/$(convoId)).data.user_id == uid()
+            || isAdmin()
+          );
       }
     }
 
@@ -197,6 +237,37 @@ service cloud.firestore {
 
       allow delete: if isMustUser()
         && resource.data.sender_id == uid();
+    }
+
+
+    // OPPORTUNITY JOINS
+    match /post_joins/{joinId} {
+
+      allow read: if isMustUser()
+        && (
+          resource.data.user_id == uid()
+          || resource.data.author_id == uid()
+          || isAdmin()
+        );
+
+      allow create, update: if isMustUser()
+        && request.resource.data.user_id == uid();
+
+      allow delete: if isMustUser()
+        && (resource.data.user_id == uid() || isAdmin());
+    }
+
+
+    // MODERATION REPORTS
+    match /moderation_queue/{reportId} {
+
+      allow read: if isMustUser()
+        && (resource.data.reporter_id == uid() || isAdmin());
+
+      allow create, update: if isMustUser()
+        && request.resource.data.reporter_id == uid();
+
+      allow delete: if isAdmin();
     }
 
 

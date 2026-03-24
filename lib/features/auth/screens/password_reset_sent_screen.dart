@@ -1,6 +1,6 @@
-// lib/features/auth/screens/password_reset_sent_screen.dart
+﻿// lib/features/auth/screens/password_reset_sent_screen.dart
 //
-// MUST StarTrack — Password Reset / Email Verification Sent
+// MUST StarTrack â€” Password Reset / Email Verification Sent
 // Used after: forgot password, new registration (verification email)
 //
 // HCI: success illustration, clear next steps, back-to-login CTA.
@@ -49,7 +49,7 @@ class PasswordResetSentScreen extends StatelessWidget {
               const SizedBox(height: 32),
 
               Text('Check Your Email',
-                style: GoogleFonts.lexend(
+                style: GoogleFonts.plusJakartaSans(
                   fontSize: 28, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
               const SizedBox(height: 12),
               Text(
@@ -60,7 +60,7 @@ class PasswordResetSentScreen extends StatelessWidget {
                     : 'We\'ve sent an email to:\n$email\n\n'
                         'Click the link in the email to continue. '
                         'If you don\'t see it, check your spam or junk folder.',
-                style: GoogleFonts.lexend(
+                style: GoogleFonts.plusJakartaSans(
                   fontSize: 14, color: AppColors.textSecondaryLight, height: 1.6),
                 textAlign: TextAlign.center,
               ),
@@ -75,7 +75,7 @@ class PasswordResetSentScreen extends StatelessWidget {
               TextButton(
                 onPressed: () => context.go(RouteNames.guestDiscover),
                 child: Text('Explore while you wait',
-                  style: GoogleFonts.lexend(
+                  style: GoogleFonts.plusJakartaSans(
                     fontSize: 13, color: AppColors.textSecondaryLight)),
               ),
                 ],
@@ -87,3 +87,4 @@ class PasswordResetSentScreen extends StatelessWidget {
     );
   }
 }
+

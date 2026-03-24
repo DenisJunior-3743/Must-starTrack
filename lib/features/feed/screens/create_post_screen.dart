@@ -1,19 +1,19 @@
-// lib/features/feed/screens/create_post_screen.dart
+﻿// lib/features/feed/screens/create_post_screen.dart
 //
-// MUST StarTrack — Create Post Screen (Phase 3)
+// MUST StarTrack â€” Create Post Screen (Phase 3)
 //
 // Matches create_project_post.html exactly:
-//   • Title, description, category + faculty dropdowns
-//   • Tag chip input (reuses SkillChipInput)
-//   • Media upload area with upload progress indicator
-//   • Visibility radio group (Public / Followers / Collaborators)
-//   • Sticky bottom bar: Publish + save as draft
+//   â€¢ Title, description, category + faculty dropdowns
+//   â€¢ Tag chip input (reuses SkillChipInput)
+//   â€¢ Media upload area with upload progress indicator
+//   â€¢ Visibility radio group (Public / Followers / Collaborators)
+//   â€¢ Sticky bottom bar: Publish + save as draft
 //
 // HCI:
-//   • Feedback: upload progress bar per file
-//   • Constraints: publish blocked until title filled
-//   • Affordance: dashed upload box signals droppable area
-//   • Visibility of system status: compression % shown per file
+//   â€¢ Feedback: upload progress bar per file
+//   â€¢ Constraints: publish blocked until title filled
+//   â€¢ Affordance: dashed upload box signals droppable area
+//   â€¢ Visibility of system status: compression % shown per file
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -32,16 +32,22 @@ import '../../../core/constants/app_dimensions.dart';
 import '../../../core/constants/app_enums.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../core/network/connectivity_service.dart';
+import '../../../core/router/route_guards.dart';
 import '../../../core/utils/media_path_utils.dart';
+import '../../../data/local/dao/post_dao.dart';
+import '../../../data/local/dao/sync_queue_dao.dart';
 import '../../../data/local/dao/user_dao.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/models/user_model.dart';
+import '../../../data/remote/sync_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
 import '../../shared/hci_components/st_form_widgets.dart';
 import '../bloc/feed_cubit.dart';
 
 class CreatePostScreen extends StatefulWidget {
-  const CreatePostScreen({super.key});
+  const CreatePostScreen({super.key, this.existingPost});
+
+  final PostModel? existingPost;
 
   @override
   State<CreatePostScreen> createState() => _CreatePostScreenState();
@@ -51,19 +57,33 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
+  final _qualificationsCtrl = TextEditingController();
+  final _deadlineCtrl = TextEditingController();
+  final _youtubeCtrl = TextEditingController();
 
   String _category = 'Innovation';
-  String _faculty = 'Computing and Informatics';
+  String? _faculty = 'Computing and Informatics';
+  List<String> _selectedFaculties = [];
   String _type = 'project';
   PostVisibility _visibility = PostVisibility.public;
   List<String> _tags = [];
   final List<_UploadItem> _uploads = [];
+  List<_LinkItem> _linkItems = [];
+  String _qualifications = '';
+  DateTime? _deadline;
   bool _publishing = false;
 
   final _imagePicker = ImagePicker();
   final _uuid = const Uuid();
 
+  bool get _isEditing => widget.existingPost != null;
+
+  bool get _isLecturer =>
+      sl<AuthCubit>().currentUser?.isLecturer == true ||
+      sl<RouteGuards>().currentRole == UserRole.lecturer;
+
   static const int _maxFileSizeBytes = 50 * 1024 * 1024;
+  static const int _maxImageSizeBytes = 1536 * 1024; // 1.5 MB
 
   static const _categories = ['Innovation', 'Research', 'Software', 'Design', 'Hardware', 'Data Analysis'];
   static const _faculties = [
@@ -76,10 +96,50 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _qualificationsCtrl.addListener(() => _qualifications = _qualificationsCtrl.text);
+    _seedFromExistingPost();
+    // Lecturers can only post opportunities — lock the type.
+    if (_isLecturer && _type != 'opportunity') {
+      _type = 'opportunity';
+    }
+  }
+
+  @override
   void dispose() {
     _titleCtrl.dispose();
     _descCtrl.dispose();
+    _qualificationsCtrl.dispose();
+    _deadlineCtrl.dispose();
+    _youtubeCtrl.dispose();
     super.dispose();
+  }
+
+  void _seedFromExistingPost() {
+    final post = widget.existingPost;
+    if (post == null) {
+      return;
+    }
+
+    _titleCtrl.text = post.title;
+    _descCtrl.text = post.description ?? '';
+    _category = _categories.contains(post.category) ? post.category! : _category;
+    _faculty = post.faculty;
+    _type = post.type;
+    _visibility = post.visibility;
+    _tags = List<String>.from(post.tags);
+    _linkItems = post.externalLinks.map((m) => _LinkItem(url: m['url'] ?? '', description: m['description'] ?? '')).toList();
+    _qualifications = post.areaOfExpertise ?? '';
+    _qualificationsCtrl.text = _qualifications;
+    _deadline = post.opportunityDeadline;
+    // Seed multi-faculty selection for opportunities.
+    if (_type == 'opportunity' && _faculty != null) {
+      _selectedFaculties = _faculty!.split(', ').where((f) => f.isNotEmpty).toList();
+    }
+    _deadlineCtrl.text = _deadline != null ? '${_deadline!.year}-${_deadline!.month.toString().padLeft(2,'0')}-${_deadline!.day.toString().padLeft(2,'0')}' : '';
+    _youtubeCtrl.text = post.youtubeUrl ?? '';
+    _uploads.addAll(post.mediaUrls.map(_uploadItemFromSource));
   }
 
   Future<void> _pickMedia() async {
@@ -122,7 +182,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
   Future<void> _pickVideo() async {
     try {
-      final file = await _imagePicker.pickVideo(source: ImageSource.gallery);
+      final file = await _imagePicker.pickVideo(
+        source: ImageSource.gallery,
+        maxDuration: const Duration(minutes: 2),
+      );
       if (file == null) return;
       await _addPickedFiles([file], isVideo: true);
     } on PlatformException {
@@ -144,7 +207,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   }
 
   Future<void> _pickVideoWithImagePickerFallback() async {
-    final file = await _imagePicker.pickVideo(source: ImageSource.gallery);
+    final file = await _imagePicker.pickVideo(
+      source: ImageSource.gallery,
+      maxDuration: const Duration(minutes: 2),
+    );
     if (file == null) return;
     await _addPickedFiles([file], isVideo: true);
     _showPickerMessage('Using compatibility video picker for this device.');
@@ -180,7 +246,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         continue;
       }
       final fileSize = await local.length();
-      if (fileSize > _maxFileSizeBytes) {
+      final sizeLimit = isVideo ? _maxFileSizeBytes : _maxImageSizeBytes;
+      if (fileSize > sizeLimit) {
         await local.delete().catchError((_) => local);
         rejected.add(picked.name);
         continue;
@@ -188,6 +255,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       items.add(_UploadItem(
         id: _uuid.v4(),
         file: local,
+        source: local.path,
         name: picked.name,
         progress: 0,
         isVideo: isVideo,
@@ -258,19 +326,21 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   }
 
   Future<UserModel?> _resolvePublishingUser() async {
-    final currentUser = sl<AuthCubit>().currentUser;
-    if (currentUser == null) {
-      return null;
+    // Primary: global AuthCubit state (set after login / registration).
+    final fromCubit = sl<AuthCubit>().currentUser;
+    if (fromCubit != null) {
+      final userDao = sl<UserDao>();
+      final existing = await userDao.getUserById(fromCubit.id);
+      if (existing != null) return existing;
+      await userDao.insertUser(fromCubit);
+      return fromCubit;
     }
 
-    final userDao = sl<UserDao>();
-    final existing = await userDao.getUserById(currentUser.id);
-    if (existing != null) {
-      return existing;
-    }
-
-    await userDao.insertUser(currentUser);
-    return currentUser;
+    // Fallback: the user authenticated via a screen that still uses a local
+    // AuthCubit (e.g. register steps 1-2). Guards always store the uid.
+    final uid = sl<RouteGuards>().currentUserId;
+    if (uid == null || uid.isEmpty) return null;
+    return sl<UserDao>().getUserById(uid);
   }
 
   Future<bool> _isOffline() async {
@@ -304,30 +374,61 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     setState(() => _publishing = true);
 
     final wasOffline = await _isOffline();
-    final mediaUrls = _uploads.map((upload) => upload.file.path).toList();
+    final mediaUrls = _uploads.map((upload) => upload.source).toList();
+    final now = DateTime.now();
 
-    final post = PostModel(
-      id: _uuid.v4(),
-      authorId: publishingUser.id,
-      authorName: publishingUser.displayName,
-      authorPhotoUrl: publishingUser.photoUrl,
-      authorRole: publishingUser.role.name,
-      type: _type,
-      title: _titleCtrl.text.trim(),
-      description: _descCtrl.text.trim(),
-      category: _category,
-      faculty: _faculty,
-      tags: _tags,
-      skillsUsed: const [],
-      visibility: _visibility,
-      mediaUrls: mediaUrls,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    );
+    final post = widget.existingPost?.copyWith(
+          authorId: publishingUser.id,
+          authorName: publishingUser.displayName,
+          authorPhotoUrl: publishingUser.photoUrl,
+          authorRole: publishingUser.role.name,
+          type: _type,
+          title: _titleCtrl.text.trim(),
+          description: _descCtrl.text.trim(),
+          category: _type == 'project' ? _category : null,
+          faculty: _type == 'opportunity'
+              ? (_selectedFaculties.isEmpty ? null : _selectedFaculties.join(', '))
+              : _faculty,
+          tags: _type == 'project' ? _tags : [],
+          skillsUsed: _tags,
+          youtubeUrl: _youtubeCtrl.text.trim().isNotEmpty ? _youtubeCtrl.text.trim() : null,
+          visibility: _visibility,
+          mediaUrls: _type == 'project' ? mediaUrls : [],
+          externalLinks: _linkItems.map((l) => {'url': l.url, 'description': l.description}).toList(),
+          areaOfExpertise: _type == 'opportunity' ? _qualifications : null,
+          opportunityDeadline: _type == 'opportunity' ? _deadline : null,
+          updatedAt: now,
+        ) ??
+        PostModel(
+          id: _uuid.v4(),
+          authorId: publishingUser.id,
+          authorName: publishingUser.displayName,
+          authorPhotoUrl: publishingUser.photoUrl,
+          authorRole: publishingUser.role.name,
+          type: _type,
+          title: _titleCtrl.text.trim(),
+          description: _descCtrl.text.trim(),
+          category: _type == 'project' ? _category : null,
+          faculty: _type == 'opportunity'
+              ? (_selectedFaculties.isEmpty ? null : _selectedFaculties.join(', '))
+              : _faculty,
+          tags: _type == 'project' ? _tags : [],
+          skillsUsed: _tags,
+          youtubeUrl: _youtubeCtrl.text.trim().isNotEmpty ? _youtubeCtrl.text.trim() : null,
+          visibility: _visibility,
+          mediaUrls: _type == 'project' ? mediaUrls : [],
+          externalLinks: _linkItems.map((l) => {'url': l.url, 'description': l.description}).toList(),
+          areaOfExpertise: _type == 'opportunity' ? _qualifications : null,
+          opportunityDeadline: _type == 'opportunity' ? _deadline : null,
+          createdAt: now,
+          updatedAt: now,
+        );
 
     await _cacheUploadedImages(mediaUrls);
 
-    final result = await feedCubit.publishPost(post);
+    final result = _isEditing
+        ? await _updateExistingPost(post, wasOffline: wasOffline)
+        : await feedCubit.publishPost(post);
     if (!mounted) return;
 
     setState(() => _publishing = false);
@@ -335,7 +436,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     messenger.showSnackBar(
       SnackBar(
         content: Text(
-          wasOffline && _uploads.isNotEmpty
+          wasOffline && _uploads.any((upload) => upload.hasLocalFile)
               ? 'You are offline. Your post is saved on this device and will upload automatically when network returns.'
               : result.message,
         ),
@@ -345,7 +446,46 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     );
 
     if (result.savedLocally) {
-      context.pop();
+      context.pop(true);
+    }
+  }
+
+  Future<PublishPostResult> _updateExistingPost(
+    PostModel post, {
+    required bool wasOffline,
+  }) async {
+    try {
+      await sl<PostDao>().updatePost(post);
+      await sl<SyncQueueDao>().enqueue(
+        operation: 'update',
+        entity: 'posts',
+        entityId: post.id,
+        payload: post.toMap(),
+      );
+
+      final syncResult = await sl<SyncService>().processPendingSync();
+      if (syncResult.failed == 0 && syncResult.remaining == 0) {
+        return const PublishPostResult(
+          savedLocally: true,
+          syncedRemotely: true,
+          message: 'Post updated successfully.',
+        );
+      }
+
+      return PublishPostResult(
+        savedLocally: true,
+        syncedRemotely: false,
+        message: wasOffline
+            ? 'Changes saved locally and will sync when you are back online.'
+            : 'Changes saved locally. Firebase sync is still pending.',
+      );
+    } catch (error) {
+      debugPrint('Update post error: $error');
+      return const PublishPostResult(
+        savedLocally: false,
+        syncedRemotely: false,
+        message: 'Could not update your post right now. Please try again.',
+      );
     }
   }
 
@@ -377,16 +517,22 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           onPressed: () => context.pop(),
           tooltip: 'Discard',
         ),
-        title: Text(_type == 'project' ? 'New Project' : 'New Opportunity'),
-        actions: [
-          TextButton(
-            onPressed: () {}, //  save as draft
-            child: Text('Drafts',
-              style: GoogleFonts.lexend(
-                fontSize: 14, fontWeight: FontWeight.w700,
-                color: AppColors.primary)),
-          ),
-        ],
+        title: Text(
+          _isEditing
+              ? (_type == 'project' ? 'Edit Project' : 'Edit Opportunity')
+              : (_type == 'project' ? 'New Project' : 'New Opportunity'),
+        ),
+        actions: _isEditing
+            ? const []
+            : [
+                TextButton(
+                  onPressed: () {},
+                  child: Text('Drafts',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 14, fontWeight: FontWeight.w700,
+                      color: AppColors.primary)),
+                ),
+              ],
       ),
       body: Form(
         key: _formKey,
@@ -395,60 +541,62 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Type selector ──────────────────────────────────────────
-              const _SectionHeader('Post Type'),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: _types.map((t) {
-                    final (value, label, icon) = t;
-                    final active = _type == value;
-                    return Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(right: value == 'project' ? 8 : 0),
-                        child: GestureDetector(
-                          onTap: () => setState(() => _type = value),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              color: active
-                                  ? AppColors.primary
-                                  : Theme.of(context).cardColor,
-                              borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-                              border: Border.all(
-                                color: active ? AppColors.primary : AppColors.borderLight),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(icon, size: 18,
-                                  color: active ? Colors.white : AppColors.textSecondaryLight),
-                                const SizedBox(width: 8),
-                                Text(label,
-                                  style: GoogleFonts.lexend(
-                                    fontSize: 13, fontWeight: FontWeight.w600,
-                                    color: active ? Colors.white : AppColors.textSecondaryLight)),
-                              ],
+              // Type selector (hidden for lecturers  they can only post opportunities)
+              if (!_isLecturer) ...[
+                const _SectionHeader('Post Type'),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: _types.map((t) {
+                      final (value, label, icon) = t;
+                      final active = _type == value;
+                      return Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.only(right: value == 'project' ? 8 : 0),
+                          child: GestureDetector(
+                            onTap: () => setState(() => _type = value),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                color: active
+                                    ? AppColors.primary
+                                    : Theme.of(context).cardColor,
+                                borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+                                border: Border.all(
+                                  color: active ? AppColors.primary : AppColors.borderLight),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(icon, size: 18,
+                                    color: active ? Colors.white : AppColors.textSecondaryLight),
+                                  const SizedBox(width: 8),
+                                  Text(label,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 13, fontWeight: FontWeight.w600,
+                                      color: active ? Colors.white : AppColors.textSecondaryLight)),
+                                ],
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    );
-                  }).toList(),
+                      );
+                    }).toList(),
+                  ),
                 ),
-              ),
+              ],
 
-              // ── Project details ────────────────────────────────────────
-              const _SectionHeader('Project Details'),
+              // â”€â”€ Details â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+              const _SectionHeader('Details'),
 
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
                   children: [
                     StTextField(
-                      label: 'Project Title',
-                      hint: 'Enter a catchy name for your project',
+                      label: _type == 'project' ? 'Project Title' : 'Project Name',
+                      hint: _type == 'project' ? 'Enter a catchy name for your project' : 'Name of the project needing help',
                       controller: _titleCtrl,
                       textInputAction: TextInputAction.next,
                       validator: (v) => (v == null || v.trim().isEmpty)
@@ -464,54 +612,124 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                     ),
                     const SizedBox(height: AppDimensions.spacingMd),
 
-                    // Category + Faculty row
-                    Row(
-                      children: [
-                        Expanded(
-                          child: StDropdown<String>(
-                            label: 'Category',
-                            value: _category,
-                            items: _categories.map((c) =>
-                              DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis))).toList(),
-                            onChanged: (v) => setState(() => _category = v ?? _category),
+                    if (_type == 'project') ...[
+                      // Category + Faculty row
+                      Row(
+                        children: [
+                          Expanded(
+                            child: StDropdown<String>(
+                              label: 'Category',
+                              value: _category,
+                              items: _categories.map((c) =>
+                                DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis))).toList(),
+                              onChanged: (v) => setState(() => _category = v ?? _category),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: StDropdown<String>(
-                            label: 'Faculty',
-                            value: _faculty,
-                            items: _faculties.map((f) =>
-                              DropdownMenuItem(value: f, child: Text(f, overflow: TextOverflow.ellipsis))).toList(),
-                            onChanged: (v) => setState(() => _faculty = v ?? _faculty),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: StDropdown<String>(
+                              label: 'Faculty',
+                              value: _faculty,
+                              items: _faculties.map((f) =>
+                                DropdownMenuItem(value: f, child: Text(f, overflow: TextOverflow.ellipsis))).toList(),
+                              onChanged: (v) => setState(() => _faculty = v ?? _faculty),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppDimensions.spacingMd),
+                        ],
+                      ),
+                      const SizedBox(height: AppDimensions.spacingMd),
 
-                    // Tags
-                    SkillChipInput(
-                      label: 'Tags',
-                      onChanged: (t) => setState(() => _tags = t),
-                    ),
+                      // Tags
+                      SkillChipInput(
+                        label: 'Tags',
+                        initialSkills: _tags,
+                        onChanged: (t) => setState(() => _tags = t),
+                      ),
+                    ] else ...[
+                      // Qualifications
+                      StTextField(
+                        label: 'Qualifications',
+                        hint: 'Required skills or experience',
+                        controller: _qualificationsCtrl,
+                        maxLines: 3,
+                        textInputAction: TextInputAction.next,
+                      ),
+                      const SizedBox(height: AppDimensions.spacingMd),
+
+                      // Faculty — multi-select for opportunities
+                      _FacultyMultiSelect(
+                        selectedFaculties: _selectedFaculties,
+                        onChanged: (faculties) =>
+                            setState(() => _selectedFaculties = faculties),
+                      ),
+                      const SizedBox(height: AppDimensions.spacingMd),
+
+                      // Deadline
+                      GestureDetector(
+                        onTap: () async {
+                          final date = await showDatePicker(
+                            context: context,
+                            initialDate: _deadline ?? DateTime.now().add(const Duration(days: 30)),
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                          );
+                          if (date != null) {
+                            setState(() {
+                              _deadline = date;
+                              _deadlineCtrl.text = '${date.year}-${date.month.toString().padLeft(2,'0')}-${date.day.toString().padLeft(2,'0')}';
+                            });
+                          }
+                        },
+                        child: AbsorbPointer(
+                          child: StTextField(
+                            label: 'Deadline',
+                            hint: 'Select deadline date',
+                            controller: _deadlineCtrl,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
 
-              // ── Media upload ───────────────────────────────────────────
-              const _SectionHeader('Project Media'),
+              // â”€â”€ Media upload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+              if (_type == 'project') ...[
+                const _SectionHeader('Project Media'),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: _UploadArea(
+                    onTap: _pickMedia,
+                    items: _uploads,
+                    onRemove: (id) => setState(() =>
+                      _uploads.removeWhere((u) => u.id == id)),
+                  ),
+                ),
+              ],
+
+              // â”€â”€ Links â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+              const _SectionHeader('Links'),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _UploadArea(
-                  onTap: _pickMedia,
-                  items: _uploads,
-                  onRemove: (id) => setState(() =>
-                    _uploads.removeWhere((u) => u.id == id)),
+                child: _LinksArea(
+                  onAdd: () => setState(() => _linkItems.add(_LinkItem())),
+                  items: _linkItems,
+                  onRemove: (id) => setState(() => _linkItems.removeWhere((l) => l.id == id)),
                 ),
               ),
 
-              // ── Visibility ─────────────────────────────────────────────
+              // â”€â”€ YouTube URL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: StTextField(
+                  controller: _youtubeCtrl,
+                  label: 'YouTube Video URL (optional)',
+                  hint: 'https://youtube.com/watch?v=...',
+                  prefixIcon: const Icon(Icons.play_circle_outline_rounded),
+                ),
+              ),
+
+              // â”€â”€ Visibility â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
               const _SectionHeader('Privacy & Visibility'),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -525,7 +743,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         ),
       ),
 
-      // ── Sticky publish button ──────────────────────────────────────────
+      // â”€â”€ Sticky publish button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       bottomNavigationBar: Container(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         decoration: BoxDecoration(
@@ -535,7 +753,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         child: SafeArea(
           top: false,
           child: StButton(
-            label: _type == 'project' ? 'Publish Project' : 'Publish Opportunity',
+            label: _isEditing
+                ? (_type == 'project' ? 'Save Project Changes' : 'Save Opportunity Changes')
+                : (_type == 'project' ? 'Publish Project' : 'Publish Opportunity'),
             trailingIcon: Icons.rocket_launch_rounded,
             isLoading: _publishing,
             onPressed: _publish,
@@ -546,9 +766,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Section header
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _SectionHeader extends StatelessWidget {
   final String title;
@@ -559,35 +779,40 @@ class _SectionHeader extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
       child: Text(title.toUpperCase(),
-        style: GoogleFonts.lexend(
+        style: GoogleFonts.plusJakartaSans(
           fontSize: 11, fontWeight: FontWeight.w700,
           color: AppColors.textSecondaryLight, letterSpacing: 0.1)),
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Upload area
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _UploadItem {
   final String id;
-  final File file;
+  final File? file;
+  final String source;
   final String name;
-  final double progress; // 0.0 → 1.0
+  final double progress; // 0.0 â†’ 1.0
   final bool isVideo;
 
   const _UploadItem({
     required this.id,
     required this.file,
+    required this.source,
     required this.name,
     required this.progress,
     required this.isVideo,
   });
 
+  bool get hasLocalFile => file != null || isLocalMediaPath(source);
+
   _UploadItem copyWith({
     String? id,
     File? file,
+    String? source,
     String? name,
     double? progress,
     bool? isVideo,
@@ -595,11 +820,45 @@ class _UploadItem {
     return _UploadItem(
       id: id ?? this.id,
       file: file ?? this.file,
+      source: source ?? this.source,
       name: name ?? this.name,
       progress: progress ?? this.progress,
       isVideo: isVideo ?? this.isVideo,
     );
   }
+}
+
+_UploadItem _uploadItemFromSource(String source) {
+  final localPath = source.startsWith('file://')
+      ? Uri.parse(source).toFilePath()
+      : source;
+  final localFile = isLocalMediaPath(source) ? File(localPath) : null;
+  return _UploadItem(
+    id: const Uuid().v4(),
+    file: localFile,
+    source: source,
+    name: _displayNameForMediaSource(source),
+    progress: 0,
+    isVideo: isVideoMediaPath(source),
+  );
+}
+
+String _displayNameForMediaSource(String source) {
+  final uri = Uri.tryParse(source);
+  if (uri != null && uri.pathSegments.isNotEmpty) {
+    return uri.pathSegments.last;
+  }
+
+  final segments = source.split(RegExp(r'[\\/]'));
+  return segments.isNotEmpty ? segments.last : source;
+}
+
+class _LinkItem {
+  final String id;
+  String url;
+  String description;
+
+  _LinkItem({String? id, this.url = '', this.description = ''}) : id = id ?? const Uuid().v4();
 }
 
 class _UploadArea extends StatelessWidget {
@@ -617,29 +876,59 @@ class _UploadArea extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Drop zone
+        // Drop zone — modern card with subtle gradient accent
         GestureDetector(
           onTap: onTap,
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 32),
+            padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
             decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
+              color: AppColors.primaryTint10,
               border: Border.all(
-                color: AppColors.borderLight, width: 2,
-                style: BorderStyle.solid),
-              borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+                color: AppColors.primary.withValues(alpha: 0.35),
+                width: 1.5,
+              ),
+              borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
             ),
             child: Column(
               children: [
-                const Icon(Icons.cloud_upload_rounded,
-                    size: 40, color: AppColors.primary),
-                const SizedBox(height: 8),
-                Text('Upload Photos or Videos',
-                  style: GoogleFonts.lexend(fontWeight: FontWeight.w600)),
-                Text('Maximum file size: 50MB',
-                  style: GoogleFonts.lexend(
-                    fontSize: 12, color: AppColors.textSecondaryLight)),
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.35),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.cloud_upload_rounded,
+                    size: 28,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Tap to upload photos or videos',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'JPG, PNG, MP4 · Max 50 MB per file',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    color: AppColors.textSecondaryLight,
+                  ),
+                ),
               ],
             ),
           ),
@@ -665,6 +954,19 @@ class _UploadRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final isReady = item.progress <= 0;
     final isDone = item.progress >= 1.0;
+    final previewPath = item.source.startsWith('file://')
+      ? Uri.parse(item.source).toFilePath()
+      : item.source;
+    final statusLabel = isDone
+      ? 'Uploaded'
+      : item.hasLocalFile
+        ? 'Ready to sync'
+        : 'Attached';
+    final statusColor = isDone
+      ? AppColors.success
+      : item.hasLocalFile
+        ? AppColors.info
+        : AppColors.primary;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -678,15 +980,20 @@ class _UploadRow extends StatelessWidget {
         children: [
           // Thumbnail
           ClipRRect(
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(10),
             child: SizedBox(
-              width: 48, height: 48,
+              width: 56, height: 56,
               child: item.isVideo
                   ? Container(
                       color: AppColors.primaryTint10,
-                      child: const Icon(Icons.videocam_rounded,
-                          color: AppColors.primary))
-                  : Image.file(item.file, fit: BoxFit.cover),
+                      child: const Center(
+                        child: Icon(Icons.videocam_rounded,
+                            size: 28, color: AppColors.primary),
+                      ),
+                    )
+                  : item.hasLocalFile
+                    ? Image.file(File(previewPath), fit: BoxFit.cover)
+                    : Image.network(item.source, fit: BoxFit.cover),
             ),
           ),
           const SizedBox(width: 12),
@@ -700,23 +1007,15 @@ class _UploadRow extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(item.name,
-                        style: GoogleFonts.lexend(
+                        style: GoogleFonts.plusJakartaSans(
                           fontSize: 12, fontWeight: FontWeight.w500),
                         overflow: TextOverflow.ellipsis),
                     ),
                     Text(
-                      isDone
-                          ? 'Uploaded'
-                          : isReady
-                              ? 'Ready to sync'
-                              : 'Uploading…',
-                      style: GoogleFonts.lexend(
+                      isReady ? statusLabel : 'Uploadingâ€¦',
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 10, fontWeight: FontWeight.w700,
-                        color: isDone
-                            ? AppColors.success
-                            : isReady
-                                ? AppColors.info
-                                : AppColors.warning),
+                        color: isReady ? statusColor : AppColors.warning),
                     ),
                   ],
                 ),
@@ -746,9 +1045,158 @@ class _UploadRow extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Links area
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+class _LinksArea extends StatelessWidget {
+  final VoidCallback onAdd;
+  final List<_LinkItem> items;
+  final ValueChanged<String> onRemove;
+
+  const _LinksArea({
+    required this.onAdd,
+    required this.items,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        ...items.map((item) => _LinkRow(item: item, onRemove: onRemove)),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: onAdd,
+          icon: const Icon(Icons.add_link),
+          label: const Text('Add Link'),
+        ),
+      ],
+    );
+  }
+}
+
+class _LinkRow extends StatelessWidget {
+  final _LinkItem item;
+  final ValueChanged<String> onRemove;
+
+  const _LinkRow({required this.item, required this.onRemove});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        border: Border.all(color: AppColors.borderLight),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
+      ),
+      child: Column(
+        children: [
+          TextField(
+            decoration: const InputDecoration(labelText: 'URL'),
+            onChanged: (v) => item.url = v,
+            controller: TextEditingController(text: item.url),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            decoration: const InputDecoration(labelText: 'Description'),
+            onChanged: (v) => item.description = v,
+            controller: TextEditingController(text: item.description),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: IconButton(
+              icon: const Icon(Icons.close_rounded, color: AppColors.textSecondaryLight),
+              onPressed: () => onRemove(item.id),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Visibility picker
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
 // ─────────────────────────────────────────────────────────────────────────────
+// Faculty multi-select (for opportunities)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _FacultyMultiSelect extends StatelessWidget {
+  final List<String> selectedFaculties;
+  final ValueChanged<List<String>> onChanged;
+
+  const _FacultyMultiSelect({
+    required this.selectedFaculties,
+    required this.onChanged,
+  });
+
+  static const _faculties = [
+    'Computing and Informatics',
+    'Applied Sciences and Technology',
+    'Medicine',
+    'Business and Management Sciences',
+    'Science',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Target Faculties',
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Select one or more faculties this opportunity applies to',
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 11,
+            color: AppColors.textSecondaryLight,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: _faculties.map((faculty) {
+            final selected = selectedFaculties.contains(faculty);
+            return FilterChip(
+              label: Text(
+                faculty,
+                style: GoogleFonts.plusJakartaSans(fontSize: 12),
+              ),
+              selected: selected,
+              selectedColor: AppColors.primaryTint10,
+              checkmarkColor: AppColors.primary,
+              side: BorderSide(
+                color: selected ? AppColors.primary : AppColors.borderLight,
+              ),
+              onSelected: (checked) {
+                final updated = List<String>.from(selectedFaculties);
+                if (checked) {
+                  updated.add(faculty);
+                } else {
+                  updated.remove(faculty);
+                }
+                onChanged(updated);
+              },
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+}
 
 class _VisibilityPicker extends StatelessWidget {
   final PostVisibility value;
@@ -794,10 +1242,10 @@ class _VisibilityPicker extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(label,
-                          style: GoogleFonts.lexend(
+                          style: GoogleFonts.plusJakartaSans(
                             fontSize: 14, fontWeight: FontWeight.w600)),
                         Text(desc,
-                          style: GoogleFonts.lexend(
+                          style: GoogleFonts.plusJakartaSans(
                             fontSize: 11, color: AppColors.textSecondaryLight)),
                       ],
                     ),
@@ -819,3 +1267,4 @@ class _VisibilityPicker extends StatelessWidget {
     );
   }
 }
+

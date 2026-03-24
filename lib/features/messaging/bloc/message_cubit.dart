@@ -29,6 +29,8 @@ import 'package:uuid/uuid.dart';
 
 import '../../../data/local/dao/message_dao.dart';
 import '../../../data/local/dao/sync_queue_dao.dart';
+import '../../../data/local/dao/user_dao.dart';
+import '../../../data/remote/sync_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
 
 // ── States ────────────────────────────────────────────────────────────────────
@@ -49,15 +51,17 @@ class ConversationsLoading extends MessageState {
 
 class ConversationsLoaded extends MessageState {
   final List<ConversationSummary> conversations;
+  final List<CollaborationInboxItem> requests;
   final bool hasMore;
 
   const ConversationsLoaded({
     required this.conversations,
+    this.requests = const [],
     this.hasMore = false,
   });
 
   @override
-  List<Object?> get props => [conversations, hasMore];
+  List<Object?> get props => [conversations, requests, hasMore];
 }
 
 class ThreadLoading extends MessageState {
@@ -66,14 +70,20 @@ class ThreadLoading extends MessageState {
 
 class ThreadLoaded extends MessageState {
   final String conversationId;
+  final String peerId;
   final String peerName;
+  final String? peerPhotoUrl;
+  final bool isPeerLecturer;
   final List<MessageModel> messages;
   final bool hasMore;
   final bool isLoadingMore;
 
   const ThreadLoaded({
     required this.conversationId,
+    required this.peerId,
     required this.peerName,
+    this.peerPhotoUrl,
+    this.isPeerLecturer = false,
     required this.messages,
     this.hasMore = false,
     this.isLoadingMore = false,
@@ -85,14 +95,26 @@ class ThreadLoaded extends MessageState {
     bool? isLoadingMore,
   }) => ThreadLoaded(
     conversationId: conversationId,
+    peerId: peerId,
     peerName: peerName,
+    peerPhotoUrl: peerPhotoUrl,
+    isPeerLecturer: isPeerLecturer,
     messages: messages ?? this.messages,
     hasMore: hasMore ?? this.hasMore,
     isLoadingMore: isLoadingMore ?? this.isLoadingMore,
   );
 
   @override
-  List<Object?> get props => [conversationId, messages, hasMore, isLoadingMore];
+  List<Object?> get props => [
+        conversationId,
+        peerId,
+        peerName,
+        peerPhotoUrl,
+        isPeerLecturer,
+        messages,
+        hasMore,
+        isLoadingMore,
+      ];
 }
 
 class MessageError extends MessageState {
@@ -109,7 +131,10 @@ class MessageCubit extends Cubit<MessageState> {
   final MessageDao _messageDao;
   final SyncQueueDao _syncDao;
   final AuthCubit _authCubit;
+  final UserDao _userDao;
+  final SyncService _syncService;
 
+  String? get currentUserId => _authCubit.currentUser?.id;
   String? get _currentUserId => _authCubit.currentUser?.id;
 
   static const _pageSize = 40;
@@ -119,9 +144,13 @@ class MessageCubit extends Cubit<MessageState> {
     required MessageDao messageDao,
     required SyncQueueDao syncDao,
     required AuthCubit authCubit,
+    required UserDao userDao,
+    required SyncService syncService,
   })  : _messageDao = messageDao,
         _syncDao = syncDao,
         _authCubit = authCubit,
+        _userDao = userDao,
+        _syncService = syncService,
         super(const MessageInitial());
 
   // ── Load conversations ────────────────────────────────────────────────────
@@ -129,17 +158,23 @@ class MessageCubit extends Cubit<MessageState> {
   Future<void> loadConversations() async {
     final uid = _currentUserId;
     if (uid == null || uid.isEmpty) {
-      emit(const ConversationsLoaded(conversations: []));
+      emit(const ConversationsLoaded(conversations: [], requests: []));
       return;
     }
     emit(const ConversationsLoading());
     try {
+      await _syncService.syncRemoteToLocal();
       final convos = await _messageDao.getConversations(
         userId: uid,
         pageSize: _pageSize,
       );
+      final requests = await _messageDao.getCollaborationRequests(
+        userId: uid,
+        limit: _pageSize,
+      );
       emit(ConversationsLoaded(
         conversations: convos,
+        requests: requests,
         hasMore: convos.length == _pageSize,
       ));
     } catch (e) {
@@ -164,13 +199,34 @@ class MessageCubit extends Cubit<MessageState> {
         return;
       }
 
+      var resolvedPeerName = peerName.trim();
+      var resolvedPeerPhotoUrl = peerPhotoUrl;
+      var resolvedIsPeerLecturer = isPeerLecturer;
+
+      if (resolvedPeerName.isEmpty || resolvedPeerPhotoUrl == null) {
+        final peer = await _userDao.getUserById(peerId);
+        if (peer != null) {
+          resolvedPeerName = resolvedPeerName.isEmpty
+              ? (peer.displayName?.trim().isNotEmpty == true
+                  ? peer.displayName!.trim()
+                  : peer.email)
+              : resolvedPeerName;
+          resolvedPeerPhotoUrl ??= peer.photoUrl;
+          resolvedIsPeerLecturer = resolvedIsPeerLecturer || peer.isLecturer;
+        }
+      }
+
+      if (resolvedPeerName.isEmpty) {
+        resolvedPeerName = 'Conversation';
+      }
+
       // Ensure conversation exists (creates if first time)
       final convoId = await _messageDao.ensureConversation(
         userId: uid,
         peerId: peerId,
-        peerName: peerName,
-        peerPhotoUrl: peerPhotoUrl,
-        isPeerLecturer: isPeerLecturer,
+        peerName: resolvedPeerName,
+        peerPhotoUrl: resolvedPeerPhotoUrl,
+        isPeerLecturer: resolvedIsPeerLecturer,
       );
 
       final messages = await _messageDao.getMessages(
@@ -183,10 +239,17 @@ class MessageCubit extends Cubit<MessageState> {
         conversationId: convoId,
         userId: uid,
       );
+      await _syncService.markConversationReadRemote(
+        conversationId: convoId,
+        userId: uid,
+      );
 
       emit(ThreadLoaded(
         conversationId: convoId,
-        peerName: peerName,
+        peerId: peerId,
+        peerName: resolvedPeerName,
+        peerPhotoUrl: resolvedPeerPhotoUrl,
+        isPeerLecturer: resolvedIsPeerLecturer,
         messages: messages,
         hasMore: messages.length == _pageSize,
       ));
@@ -266,6 +329,7 @@ class MessageCubit extends Cubit<MessageState> {
           'created_at': msg.createdAt.toIso8601String(),
         },
       );
+      await _syncService.processPendingSync();
     } catch (e) {
       // Rollback optimistic message on failure
       final rolled = (state as ThreadLoaded).messages
@@ -291,6 +355,7 @@ class MessageCubit extends Cubit<MessageState> {
       operation: 'delete',
       payload: {},
     );
+    await _syncService.processPendingSync();
   }
 
   // ── Search conversations ──────────────────────────────────────────────────
@@ -302,13 +367,39 @@ class MessageCubit extends Cubit<MessageState> {
     }
     try {
       final uid = _currentUserId;
+      if (uid == null || uid.isEmpty) {
+        emit(const ConversationsLoaded(conversations: [], requests: []));
+        return;
+      }
       final results = await _messageDao.searchConversations(
-        userId: uid ?? '',
+        userId: uid,
         query: query,
       );
-      emit(ConversationsLoaded(conversations: results));
+      final requests = await _messageDao.getCollaborationRequests(
+        userId: uid,
+        limit: _pageSize,
+      );
+      final lowered = query.toLowerCase();
+      final matchingRequests = requests.where((request) {
+        return request.counterpartName.toLowerCase().contains(lowered) ||
+            request.postTitle.toLowerCase().contains(lowered) ||
+            request.message.toLowerCase().contains(lowered);
+      }).toList();
+      emit(ConversationsLoaded(conversations: results, requests: matchingRequests));
     } catch (e) {
       emit(MessageError('Search failed: $e'));
     }
+  }
+
+  Future<void> deleteConversation(String conversationId) async {
+    await _messageDao.deleteConversation(conversationId);
+    await _syncDao.enqueue(
+      entity: 'conversation',
+      entityId: conversationId,
+      operation: 'delete',
+      payload: const {},
+    );
+    await _syncService.processPendingSync();
+    await loadConversations();
   }
 }

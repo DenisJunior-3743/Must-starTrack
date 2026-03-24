@@ -1,40 +1,16 @@
-// lib/data/local/dao/message_dao.dart
-//
-// MUST StarTrack — Message DAO (Phase 4)
-//
-// Handles all SQLite operations for direct messages:
-//   • insertMessage         — writes new message, updates conversation last_message_at
-//   • getConversations      — paginated list of conversations with last message preview
-//   • getMessages           — cursor-based paginated message thread
-//   • markConversationRead  — clears unread count for a conversation
-//   • deleteMessage         — soft delete (sets is_deleted=1)
-//   • deleteConversation    — removes all messages + conversation row
-//   • getUnreadCount        — badge count for nav bar
-//   • searchConversations   — search by peer display name
-//
-// Offline-first:
-//   Writes go to SQLite first. Phase 5 will enqueue to SyncQueueDao
-//   and propagate to Firestore. Firestore push notification arrives via
-//   FCM → writes to SQLite → notifies MessagingCubit via stream.
-//
-// Schema tables used (defined in database_schema.dart):
-//   conversations(id, user_id, peer_id, peer_name, peer_photo_url,
-//                 last_message, last_message_at, unread_count, is_peer_lecturer)
-//   messages(id, conversation_id, sender_id, content, message_type,
-//            file_url, file_name, file_size, created_at, is_read, is_deleted)
+import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
 
 import '../database_helper.dart';
-
-// ── Message model ─────────────────────────────────────────────────────────────
+import '../schema/database_schema.dart';
 
 class MessageModel {
   final String id;
   final String conversationId;
   final String senderId;
   final String content;
-  final String messageType; // 'text' | 'file' | 'project_link'
+  final String messageType;
   final String? fileUrl;
   final String? fileName;
   final String? fileSize;
@@ -56,37 +32,55 @@ class MessageModel {
     this.isDeleted = false,
   });
 
-  /// Constructs from SQLite row map.
-  factory MessageModel.fromMap(Map<String, dynamic> m) => MessageModel(
-    id: m['id'] as String,
-    conversationId: m['conversation_id'] as String,
-    senderId: m['sender_id'] as String,
-    content: m['content'] as String,
-    messageType: m['message_type'] as String? ?? 'text',
-    fileUrl: m['file_url'] as String?,
-    fileName: m['file_name'] as String?,
-    fileSize: m['file_size'] as String?,
-    createdAt: DateTime.fromMillisecondsSinceEpoch(m['created_at'] as int),
-    isRead: (m['is_read'] as int? ?? 0) == 1,
-    isDeleted: (m['is_deleted'] as int? ?? 0) == 1,
-  );
+  factory MessageModel.fromMap(Map<String, dynamic> map) => MessageModel(
+        id: map['id'] as String,
+        conversationId: (map['conversation_id'] ?? map['thread_id']) as String,
+        senderId: map['sender_id'] as String,
+        content: map['content'] as String? ?? '',
+        messageType: map['message_type'] as String? ?? 'text',
+        fileUrl: map['file_url'] as String? ?? map['media_url'] as String?,
+        fileName: map['file_name'] as String?,
+        fileSize: map['file_size'] as String?,
+        createdAt: _dateFromDb(map['created_at'] ?? map['sent_at']),
+        isRead: (map['is_read'] as int? ?? (map['read_at'] != null ? 1 : 0)) == 1,
+        isDeleted: (map['is_deleted'] as int? ?? 0) == 1,
+      );
 
   Map<String, dynamic> toMap() => {
-    'id': id,
-    'conversation_id': conversationId,
-    'sender_id': senderId,
-    'content': content,
-    'message_type': messageType,
-    'file_url': fileUrl,
-    'file_name': fileName,
-    'file_size': fileSize,
-    'created_at': createdAt.millisecondsSinceEpoch,
-    'is_read': isRead ? 1 : 0,
-    'is_deleted': isDeleted ? 1 : 0,
-  };
-}
+        'id': id,
+        'thread_id': conversationId,
+        'conversation_id': conversationId,
+        'sender_id': senderId,
+        'content': content,
+        'message_type': messageType,
+        'file_url': fileUrl,
+        'file_name': fileName,
+        'file_size': fileSize,
+        'media_url': fileUrl,
+        'created_at': createdAt.millisecondsSinceEpoch,
+        'sent_at': createdAt.toIso8601String(),
+        'status': isRead ? 'read' : 'sent',
+        'is_read': isRead ? 1 : 0,
+        'is_deleted': isDeleted ? 1 : 0,
+      };
 
-// ── Conversation summary model ────────────────────────────────────────────────
+  static DateTime _dateFromDb(dynamic value) {
+    if (value is int) {
+      return DateTime.fromMillisecondsSinceEpoch(value);
+    }
+    if (value is String) {
+      final numeric = int.tryParse(value);
+      if (numeric != null) {
+        return DateTime.fromMillisecondsSinceEpoch(numeric);
+      }
+      final parsed = DateTime.tryParse(value);
+      if (parsed != null) {
+        return parsed;
+      }
+    }
+    return DateTime.now();
+  }
+}
 
 class ConversationSummary {
   final String id;
@@ -109,108 +103,176 @@ class ConversationSummary {
     this.isPeerLecturer = false,
   });
 
-  factory ConversationSummary.fromMap(Map<String, dynamic> m) =>
-      ConversationSummary(
-        id: m['id'] as String,
-        peerId: m['peer_id'] as String,
-        peerName: m['peer_name'] as String,
-        peerPhotoUrl: m['peer_photo_url'] as String?,
-        lastMessage: m['last_message'] as String? ?? '',
-        lastMessageAt: DateTime.fromMillisecondsSinceEpoch(
-            m['last_message_at'] as int),
-        unreadCount: m['unread_count'] as int? ?? 0,
-        isPeerLecturer: (m['is_peer_lecturer'] as int? ?? 0) == 1,
+  factory ConversationSummary.fromMap(Map<String, dynamic> map) => ConversationSummary(
+        id: map['id'] as String,
+        peerId: map['peer_id'] as String,
+        peerName: map['peer_name'] as String? ?? 'Unknown',
+        peerPhotoUrl: map['peer_photo_url'] as String?,
+        lastMessage: map['last_message'] as String? ?? '',
+        lastMessageAt: MessageModel._dateFromDb(map['last_message_at']),
+        unreadCount: map['unread_count'] as int? ?? 0,
+        isPeerLecturer: (map['is_peer_lecturer'] as int? ?? 0) == 1,
       );
 }
 
-// ── DAO ───────────────────────────────────────────────────────────────────────
+class CollaborationInboxItem {
+  final String id;
+  final String counterpartId;
+  final String counterpartName;
+  final String? counterpartPhotoUrl;
+  final String? postId;
+  final String postTitle;
+  final String message;
+  final String status;
+  final bool isIncoming;
+  final DateTime createdAt;
+
+  const CollaborationInboxItem({
+    required this.id,
+    required this.counterpartId,
+    required this.counterpartName,
+    this.counterpartPhotoUrl,
+    this.postId,
+    required this.postTitle,
+    required this.message,
+    required this.status,
+    required this.isIncoming,
+    required this.createdAt,
+  });
+}
+
+class AcceptedPeerCollaboration {
+  final String requestId;
+  final String peerId;
+  final String peerName;
+  final String? peerPhotoUrl;
+  final String peerRole;
+  final String? postId;
+  final String postTitle;
+  final String? postCategory;
+  final List<String> postMediaUrls;
+  final String message;
+  final DateTime acceptedAt;
+
+  const AcceptedPeerCollaboration({
+    required this.requestId,
+    required this.peerId,
+    required this.peerName,
+    this.peerPhotoUrl,
+    required this.peerRole,
+    this.postId,
+    required this.postTitle,
+    this.postCategory,
+    this.postMediaUrls = const [],
+    required this.message,
+    required this.acceptedAt,
+  });
+}
 
 class MessageDao {
   final _db = DatabaseHelper.instance;
 
-  // ── Insert a new message ─────────────────────────────────────────────────
+  Future<void> _ensureThreadRecord({
+    required Database db,
+    required String conversationId,
+    required String userId,
+    required String peerId,
+  }) async {
+    final existing = await db.query(
+      DatabaseSchema.tableMessageThreads,
+      columns: ['id'],
+      where: 'id = ?',
+      whereArgs: [conversationId],
+      limit: 1,
+    );
+    if (existing.isNotEmpty) {
+      return;
+    }
 
-  /// Inserts [message] and updates the parent conversation's preview.
-  /// Runs atomically in a single transaction.
+    final now = DateTime.now().toIso8601String();
+    await db.insert(DatabaseSchema.tableMessageThreads, {
+      'id': conversationId,
+      'participant_ids': '[$userId,$peerId]',
+      'last_message_id': null,
+      'last_message_text': '',
+      'last_message_at': now,
+      'unread_count': 0,
+      'created_at': now,
+      'updated_at': now,
+      'sync_status': 0,
+    });
+  }
+
   Future<void> insertMessage(MessageModel message) async {
     final db = await _db.database;
 
     await db.transaction((txn) async {
-      // 1. Insert message row
       await txn.insert(
-        'messages',
+        DatabaseSchema.tableMessages,
         message.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
 
-      // 2. Update conversation preview + bump unread for peer
       await txn.rawUpdate('''
-        UPDATE conversations
-        SET last_message       = ?,
-            last_message_at    = ?,
-            unread_count       = CASE
-                                   WHEN user_id != ? THEN unread_count + 1
-                                   ELSE 0
-                                 END
+        UPDATE ${DatabaseSchema.tableConversations}
+        SET last_message = ?,
+            last_message_at = ?,
+            updated_at = ?,
+            unread_count = CASE
+              WHEN user_id != ? THEN unread_count + 1
+              ELSE 0
+            END
         WHERE id = ?
       ''', [
         message.content.length > 80
             ? '${message.content.substring(0, 80)}…'
             : message.content,
         message.createdAt.millisecondsSinceEpoch,
+        message.createdAt.toIso8601String(),
         message.senderId,
         message.conversationId,
       ]);
     });
   }
 
-  // ── Get conversations ────────────────────────────────────────────────────
-
-  /// Returns all conversations for [userId] sorted by most recent message.
   Future<List<ConversationSummary>> getConversations({
     required String userId,
     int pageSize = 30,
     DateTime? before,
   }) async {
     final db = await _db.database;
-
     final whereArgs = <dynamic>[userId];
-    String cursorClause = '';
+    var cursorClause = '';
     if (before != null) {
       cursorClause = 'AND last_message_at < ?';
       whereArgs.add(before.millisecondsSinceEpoch);
     }
 
     final rows = await db.rawQuery('''
-      SELECT * FROM conversations
+      SELECT * FROM ${DatabaseSchema.tableConversations}
       WHERE user_id = ? $cursorClause
-      ORDER BY last_message_at DESC
+      ORDER BY COALESCE(last_message_at, 0) DESC
       LIMIT ?
     ''', [...whereArgs, pageSize]);
 
     return rows.map(ConversationSummary.fromMap).toList();
   }
 
-  // ── Get messages in thread ───────────────────────────────────────────────
-
-  /// Cursor-based pagination: loads [pageSize] messages before [before].
-  /// This yields O(log n) complexity vs OFFSET-based O(n).
   Future<List<MessageModel>> getMessages({
     required String conversationId,
     int pageSize = 40,
     DateTime? before,
   }) async {
     final db = await _db.database;
-
-    final whereArgs = <dynamic>[conversationId, 0]; // is_deleted = 0
-    String cursorClause = '';
+    final whereArgs = <dynamic>[conversationId, 0];
+    var cursorClause = '';
     if (before != null) {
       cursorClause = 'AND created_at < ?';
       whereArgs.add(before.millisecondsSinceEpoch);
     }
 
     final rows = await db.rawQuery('''
-      SELECT * FROM messages
+      SELECT * FROM ${DatabaseSchema.tableMessages}
       WHERE conversation_id = ?
         AND is_deleted = ?
         $cursorClause
@@ -218,83 +280,77 @@ class MessageDao {
       LIMIT ?
     ''', [...whereArgs, pageSize]);
 
-    // Reverse so caller gets chronological order
     return rows.reversed.map(MessageModel.fromMap).toList();
   }
 
-  // ── Mark conversation as read ────────────────────────────────────────────
-
-  /// Resets unread_count to 0 and marks all unread messages as read.
   Future<void> markConversationRead({
     required String conversationId,
     required String userId,
   }) async {
     final db = await _db.database;
-
     await db.transaction((txn) async {
-      // Zero out unread on conversation
       await txn.update(
-        'conversations',
-        {'unread_count': 0},
+        DatabaseSchema.tableConversations,
+        {
+          'unread_count': 0,
+          'updated_at': DateTime.now().toIso8601String(),
+        },
         where: 'id = ? AND user_id = ?',
         whereArgs: [conversationId, userId],
       );
 
-      // Mark individual messages as read
       await txn.rawUpdate('''
-        UPDATE messages
-        SET is_read = 1
+        UPDATE ${DatabaseSchema.tableMessages}
+        SET is_read = 1,
+            read_at = COALESCE(read_at, ?),
+            status = 'read'
         WHERE conversation_id = ?
           AND sender_id != ?
           AND is_read = 0
-      ''', [conversationId, userId]);
+      ''', [DateTime.now().toIso8601String(), conversationId, userId]);
     });
   }
-
-  // ── Soft-delete a message ────────────────────────────────────────────────
 
   Future<void> deleteMessage(String messageId) async {
     final db = await _db.database;
     await db.update(
-      'messages',
+      DatabaseSchema.tableMessages,
       {'is_deleted': 1},
       where: 'id = ?',
       whereArgs: [messageId],
     );
   }
 
-  // ── Hard-delete a conversation ───────────────────────────────────────────
-
   Future<void> deleteConversation(String conversationId) async {
     final db = await _db.database;
-
     await db.transaction((txn) async {
       await txn.delete(
-        'messages',
+        DatabaseSchema.tableMessages,
         where: 'conversation_id = ?',
         whereArgs: [conversationId],
       );
       await txn.delete(
-        'conversations',
+        DatabaseSchema.tableConversations,
+        where: 'id = ?',
+        whereArgs: [conversationId],
+      );
+      await txn.delete(
+        DatabaseSchema.tableMessageThreads,
         where: 'id = ?',
         whereArgs: [conversationId],
       );
     });
   }
 
-  // ── Total unread count (nav badge) ───────────────────────────────────────
-
   Future<int> getTotalUnreadCount(String userId) async {
     final db = await _db.database;
     final result = await db.rawQuery('''
       SELECT COALESCE(SUM(unread_count), 0) AS total
-      FROM conversations
+      FROM ${DatabaseSchema.tableConversations}
       WHERE user_id = ?
     ''', [userId]);
     return result.first['total'] as int? ?? 0;
   }
-
-  // ── Search conversations ─────────────────────────────────────────────────
 
   Future<List<ConversationSummary>> searchConversations({
     required String userId,
@@ -302,19 +358,15 @@ class MessageDao {
   }) async {
     final db = await _db.database;
     final rows = await db.rawQuery('''
-      SELECT * FROM conversations
+      SELECT * FROM ${DatabaseSchema.tableConversations}
       WHERE user_id = ?
         AND peer_name LIKE ?
-      ORDER BY last_message_at DESC
+      ORDER BY COALESCE(last_message_at, 0) DESC
       LIMIT 30
     ''', [userId, '%$query%']);
     return rows.map(ConversationSummary.fromMap).toList();
   }
 
-  // ── Ensure conversation exists ───────────────────────────────────────────
-
-  /// Creates a conversation row if none exists between [userId] and [peerId].
-  /// Returns the conversation ID (either existing or newly created).
   Future<String> ensureConversation({
     required String userId,
     required String peerId,
@@ -323,33 +375,162 @@ class MessageDao {
     bool isPeerLecturer = false,
   }) async {
     final db = await _db.database;
-
-    // Check existing
     final existing = await db.query(
-      'conversations',
+      DatabaseSchema.tableConversations,
       where: 'user_id = ? AND peer_id = ?',
       whereArgs: [userId, peerId],
       limit: 1,
     );
 
     if (existing.isNotEmpty) {
-      return existing.first['id'] as String;
+      final conversationId = existing.first['id'] as String;
+      await _ensureThreadRecord(
+        db: db,
+        conversationId: conversationId,
+        userId: userId,
+        peerId: peerId,
+      );
+      return conversationId;
     }
 
-    // Create new
-    final id = '${userId}_${peerId}_${DateTime.now().millisecondsSinceEpoch}';
-    await db.insert('conversations', {
+    final now = DateTime.now();
+    final id = '${userId}_${peerId}_${now.millisecondsSinceEpoch}';
+    await db.insert(DatabaseSchema.tableConversations, {
       'id': id,
       'user_id': userId,
       'peer_id': peerId,
       'peer_name': peerName,
       'peer_photo_url': peerPhotoUrl,
       'last_message': '',
-      'last_message_at': DateTime.now().millisecondsSinceEpoch,
+      'last_message_at': now.millisecondsSinceEpoch,
       'unread_count': 0,
       'is_peer_lecturer': isPeerLecturer ? 1 : 0,
+      'created_at': now.toIso8601String(),
+      'updated_at': now.toIso8601String(),
     });
+    await _ensureThreadRecord(
+      db: db,
+      conversationId: id,
+      userId: userId,
+      peerId: peerId,
+    );
 
     return id;
+  }
+
+  Future<List<CollaborationInboxItem>> getCollaborationRequests({
+    required String userId,
+    int limit = 40,
+  }) async {
+    final db = await _db.database;
+    final rows = await db.rawQuery('''
+      SELECT
+        r.id,
+        r.post_id,
+        r.message,
+        r.status,
+        r.created_at,
+        r.updated_at,
+        CASE WHEN r.receiver_id = ? THEN 1 ELSE 0 END AS is_incoming,
+        CASE WHEN r.receiver_id = ? THEN r.sender_id ELSE r.receiver_id END AS counterpart_id,
+        CASE
+          WHEN r.receiver_id = ? THEN COALESCE(us.display_name, us.email, 'Someone')
+          ELSE COALESCE(ur.display_name, ur.email, 'Someone')
+        END AS counterpart_name,
+        CASE WHEN r.receiver_id = ? THEN us.photo_url ELSE ur.photo_url END AS counterpart_photo_url,
+        COALESCE(p.title, 'Project request') AS post_title
+      FROM ${DatabaseSchema.tableCollabRequests} r
+      LEFT JOIN ${DatabaseSchema.tableUsers} us ON us.id = r.sender_id
+      LEFT JOIN ${DatabaseSchema.tableUsers} ur ON ur.id = r.receiver_id
+      LEFT JOIN ${DatabaseSchema.tablePosts} p ON p.id = r.post_id
+      WHERE r.sender_id = ? OR r.receiver_id = ?
+      ORDER BY COALESCE(r.updated_at, r.created_at) DESC
+      LIMIT ?
+    ''', [userId, userId, userId, userId, userId, userId, limit]);
+
+    return rows
+        .map(
+          (row) => CollaborationInboxItem(
+            id: row['id'] as String,
+            counterpartId: row['counterpart_id'] as String? ?? '',
+            counterpartName: row['counterpart_name'] as String? ?? 'Someone',
+            counterpartPhotoUrl: row['counterpart_photo_url'] as String?,
+            postId: row['post_id'] as String?,
+            postTitle: row['post_title'] as String? ?? 'Project request',
+            message: row['message'] as String? ?? '',
+            status: row['status'] as String? ?? 'pending',
+            isIncoming: (row['is_incoming'] as int? ?? 0) == 1,
+            createdAt: MessageModel._dateFromDb(row['updated_at'] ?? row['created_at']),
+          ),
+        )
+        .toList();
+  }
+
+  Future<List<AcceptedPeerCollaboration>> getAcceptedCollaborators({
+    required String userId,
+    int limit = 60,
+  }) async {
+    final db = await _db.database;
+    final rows = await db.rawQuery('''
+      SELECT
+        r.id,
+        r.post_id,
+        r.message,
+        r.updated_at,
+        CASE WHEN r.receiver_id = ? THEN r.sender_id ELSE r.receiver_id END AS peer_id,
+        CASE
+          WHEN r.receiver_id = ? THEN COALESCE(us.display_name, us.email, 'Someone')
+          ELSE COALESCE(ur.display_name, ur.email, 'Someone')
+        END AS peer_name,
+        CASE WHEN r.receiver_id = ? THEN us.photo_url ELSE ur.photo_url END AS peer_photo_url,
+        CASE WHEN r.receiver_id = ? THEN COALESCE(us.role, 'student') ELSE COALESCE(ur.role, 'student') END AS peer_role,
+        COALESCE(p.title, 'Untitled project') AS post_title,
+        p.category AS post_category,
+        p.images AS post_images,
+        p.videos AS post_videos
+      FROM ${DatabaseSchema.tableCollabRequests} r
+      LEFT JOIN ${DatabaseSchema.tableUsers} us ON us.id = r.sender_id
+      LEFT JOIN ${DatabaseSchema.tableUsers} ur ON ur.id = r.receiver_id
+      LEFT JOIN ${DatabaseSchema.tablePosts} p ON p.id = r.post_id
+      WHERE (r.sender_id = ? OR r.receiver_id = ?)
+        AND r.status = 'accepted'
+      ORDER BY COALESCE(r.updated_at, r.created_at) DESC
+      LIMIT ?
+    ''', [userId, userId, userId, userId, userId, userId, limit]);
+
+    List<String> parseList(dynamic value) {
+      if (value is String && value.isNotEmpty) {
+        try {
+          return List<String>.from(jsonDecode(value) as List);
+        } catch (_) {
+          return const [];
+        }
+      }
+      if (value is List) {
+        return value.map((entry) => entry.toString()).toList();
+      }
+      return const [];
+    }
+
+    return rows
+        .map(
+          (row) => AcceptedPeerCollaboration(
+            requestId: row['id'] as String,
+            peerId: row['peer_id'] as String? ?? '',
+            peerName: row['peer_name'] as String? ?? 'Someone',
+            peerPhotoUrl: row['peer_photo_url'] as String?,
+            peerRole: row['peer_role'] as String? ?? 'student',
+            postId: row['post_id'] as String?,
+            postTitle: row['post_title'] as String? ?? 'Untitled project',
+            postCategory: row['post_category'] as String?,
+            postMediaUrls: [
+              ...parseList(row['post_images']),
+              ...parseList(row['post_videos']),
+            ],
+            message: row['message'] as String? ?? '',
+            acceptedAt: MessageModel._dateFromDb(row['updated_at']),
+          ),
+        )
+        .toList();
   }
 }

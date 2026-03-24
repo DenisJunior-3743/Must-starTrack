@@ -27,12 +27,15 @@
 //    call the FCM Admin SDK to send the push. The app receives it via
 //    this service and routes to the right screen."
 
+import 'dart:async';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
 
+import '../local/services/notification_preferences_service.dart';
 import '../../core/router/route_names.dart';
 
 // ── Background message handler (top-level function required by FCM) ───────────
@@ -50,6 +53,7 @@ class FcmService {
   final FirebaseMessaging _messaging;
   final FirebaseFirestore _firestore;
   final FlutterLocalNotificationsPlugin _localNotif;
+  final NotificationPreferencesService _preferences;
 
   // Android notification channel (must match AndroidManifest.xml)
   static const _channelId = 'startrack_main';
@@ -60,9 +64,11 @@ class FcmService {
     FirebaseMessaging? messaging,
     FirebaseFirestore? firestore,
     FlutterLocalNotificationsPlugin? localNotif,
+    required NotificationPreferencesService preferences,
   })  : _messaging = messaging ?? FirebaseMessaging.instance,
         _firestore = firestore ?? FirebaseFirestore.instance,
-        _localNotif = localNotif ?? FlutterLocalNotificationsPlugin();
+      _localNotif = localNotif ?? FlutterLocalNotificationsPlugin(),
+      _preferences = preferences;
 
   // ── Initialise ────────────────────────────────────────────────────────────
 
@@ -79,7 +85,7 @@ class FcmService {
 
     // Subscribe to foreground messages
     FirebaseMessaging.onMessage.listen(
-        (msg) => _handleForegroundMessage(msg));
+      (msg) => unawaited(_handleForegroundMessage(msg)));
 
     // Handle notification taps when app is in background (not terminated)
     FirebaseMessaging.onMessageOpenedApp.listen(
@@ -192,11 +198,16 @@ class FcmService {
   // ── Handle foreground messages ────────────────────────────────────────────
 
   /// Shows an in-app local notification banner when app is in foreground.
-  void _handleForegroundMessage(RemoteMessage message) {
+  Future<void> _handleForegroundMessage(RemoteMessage message) async {
     final notification = message.notification;
     if (notification == null) return;
 
-    _localNotif.show(
+    final type = message.data['type'] as String? ?? 'system';
+    if (!_preferences.shouldPresentAlert(type: type, requirePushEnabled: true)) {
+      return;
+    }
+
+    await _localNotif.show(
       notification.hashCode,
       notification.title,
       notification.body,
@@ -229,7 +240,7 @@ class FcmService {
     switch (type) {
       case 'message':
         if (entityId != null) {
-          router.push('${RouteNames.chatDetail}/$entityId');
+          router.push(RouteNames.chatDetail.replaceFirst(':threadId', entityId));
         }
         break;
       case 'opportunity':
@@ -242,7 +253,7 @@ class FcmService {
         break;
       case 'endorsement':
         if (entityId != null) {
-          router.push('${RouteNames.profile}/$entityId');
+          router.push(RouteNames.profile.replaceFirst(':userId', entityId));
         }
         break;
       default:

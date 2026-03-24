@@ -22,6 +22,7 @@
 //   retry 5: 6 hours
 
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../database_helper.dart';
@@ -110,6 +111,10 @@ class SyncQueueDao {
     await db.insert(
       DatabaseSchema.tableSyncQueue,
       item.toMap(),
+    );
+    debugPrint(
+      '[SyncQueue] Enqueued operation=$operation entity=$entity entityId=$entityId '
+      'retry=${item.retryCount} payloadKeys=${payload.keys.toList()}',
     );
   }
 

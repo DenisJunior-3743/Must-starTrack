@@ -1,4 +1,4 @@
-﻿<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- Internet access (Firebase, Firestore, FCM) -->
     <uses-permission android:name="android.permission.INTERNET"/>
@@ -14,7 +14,8 @@
     <application
         android:label="StarTrack"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:enableOnBackInvokedCallback="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -34,14 +35,9 @@
             </intent-filter>
         </activity>
 
-        <!-- FCM background message handler -->
-        <service
+        <!-- flutter_local_notifications: scheduled alarm receiver -->
+        <receiver
             android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
-            android:exported="false"/>
-
-        <!-- FCM: required for receiving messages when app is in background/killed -->
-        <service
-            android:name="io.flutter.plugins.firebase.messaging.FlutterFirebaseMessagingBackgroundExecutor"
             android:exported="false"/>
 
         <!-- FCM notification icon colour -->
@@ -53,6 +49,12 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- image_cropper: UCrop activity for WhatsApp-style photo crop -->
+        <activity
+            android:name="com.yalantis.ucrop.UCropActivity"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
     </application>
 
     <queries>

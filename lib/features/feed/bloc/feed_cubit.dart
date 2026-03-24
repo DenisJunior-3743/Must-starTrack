@@ -18,13 +18,18 @@
 //   • Uses createdAt of last item as cursor
 //   • hasMore flag stops unnecessary calls
 
+import 'dart:async';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
+import '../../../data/local/dao/activity_log_dao.dart';
 import '../../../core/utils/media_path_utils.dart';
 import '../../../data/local/dao/post_dao.dart';
 import '../../../data/local/dao/sync_queue_dao.dart';
+import '../../../data/local/dao/user_dao.dart';
 import '../../../data/models/post_model.dart';
+import '../../../data/remote/recommender_service.dart';
 import '../../../data/remote/sync_service.dart';
 
 // ── States ────────────────────────────────────────────────────────────────────
@@ -128,17 +133,28 @@ class FeedFilter extends Equatable {
 
 class FeedCubit extends Cubit<FeedState> {
   final PostDao _postDao;
+  final UserDao _userDao;
+  final ActivityLogDao _activityLogDao;
+  final RecommenderService _recommenderService;
   final SyncQueueDao _syncQueue;
   final SyncService? _syncService;
   final String? _currentUserId;
-  static const _pageSize = 20;
+  static const _pageSize = 40;
+  static const _targetAuthorGroups = 12;
+  static const _maxPrefetchPages = 6;
 
   FeedCubit({
     PostDao? postDao,
+    UserDao? userDao,
+    ActivityLogDao? activityLogDao,
+    RecommenderService? recommenderService,
     SyncQueueDao? syncQueue,
     SyncService? syncService,
     String? currentUserId,
   })  : _postDao = postDao ?? PostDao(),
+        _userDao = userDao ?? UserDao(),
+        _activityLogDao = activityLogDao ?? ActivityLogDao(),
+        _recommenderService = recommenderService ?? RecommenderService(),
         _syncQueue = syncQueue ?? SyncQueueDao(),
         _syncService = syncService,
         _currentUserId = currentUserId,
@@ -158,16 +174,13 @@ class FeedCubit extends Cubit<FeedState> {
       await _syncService?.syncRemoteToLocal(postLimit: _pageSize * 3);
       if (isClosed) return;
       final f = filter ?? const FeedFilter();
-      final posts = await _postDao.getFeedPage(
-        pageSize: _pageSize,
-        filterFaculty: f.faculty,
-        filterCategory: f.category,
-        filterType: f.type,
-        currentUserId: _currentUserId,
+      final batch = await _loadGroupedBatch(
+        filter: f,
+        existingAuthorIds: const <String>{},
       );
       _emitIfOpen(FeedLoaded(
-        posts: posts,
-        hasMore: posts.length == _pageSize,
+        posts: batch.posts,
+        hasMore: batch.hasMore,
         filter: f,
       ));
     } catch (e) {
@@ -188,27 +201,112 @@ class FeedCubit extends Cubit<FeedState> {
     _emitIfOpen(current.copyWith(isLoadingMore: true));
 
     try {
-      final cursor = current.posts.isNotEmpty
-          ? current.posts.last.createdAt.millisecondsSinceEpoch
-          : null;
-
-      final newPosts = await _postDao.getFeedPage(
-        pageSize: _pageSize,
-        afterCursor: cursor,
-        filterFaculty: current.filter.faculty,
-        filterCategory: current.filter.category,
-        filterType: current.filter.type,
-        currentUserId: _currentUserId,
+      final batch = await _loadGroupedBatch(
+        filter: current.filter,
+        afterCursor: current.posts.isNotEmpty
+            ? current.posts.last.createdAt.millisecondsSinceEpoch
+            : null,
+        existingAuthorIds: current.posts.map((post) => post.authorId).toSet(),
       );
 
       _emitIfOpen(current.copyWith(
-        posts: [...current.posts, ...newPosts],
-        hasMore: newPosts.length == _pageSize,
+        posts: [...current.posts, ...batch.posts],
+        hasMore: batch.hasMore,
         isLoadingMore: false,
       ));
     } catch (e) {
       _emitIfOpen(current.copyWith(isLoadingMore: false));
     }
+  }
+
+  Future<_FeedBatchResult> _loadGroupedBatch({
+    required FeedFilter filter,
+    required Set<String> existingAuthorIds,
+    int? afterCursor,
+  }) async {
+    final collectedPosts = <PostModel>[];
+    final seenPostIds = <String>{};
+    final seenAuthorIds = <String>{...existingAuthorIds};
+
+    var cursor = afterCursor;
+    var hasMore = true;
+
+    for (var page = 0; page < _maxPrefetchPages; page++) {
+      final pagePosts = await _postDao.getFeedPage(
+        pageSize: _pageSize,
+        afterCursor: cursor,
+        filterFaculty: filter.faculty,
+        filterCategory: filter.category,
+        filterType: filter.type,
+        currentUserId: _currentUserId,
+      );
+
+      if (pagePosts.isEmpty) {
+        hasMore = false;
+        break;
+      }
+
+      for (final post in pagePosts) {
+        if (seenPostIds.add(post.id)) {
+          collectedPosts.add(post);
+          seenAuthorIds.add(post.authorId);
+        }
+      }
+
+      if (pagePosts.length < _pageSize) {
+        hasMore = false;
+        break;
+      }
+
+      cursor = pagePosts.last.createdAt.millisecondsSinceEpoch;
+
+      if (seenAuthorIds.length >= existingAuthorIds.length + _targetAuthorGroups) {
+        break;
+      }
+    }
+
+    final rankedPosts = await _rankPosts(
+      posts: collectedPosts,
+      useHybrid: afterCursor == null,
+    );
+
+    return _FeedBatchResult(posts: rankedPosts, hasMore: hasMore);
+  }
+
+  Future<List<PostModel>> _rankPosts({
+    required List<PostModel> posts,
+    required bool useHybrid,
+  }) async {
+    final currentUserId = _currentUserId;
+    if (currentUserId == null || currentUserId.isEmpty || posts.isEmpty) {
+      return posts;
+    }
+
+    final user = await _userDao.getUserById(currentUserId);
+    if (user == null || user.profile == null) {
+      return posts;
+    }
+
+    final recentlyViewedCategories =
+        await _activityLogDao.getRecentCategorySignals(currentUserId);
+    final recentSearchTerms =
+        await _activityLogDao.getRecentSearchTerms(currentUserId);
+
+    final ranked = useHybrid
+        ? await _recommenderService.rankHybrid(
+            user: user,
+            candidates: posts,
+            recentlyViewedCategories: recentlyViewedCategories,
+            recentSearchTerms: recentSearchTerms,
+          )
+        : _recommenderService.rankLocally(
+            user: user,
+            candidates: posts,
+            recentlyViewedCategories: recentlyViewedCategories,
+            recentSearchTerms: recentSearchTerms,
+          );
+
+    return ranked.map((entry) => entry.post).toList();
   }
 
   // ── Apply filters ──────────────────────────────────────────────────────────
@@ -226,6 +324,11 @@ class FeedCubit extends Cubit<FeedState> {
   Future<void> likePost(String postId) async {
     final current = state;
     if (current is! FeedLoaded) return;
+    final currentUserId = _currentUserId;
+    if (currentUserId == null || currentUserId.isEmpty) {
+      debugPrint('[FeedCubit] Ignoring like for post=$postId because no authenticated user is available.');
+      return;
+    }
 
     // 1. Find the target post and optimistically toggle
     final index = current.posts.indexWhere((p) => p.id == postId);
@@ -247,24 +350,43 @@ class FeedCubit extends Cubit<FeedState> {
     _emitIfOpen(current.copyWith(posts: updatedPosts));
 
     try {
+      debugPrint(
+        '[FeedCubit] Toggling like locally for post=$postId user=$_currentUserId wasLiked=$wasLiked',
+      );
       // 3. Persist locally
       final newCount = await _postDao.toggleLike(
         postId: postId,
-        userId: _currentUserId ?? '',
+        userId: currentUserId,
+      );
+      await _activityLogDao.logAction(
+        userId: currentUserId,
+        action: wasLiked ? 'unlike_post' : 'like_post',
+        entityType: 'posts',
+        entityId: postId,
+        metadata: {
+          'post_title': original.title,
+          'author_id': original.authorId,
+        },
       );
 
       // 4. Enqueue for Firestore sync
       await _syncQueue.enqueue(
         operation: wasLiked ? 'delete' : 'create',
         entity: 'likes',
-        entityId: '${_currentUserId}_$postId',
+        entityId: '${currentUserId}_$postId',
         payload: {
           'post_id': postId,
-          'user_id': _currentUserId,
+          'user_id': currentUserId,
           'is_liking': !wasLiked,
           'like_count': newCount,
+          'author_id': original.authorId,
+          'post_title': original.title,
         },
       );
+      debugPrint(
+        '[FeedCubit] Like queued for post=$postId user=$_currentUserId isLiking=${!wasLiked} localCount=$newCount',
+      );
+      unawaited(_syncService?.processPendingSync());
 
       // 5. Update with DB-confirmed count
       final confirmed = current.posts.toList()
@@ -273,6 +395,7 @@ class FeedCubit extends Cubit<FeedState> {
         _emitIfOpen((state as FeedLoaded).copyWith(posts: confirmed));
       }
     } catch (_) {
+      debugPrint('[FeedCubit] Like toggle failed for post=$postId user=$_currentUserId. Rolling back optimistic UI.');
       // 6. Rollback on failure
       if (state is FeedLoaded) {
         final rolled = (state as FeedLoaded).posts.toList()
@@ -352,4 +475,14 @@ class FeedCubit extends Cubit<FeedState> {
         : const FeedFilter();
     await loadFeed(filter: currentFilter);
   }
+}
+
+class _FeedBatchResult {
+  final List<PostModel> posts;
+  final bool hasMore;
+
+  const _FeedBatchResult({
+    required this.posts,
+    required this.hasMore,
+  });
 }

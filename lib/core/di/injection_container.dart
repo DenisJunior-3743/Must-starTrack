@@ -35,16 +35,20 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:dio/dio.dart';
 
+import '../config/gemini_config.dart';
 import '../network/connectivity_service.dart';
 import '../router/route_guards.dart';
 
 import '../../data/local/database_helper.dart';
+import '../../data/local/dao/activity_log_dao.dart';
 import '../../data/local/dao/user_dao.dart';
 import '../../data/local/dao/post_dao.dart';
 import '../../data/local/dao/comment_dao.dart';
 import '../../data/local/dao/message_dao.dart';
 import '../../data/local/dao/notification_dao.dart';
 import '../../data/local/dao/sync_queue_dao.dart';
+import '../../data/local/dao/post_join_dao.dart';
+import '../../data/local/services/notification_preferences_service.dart';
 
 import '../../data/remote/firestore_service.dart';
 import '../../data/remote/fcm_service.dart';
@@ -62,9 +66,16 @@ import '../../features/profile/bloc/profile_cubit.dart';
 import '../../features/messaging/bloc/message_cubit.dart';
 import '../../features/notifications/bloc/notification_cubit.dart';
 import '../../features/admin/bloc/admin_cubit.dart';
+import '../../features/lecturer/bloc/lecturer_cubit.dart';
+import '../theme/theme_cubit.dart';
 
 /// Global service locator instance — the single access point.
 final sl = GetIt.instance;
+
+const _geminiApiKey = String.fromEnvironment(
+  'GEMINI_API_KEY',
+  defaultValue: GeminiConfig.bundledApiKey,
+);
 
 class InjectionContainer {
   InjectionContainer._();
@@ -74,6 +85,9 @@ class InjectionContainer {
 
     final sharedPrefs = await SharedPreferences.getInstance();
     sl.registerSingleton<SharedPreferences>(sharedPrefs);
+    sl.registerSingleton<NotificationPreferencesService>(
+      NotificationPreferencesService(prefs: sharedPrefs),
+    );
 
     const secureStorage = FlutterSecureStorage(
       aOptions: AndroidOptions(encryptedSharedPreferences: true),
@@ -110,11 +124,13 @@ class InjectionContainer {
     // ── 4. DAOs (all singletons — one instance, shared across cubits) ───────
 
     sl.registerSingleton<UserDao>(UserDao());
+    sl.registerSingleton<ActivityLogDao>(ActivityLogDao());
     sl.registerSingleton<PostDao>(PostDao());
     sl.registerSingleton<CommentDao>(CommentDao());
     sl.registerSingleton<MessageDao>(MessageDao());
     sl.registerSingleton<NotificationDao>(NotificationDao());
     sl.registerSingleton<SyncQueueDao>(SyncQueueDao());
+    sl.registerSingleton<PostJoinDao>(PostJoinDao());
 
     // ── 5. Remote services ──────────────────────────────────────────────────
 
@@ -122,9 +138,9 @@ class InjectionContainer {
       FirestoreService(firestore: sl<FirebaseFirestore>()),
     );
 
-    // Gemini key can be injected at runtime (secure storage/env). Empty key disables remote rerank.
+    // Gemini key is injected at runtime via --dart-define. Empty disables remote rerank.
     sl.registerSingleton<GeminiService>(
-      GeminiService(apiKey: ''),
+      GeminiService(apiKey: _geminiApiKey),
     );
 
     sl.registerSingleton<RecommenderService>(
@@ -140,6 +156,7 @@ class InjectionContainer {
         messaging: null,   // uses FirebaseMessaging.instance internally
         firestore: sl<FirebaseFirestore>(),
         localNotif: sl<FlutterLocalNotificationsPlugin>(),
+        preferences: sl<NotificationPreferencesService>(),
       ),
     );
 
@@ -153,6 +170,7 @@ class InjectionContainer {
         cloudinary: sl<CloudinaryService>(),
         connectivity: sl<Connectivity>(),
         localNotif: sl<FlutterLocalNotificationsPlugin>(),
+        preferences: sl<NotificationPreferencesService>(),
       ),
     );
 
@@ -182,6 +200,9 @@ class InjectionContainer {
 
     sl.registerSingleton<RouteGuards>(RouteGuards());
 
+    // ── 9a. ThemeCubit — singleton, persists theme mode across sessions ─────
+    sl.registerSingleton<ThemeCubit>(ThemeCubit(sl<SharedPreferences>()));
+
     // ── 9. AuthCubit — singleton so auth state is global ───────────────────
     //
     // All other cubits are registered as factories (new instance per screen).
@@ -201,8 +222,12 @@ class InjectionContainer {
     sl.registerFactory<FeedCubit>(
       () => FeedCubit(
         postDao: sl<PostDao>(),
+        userDao: sl<UserDao>(),
+        activityLogDao: sl<ActivityLogDao>(),
+        recommenderService: sl<RecommenderService>(),
         syncQueue: sl<SyncQueueDao>(),
         syncService: sl<SyncService>(),
+        currentUserId: sl<AuthCubit>().currentUser?.id,
       ),
     );
 
@@ -210,6 +235,10 @@ class InjectionContainer {
       () => ProfileCubit(
         userDao: sl<UserDao>(),
         postDao: sl<PostDao>(),
+        authCubit: sl<AuthCubit>(),
+        syncQueue: sl<SyncQueueDao>(),
+        cloudinary: sl<CloudinaryService>(),
+        firestore: sl<FirestoreService>(),
       ),
     );
 
@@ -218,17 +247,33 @@ class InjectionContainer {
         messageDao: sl<MessageDao>(),
         syncDao: sl<SyncQueueDao>(),
         authCubit: sl<AuthCubit>(),
+        userDao: sl<UserDao>(),
+        syncService: sl<SyncService>(),
       ),
     );
 
     sl.registerFactory<NotificationCubit>(
-      () => NotificationCubit(dao: sl<NotificationDao>(), authCubit: sl<AuthCubit>()),
+      () => NotificationCubit(
+        dao: sl<NotificationDao>(),
+        authCubit: sl<AuthCubit>(),
+        syncQueueDao: sl<SyncQueueDao>(),
+        syncService: sl<SyncService>(),
+      ),
     );
 
     sl.registerFactory<AdminCubit>(
       () => AdminCubit(
         postDao: sl<PostDao>(),
         userDao: sl<UserDao>(),
+      ),
+    );
+
+    sl.registerFactory<LecturerCubit>(
+      () => LecturerCubit(
+        postDao: sl<PostDao>(),
+        postJoinDao: sl<PostJoinDao>(),
+        userDao: sl<UserDao>(),
+        recommenderService: sl<RecommenderService>(),
       ),
     );
   }

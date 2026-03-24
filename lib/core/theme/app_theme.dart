@@ -1,17 +1,17 @@
-// lib/core/theme/app_theme.dart
+﻿// lib/core/theme/app_theme.dart
 //
-// MUST StarTrack — Theme Configuration
+// MUST StarTrack â€” Theme Configuration
 //
 // Converts all design tokens from app_colors.dart and app_text_styles.dart
 // into Flutter ThemeData objects for both light and dark mode.
 //
 // This file is the single source of truth for Material 3 theming.
-// Every widget in the app inherits these values automatically —
+// Every widget in the app inherits these values automatically â€”
 // no need to hardcode colors inside individual screens.
 //
-// HCI Principle: Consistency — uniform look across all 73 screens
+// HCI Principle: Consistency â€” uniform look across all 73 screens
 // because every widget reads from the same theme.
-// HCI Principle: Universal Design — color contrast meets WCAG AA.
+// HCI Principle: Universal Design â€” color contrast meets WCAG AA.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -20,9 +20,9 @@ import '../constants/app_colors.dart';
 import '../constants/app_dimensions.dart';
 
 abstract final class AppTheme {
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // LIGHT THEME
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   static ThemeData get light {
     final base = ThemeData(
       useMaterial3: true,
@@ -30,7 +30,7 @@ abstract final class AppTheme {
     );
 
     return base.copyWith(
-      // ── Colour Scheme ─────────────────────────────────────────────────────
+      // â”€â”€ Colour Scheme â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       colorScheme: const ColorScheme.light(
         primary: AppColors.primary,
         onPrimary: Colors.white,
@@ -46,10 +46,10 @@ abstract final class AppTheme {
         outline: AppColors.borderLight,
       ),
 
-      // ── Scaffold ──────────────────────────────────────────────────────────
+      // â”€â”€ Scaffold â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       scaffoldBackgroundColor: AppColors.backgroundLight,
 
-      // ── AppBar ────────────────────────────────────────────────────────────
+      // â”€â”€ AppBar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       appBarTheme: AppBarTheme(
         backgroundColor: AppColors.surfaceLight.withValues(alpha: 0.92),
         foregroundColor: AppColors.textPrimaryLight,
@@ -57,7 +57,7 @@ abstract final class AppTheme {
         scrolledUnderElevation: 0.5,
         shadowColor: AppColors.borderLight,
         centerTitle: true,
-        titleTextStyle: GoogleFonts.lexend(
+        titleTextStyle: GoogleFonts.plusJakartaSans(
           fontSize: 17,
           fontWeight: FontWeight.w700,
           color: AppColors.textPrimaryLight,
@@ -74,13 +74,13 @@ abstract final class AppTheme {
         systemOverlayStyle: SystemUiOverlayStyle.dark,
       ),
 
-      // ── Bottom Navigation Bar ─────────────────────────────────────────────
+      // â”€â”€ Bottom Navigation Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: AppColors.surfaceLight,
         indicatorColor: AppColors.primaryTint10,
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final isSelected = states.contains(WidgetState.selected);
-          return GoogleFonts.lexend(
+          return GoogleFonts.plusJakartaSans(
             fontSize: 11,
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
             color: isSelected
@@ -102,7 +102,7 @@ abstract final class AppTheme {
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
       ),
 
-      // ── Cards ─────────────────────────────────────────────────────────────
+      // â”€â”€ Cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       cardTheme: CardThemeData(
         color: AppColors.surfaceLight,
         elevation: AppDimensions.cardElevation,
@@ -117,7 +117,7 @@ abstract final class AppTheme {
         margin: EdgeInsets.zero,
       ),
 
-      // ── Input Decoration ──────────────────────────────────────────────────
+      // â”€â”€ Input Decoration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.surfaceLight,
@@ -160,17 +160,17 @@ abstract final class AppTheme {
             width: 1.5,
           ),
         ),
-        labelStyle: GoogleFonts.lexend(
+        labelStyle: GoogleFonts.plusJakartaSans(
           fontSize: 13,
           fontWeight: FontWeight.w600,
           color: AppColors.textSecondaryLight,
         ),
-        hintStyle: GoogleFonts.lexend(
+        hintStyle: GoogleFonts.plusJakartaSans(
           fontSize: 14,
           fontWeight: FontWeight.w400,
           color: AppColors.textHintLight,
         ),
-        errorStyle: GoogleFonts.lexend(
+        errorStyle: GoogleFonts.plusJakartaSans(
           fontSize: 12,
           color: AppColors.danger,
         ),
@@ -178,7 +178,7 @@ abstract final class AppTheme {
         suffixIconColor: AppColors.textSecondaryLight,
       ),
 
-      // ── Elevated Button ───────────────────────────────────────────────────
+      // â”€â”€ Elevated Button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
@@ -189,7 +189,7 @@ abstract final class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
           ),
-          textStyle: GoogleFonts.lexend(
+          textStyle: GoogleFonts.plusJakartaSans(
             fontSize: 15,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.01,
@@ -197,7 +197,7 @@ abstract final class AppTheme {
         ),
       ),
 
-      // ── Outlined Button ───────────────────────────────────────────────────
+      // â”€â”€ Outlined Button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.primary,
@@ -206,28 +206,28 @@ abstract final class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
           ),
-          textStyle: GoogleFonts.lexend(
+          textStyle: GoogleFonts.plusJakartaSans(
             fontSize: 15,
             fontWeight: FontWeight.w600,
           ),
         ),
       ),
 
-      // ── Text Button ───────────────────────────────────────────────────────
+      // â”€â”€ Text Button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: AppColors.primary,
-          textStyle: GoogleFonts.lexend(
+          textStyle: GoogleFonts.plusJakartaSans(
             fontSize: 14,
             fontWeight: FontWeight.w600,
           ),
         ),
       ),
 
-      // ── Chip ──────────────────────────────────────────────────────────────
+      // â”€â”€ Chip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       chipTheme: ChipThemeData(
         backgroundColor: AppColors.primaryTint10,
-        labelStyle: GoogleFonts.lexend(
+        labelStyle: GoogleFonts.plusJakartaSans(
           fontSize: 12,
           fontWeight: FontWeight.w500,
           color: AppColors.primary,
@@ -239,18 +239,18 @@ abstract final class AppTheme {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       ),
 
-      // ── Divider ───────────────────────────────────────────────────────────
+      // â”€â”€ Divider â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       dividerTheme: const DividerThemeData(
         color: AppColors.borderLight,
         thickness: 0.8,
         space: 0,
       ),
 
-      // ── SnackBar ──────────────────────────────────────────────────────────
+      // â”€â”€ SnackBar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: AppColors.textPrimaryLight,
-        contentTextStyle: GoogleFonts.lexend(
+        contentTextStyle: GoogleFonts.plusJakartaSans(
           color: Colors.white,
           fontSize: 13,
         ),
@@ -259,26 +259,26 @@ abstract final class AppTheme {
         ),
       ),
 
-      // ── Dialog ────────────────────────────────────────────────────────────
+      // â”€â”€ Dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       dialogTheme: DialogThemeData(
         backgroundColor: AppColors.surfaceLight,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
         ),
-        titleTextStyle: GoogleFonts.lexend(
+        titleTextStyle: GoogleFonts.plusJakartaSans(
           fontSize: 18,
           fontWeight: FontWeight.w700,
           color: AppColors.textPrimaryLight,
         ),
-        contentTextStyle: GoogleFonts.lexend(
+        contentTextStyle: GoogleFonts.plusJakartaSans(
           fontSize: 14,
           color: AppColors.textSecondaryLight,
           height: 1.5,
         ),
       ),
 
-      // ── Bottom Sheet ──────────────────────────────────────────────────────
+      // â”€â”€ Bottom Sheet â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: AppColors.surfaceLight,
         shape: RoundedRectangleBorder(
@@ -290,13 +290,13 @@ abstract final class AppTheme {
         showDragHandle: true,
       ),
 
-      // ── Progress Indicator ────────────────────────────────────────────────
+      // â”€â”€ Progress Indicator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       progressIndicatorTheme: const ProgressIndicatorThemeData(
         color: AppColors.primary,
         linearTrackColor: AppColors.primaryTint20,
       ),
 
-      // ── FloatingActionButton ──────────────────────────────────────────────
+      // â”€â”€ FloatingActionButton â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
@@ -304,20 +304,20 @@ abstract final class AppTheme {
         shape: CircleBorder(),
       ),
 
-      // ── Icon ──────────────────────────────────────────────────────────────
+      // â”€â”€ Icon â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       iconTheme: const IconThemeData(
         color: AppColors.textSecondaryLight,
         size: AppDimensions.iconMd,
       ),
 
-      // ── Text Theme ────────────────────────────────────────────────────────
+      // â”€â”€ Text Theme â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       textTheme: _buildTextTheme(Brightness.light),
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // DARK THEME
-  // ─────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   static ThemeData get dark {
     final lightTheme = light;
 
@@ -342,7 +342,7 @@ abstract final class AppTheme {
       appBarTheme: lightTheme.appBarTheme.copyWith(
         backgroundColor: AppColors.surfaceDark.withValues(alpha: 0.92),
         foregroundColor: AppColors.textPrimaryDark,
-        titleTextStyle: GoogleFonts.lexend(
+        titleTextStyle: GoogleFonts.plusJakartaSans(
           fontSize: 17,
           fontWeight: FontWeight.w700,
           color: AppColors.textPrimaryDark,
@@ -359,7 +359,7 @@ abstract final class AppTheme {
         indicatorColor: AppColors.primaryTint20,
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final isSelected = states.contains(WidgetState.selected);
-          return GoogleFonts.lexend(
+          return GoogleFonts.plusJakartaSans(
             fontSize: 11,
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
             color: isSelected
@@ -389,12 +389,12 @@ abstract final class AppTheme {
 
       inputDecorationTheme: lightTheme.inputDecorationTheme.copyWith(
         fillColor: AppColors.surfaceDark,
-        hintStyle: GoogleFonts.lexend(
+        hintStyle: GoogleFonts.plusJakartaSans(
           fontSize: 14,
           fontWeight: FontWeight.w400,
           color: AppColors.textHintDark,
         ),
-        labelStyle: GoogleFonts.lexend(
+        labelStyle: GoogleFonts.plusJakartaSans(
           fontSize: 13,
           fontWeight: FontWeight.w600,
           color: AppColors.textSecondaryDark,
@@ -416,12 +416,12 @@ abstract final class AppTheme {
 
       dialogTheme: lightTheme.dialogTheme.copyWith(
         backgroundColor: AppColors.surfaceDark,
-        titleTextStyle: GoogleFonts.lexend(
+        titleTextStyle: GoogleFonts.plusJakartaSans(
           fontSize: 18,
           fontWeight: FontWeight.w700,
           color: AppColors.textPrimaryDark,
         ),
-        contentTextStyle: GoogleFonts.lexend(
+        contentTextStyle: GoogleFonts.plusJakartaSans(
           fontSize: 14,
           color: AppColors.textSecondaryDark,
           height: 1.5,
@@ -445,7 +445,7 @@ abstract final class AppTheme {
     );
   }
 
-  // ── Shared Text Theme ─────────────────────────────────────────────────────
+  // â”€â”€ Shared Text Theme â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   static TextTheme _buildTextTheme(Brightness brightness) {
     final textColor = brightness == Brightness.light
         ? AppColors.textPrimaryLight
@@ -455,76 +455,76 @@ abstract final class AppTheme {
         : AppColors.textSecondaryDark;
 
     return TextTheme(
-      displayLarge: GoogleFonts.lexend(
+      displayLarge: GoogleFonts.plusJakartaSans(
         fontSize: 32,
         fontWeight: FontWeight.w700,
         letterSpacing: -0.5,
         color: textColor,
       ),
-      displayMedium: GoogleFonts.lexend(
+      displayMedium: GoogleFonts.plusJakartaSans(
         fontSize: 28,
         fontWeight: FontWeight.w700,
         color: textColor,
       ),
-      headlineLarge: GoogleFonts.lexend(
+      headlineLarge: GoogleFonts.plusJakartaSans(
         fontSize: 24,
         fontWeight: FontWeight.w700,
         color: textColor,
       ),
-      headlineMedium: GoogleFonts.lexend(
+      headlineMedium: GoogleFonts.plusJakartaSans(
         fontSize: 20,
         fontWeight: FontWeight.w700,
         color: textColor,
       ),
-      headlineSmall: GoogleFonts.lexend(
+      headlineSmall: GoogleFonts.plusJakartaSans(
         fontSize: 18,
         fontWeight: FontWeight.w700,
         color: textColor,
       ),
-      titleLarge: GoogleFonts.lexend(
+      titleLarge: GoogleFonts.plusJakartaSans(
         fontSize: 17,
         fontWeight: FontWeight.w700,
         color: textColor,
         letterSpacing: -0.015,
       ),
-      titleMedium: GoogleFonts.lexend(
+      titleMedium: GoogleFonts.plusJakartaSans(
         fontSize: 15,
         fontWeight: FontWeight.w600,
         color: textColor,
       ),
-      titleSmall: GoogleFonts.lexend(
+      titleSmall: GoogleFonts.plusJakartaSans(
         fontSize: 13,
         fontWeight: FontWeight.w600,
         color: textColor,
       ),
-      bodyLarge: GoogleFonts.lexend(
+      bodyLarge: GoogleFonts.plusJakartaSans(
         fontSize: 15,
         fontWeight: FontWeight.w400,
         height: 1.6,
         color: textColor,
       ),
-      bodyMedium: GoogleFonts.lexend(
+      bodyMedium: GoogleFonts.plusJakartaSans(
         fontSize: 14,
         fontWeight: FontWeight.w400,
         height: 1.5,
         color: textColor,
       ),
-      bodySmall: GoogleFonts.lexend(
+      bodySmall: GoogleFonts.plusJakartaSans(
         fontSize: 12,
         fontWeight: FontWeight.w400,
         color: secondaryColor,
       ),
-      labelLarge: GoogleFonts.lexend(
+      labelLarge: GoogleFonts.plusJakartaSans(
         fontSize: 14,
         fontWeight: FontWeight.w600,
         color: textColor,
       ),
-      labelMedium: GoogleFonts.lexend(
+      labelMedium: GoogleFonts.plusJakartaSans(
         fontSize: 12,
         fontWeight: FontWeight.w600,
         color: textColor,
       ),
-      labelSmall: GoogleFonts.lexend(
+      labelSmall: GoogleFonts.plusJakartaSans(
         fontSize: 11,
         fontWeight: FontWeight.w700,
         letterSpacing: 0.08,
@@ -533,3 +533,4 @@ abstract final class AppTheme {
     );
   }
 }
+

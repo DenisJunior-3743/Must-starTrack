@@ -131,10 +131,11 @@ class PostDao {
       conditions.add("p.status != 'archived'");
     }
 
+    // Show all non-archived posts regardless of moderation status so the
+    // local cache reflects what the user has access to see.
+    // Explicitly hide only rejected content.
     if (postColumns.contains('moderation_status')) {
-      conditions.add("p.moderation_status = 'approved'");
-    } else if (postColumns.contains('status')) {
-      conditions.add("p.status IN ('published', 'open')");
+      conditions.add("(p.moderation_status IS NULL OR p.moderation_status != 'rejected')");
     }
 
     if (afterCursor != null) {
@@ -142,7 +143,9 @@ class PostDao {
       args.add(afterCursor);
     }
     if (filterFaculty != null) {
-      conditions.add('p.faculty = ?');
+      // faculty may be a comma-separated list (e.g. 'Computing, Medicine')
+      // so use INSTR for a substring match rather than exact equality.
+      conditions.add('INSTR(p.faculty, ?) > 0');
       args.add(filterFaculty);
     }
     if (filterCategory != null) {
@@ -193,7 +196,7 @@ class PostDao {
          $selectAuthorRole
              ${currentUserId != null ? ', CASE WHEN lk.id IS NOT NULL THEN 1 ELSE 0 END AS is_liked_by_me' : ''}
       FROM   ${DatabaseSchema.tablePosts} p
-      JOIN   ${DatabaseSchema.tableUsers} u ON u.id = p.author_id
+      LEFT JOIN ${DatabaseSchema.tableUsers} u ON u.id = p.author_id
       $likeJoin
       WHERE  ${conditions.join(' AND ')}
       ORDER  BY p.created_at DESC
@@ -209,14 +212,15 @@ class PostDao {
     String authorId, {
     int pageSize = 20,
     int? afterCursor,
+    bool includeArchived = false,
   }) async {
     final db = await _db.database;
     final postColumns = await _tableColumns(db, DatabaseSchema.tablePosts);
     final rows = await db.rawQuery('''
       SELECT * FROM ${DatabaseSchema.tablePosts}
       WHERE  author_id = ?
-        ${postColumns.contains('is_archived') ? 'AND is_archived = 0' : ''}
-        ${!postColumns.contains('is_archived') && postColumns.contains('status') ? "AND status != 'archived'" : ''}
+        ${!includeArchived && postColumns.contains('is_archived') ? 'AND is_archived = 0' : ''}
+        ${!includeArchived && !postColumns.contains('is_archived') && postColumns.contains('status') ? "AND status != 'archived'" : ''}
         ${afterCursor != null ? 'AND created_at < $afterCursor' : ''}
       ORDER  BY created_at DESC
       LIMIT  ?
@@ -229,6 +233,7 @@ class PostDao {
     required String query,
     String? faculty,
     String? category,
+    String? type,
     List<String>? skills,
     String? recency, // 'week' | 'month' | 'any'
     int pageSize = 20,
@@ -262,13 +267,12 @@ class PostDao {
     }
 
     if (postColumns.contains('moderation_status')) {
-      conditions.add("p.moderation_status = 'approved'");
-    } else if (postColumns.contains('status')) {
-      conditions.add("p.status IN ('published', 'open')");
+      conditions.add("(p.moderation_status IS NULL OR p.moderation_status != 'rejected')");
     }
 
-    if (faculty != null) { conditions.add('p.faculty = ?'); args.add(faculty); }
+    if (faculty != null) { conditions.add('INSTR(p.faculty, ?) > 0'); args.add(faculty); }
     if (category != null) { conditions.add('p.category = ?'); args.add(category); }
+    if (type != null) { conditions.add('p.type = ?'); args.add(type); }
     if (afterMs != null) { conditions.add('p.created_at >= ?'); args.add(afterMs); }
     if (skills != null && skills.isNotEmpty) {
       for (final s in skills) {
@@ -300,7 +304,7 @@ class PostDao {
     final rows = await db.rawQuery('''
       SELECT p.*, $selectAuthorName, $selectAuthorPhoto
       FROM   ${DatabaseSchema.tablePosts} p
-      JOIN   ${DatabaseSchema.tableUsers} u ON u.id = p.author_id
+      LEFT JOIN ${DatabaseSchema.tableUsers} u ON u.id = p.author_id
       WHERE  ${conditions.join(' AND ')}
       ORDER  BY p.created_at DESC
       LIMIT  ? OFFSET ?
@@ -322,7 +326,7 @@ class PostDao {
              u.role         AS author_role
              ${currentUserId != null ? ", CASE WHEN lk.id IS NOT NULL THEN 1 ELSE 0 END AS is_liked_by_me" : ""}
       FROM   ${DatabaseSchema.tablePosts} p
-      JOIN   ${DatabaseSchema.tableUsers} u ON u.id = p.author_id
+      LEFT JOIN ${DatabaseSchema.tableUsers} u ON u.id = p.author_id
       $likeJoin
       WHERE  p.id = ?
     ''', [id]);
@@ -385,6 +389,74 @@ class PostDao {
         [postId],
       );
       return result.first['like_count'] as int? ?? 0;
+    });
+  }
+
+  // ── Dislikes (Optimistic) ─────────────────────────────────────────────────
+
+  /// Toggle dislike state. Returns the new dislike count.
+  Future<int> toggleDislike({
+    required String postId,
+    required String userId,
+  }) async {
+    final db = await _db.database;
+
+    return db.transaction((txn) async {
+      final existing = await txn.query(
+        DatabaseSchema.tableDislikes,
+        where: 'post_id = ? AND user_id = ?',
+        whereArgs: [postId, userId],
+        limit: 1,
+      );
+
+      int delta;
+      if (existing.isNotEmpty) {
+        // Un-dislike
+        await txn.delete(
+          DatabaseSchema.tableDislikes,
+          where: 'post_id = ? AND user_id = ?',
+          whereArgs: [postId, userId],
+        );
+        delta = -1;
+      } else {
+        // Dislike (also remove like if present)
+        await txn.delete(
+          DatabaseSchema.tableLikes,
+          where: 'post_id = ? AND user_id = ?',
+          whereArgs: [postId, userId],
+        );
+        // Decrement like_count if a like was removed
+        await txn.rawUpdate('''
+          UPDATE ${DatabaseSchema.tablePosts}
+          SET like_count = MAX(0, like_count - (
+            SELECT CASE WHEN COUNT(*) > 0 THEN 0 ELSE 1 END
+            FROM ${DatabaseSchema.tableLikes} WHERE post_id = ? AND user_id = ?
+          ))
+          WHERE id = ?
+        ''', [postId, userId, postId]);
+
+        await txn.insert(DatabaseSchema.tableDislikes, {
+          'id': _uuid.v4(),
+          'post_id': postId,
+          'user_id': userId,
+          'created_at': DateTime.now().millisecondsSinceEpoch,
+          'sync_status': 0,
+        });
+        delta = 1;
+      }
+
+      // Update denormalised dislike count
+      await txn.rawUpdate('''
+        UPDATE ${DatabaseSchema.tablePosts}
+        SET dislike_count = MAX(0, dislike_count + ?), sync_status = 0
+        WHERE id = ?
+      ''', [delta, postId]);
+
+      final result = await txn.rawQuery(
+        'SELECT dislike_count FROM ${DatabaseSchema.tablePosts} WHERE id = ?',
+        [postId],
+      );
+      return result.first['dislike_count'] as int? ?? 0;
     });
   }
 
@@ -515,12 +587,29 @@ class PostDao {
     'share_count': p.shareCount,
     'view_count': p.viewCount,
     'is_archived': p.isArchived ? 1 : 0,
+    'area_of_expertise': p.areaOfExpertise,
+    'max_participants': p.maxParticipants ?? 0,
+    'join_count': p.joinCount,
+    'opportunity_deadline': p.opportunityDeadline?.toIso8601String(),
     'created_at': p.createdAt.millisecondsSinceEpoch,
     'updated_at': p.updatedAt.millisecondsSinceEpoch,
     'sync_status': 0,
   };
 
   PostModel _fromDbRow(Map<String, dynamic> row) {
+    String? parseNullableString(dynamic value) {
+      if (value == null) return null;
+      if (value is String) {
+        final trimmed = value.trim();
+        return trimmed.isEmpty ? null : trimmed;
+      }
+      return value.toString();
+    }
+
+    String parseRequiredString(dynamic value, {String fallback = ''}) {
+      return parseNullableString(value) ?? fallback;
+    }
+
     List<String> parseList(dynamic v) {
       if (v == null) return [];
       try { return List<String>.from(jsonDecode(v as String) as List); }
@@ -538,7 +627,20 @@ class PostDao {
 
     int parseInt(dynamic v, {int fallback = 0}) {
       if (v is int) return v;
+      if (v is double) return v.toInt();
       if (v is String) return int.tryParse(v) ?? fallback;
+      return fallback;
+    }
+
+    bool parseBool(dynamic value, {bool fallback = false}) {
+      if (value == null) return fallback;
+      if (value is bool) return value;
+      if (value is int) return value == 1;
+      if (value is String) {
+        final normalized = value.trim().toLowerCase();
+        if (normalized == '1' || normalized == 'true') return true;
+        if (normalized == '0' || normalized == 'false') return false;
+      }
       return fallback;
     }
 
@@ -556,7 +658,8 @@ class PostDao {
     String? pickString(List<String> keys) {
       for (final key in keys) {
         final value = row[key];
-        if (value is String && value.isNotEmpty) return value;
+        final parsed = parseNullableString(value);
+        if (parsed != null && parsed.isNotEmpty) return parsed;
       }
       return null;
     }
@@ -570,18 +673,18 @@ class PostDao {
     final legacyExternalLink = pickString(['external_link']);
 
     return PostModel(
-      id: row['id'] as String,
-      authorId: row['author_id'] as String,
+      id: parseRequiredString(row['id']),
+      authorId: parseRequiredString(row['author_id']),
       authorName: pickString(['author_name', 'display_name', 'name']),
       authorPhotoUrl: pickString(['author_photo_url', 'photo_url', 'avatar_url']),
-      authorRole: row['author_role'] as String?,
-      type: row['type'] as String? ?? 'project',
-      title: row['title'] as String,
-      description: row['description'] as String?,
-      category: row['category'] as String?,
+      authorRole: parseNullableString(row['author_role']),
+      type: parseRequiredString(row['type'], fallback: 'project'),
+      title: parseRequiredString(row['title']),
+      description: parseNullableString(row['description']),
+      category: parseNullableString(row['category']),
       tags: parseList(row['tags']),
-      faculty: row['faculty'] as String?,
-      program: row['program'] as String?,
+      faculty: parseNullableString(row['faculty']),
+      program: parseNullableString(row['program']),
       skillsUsed: parseList(row['skills_used']),
       mediaUrls: parsedMediaUrls.isNotEmpty ? parsedMediaUrls : combinedLegacyMedia,
       youtubeUrl: pickString(['youtube_url', 'youtube_link']),
@@ -606,11 +709,106 @@ class PostDao {
       commentCount: parseInt(row['comment_count']),
       shareCount: parseInt(row['share_count']),
       viewCount: parseInt(row['view_count']),
-      isArchived: parseInt(row['is_archived']) == 1 || (row['status'] == 'archived'),
-      isLikedByMe: parseInt(row['is_liked_by_me']) == 1,
+        isArchived: parseBool(row['is_archived']) || (row['status'] == 'archived'),
+        isLikedByMe: parseBool(row['is_liked_by_me']),
+        areaOfExpertise: parseNullableString(row['area_of_expertise']),
+        maxParticipants: row['max_participants'] != null
+          ? parseInt(row['max_participants'])
+          : null,
+      joinCount: parseInt(row['join_count']),
+        isJoinedByMe: parseBool(row['is_joined_by_me']),
+      opportunityDeadline: row['opportunity_deadline'] != null
+          ? DateTime.tryParse(row['opportunity_deadline'].toString())
+          : null,
       createdAt: parseDate(row['created_at']),
       updatedAt: parseDate(row['updated_at']),
     );
+  }
+
+  // ── Opportunity joins ─────────────────────────────────────────────────────
+
+  /// Toggle join state for an opportunity post. Returns whether the user is now joined.
+  Future<bool> toggleJoin({
+    required String postId,
+    required String userId,
+  }) async {
+    final db = await _db.database;
+    final columns = await _tableColumns(db, DatabaseSchema.tablePosts);
+    final hasJoinTable = (await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+      [DatabaseSchema.tablePostJoins],
+    )).isNotEmpty;
+
+    return db.transaction((txn) async {
+      List<Map<String, Object?>> existing = const [];
+      if (hasJoinTable) {
+        existing = await txn.query(
+          DatabaseSchema.tablePostJoins,
+          where: 'post_id = ? AND user_id = ?',
+          whereArgs: [postId, userId],
+          limit: 1,
+        );
+      }
+
+      int delta;
+      bool isNowJoined;
+      if (existing.isNotEmpty) {
+        // Unjoin
+        if (hasJoinTable) {
+          await txn.delete(
+            DatabaseSchema.tablePostJoins,
+            where: 'post_id = ? AND user_id = ?',
+            whereArgs: [postId, userId],
+          );
+        }
+        delta = -1;
+        isNowJoined = false;
+      } else {
+        // Join
+        if (hasJoinTable) {
+          await txn.insert(DatabaseSchema.tablePostJoins, {
+            'id': _uuid.v4(),
+            'post_id': postId,
+            'user_id': userId,
+            'created_at': DateTime.now().toIso8601String(),
+            'sync_status': 0,
+          });
+        }
+        delta = 1;
+        isNowJoined = true;
+      }
+
+      if (columns.contains('join_count')) {
+        await txn.rawUpdate('''
+          UPDATE ${DatabaseSchema.tablePosts}
+          SET join_count = MAX(0, join_count + ?), sync_status = 0
+          WHERE id = ?
+        ''', [delta, postId]);
+      }
+
+      return isNowJoined;
+    });
+  }
+
+  /// Check if a user has joined an opportunity post.
+  Future<bool> hasJoinedPost({
+    required String postId,
+    required String userId,
+  }) async {
+    final db = await _db.database;
+    final hasJoinTable = (await db.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+      [DatabaseSchema.tablePostJoins],
+    )).isNotEmpty;
+    if (!hasJoinTable) return false;
+    final rows = await db.query(
+      DatabaseSchema.tablePostJoins,
+      columns: ['id'],
+      where: 'post_id = ? AND user_id = ?',
+      whereArgs: [postId, userId],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
   }
 
   Future<Set<String>> _tableColumns(Database db, String table) async {

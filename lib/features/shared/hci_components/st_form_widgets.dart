@@ -1,40 +1,41 @@
-// lib/features/shared/hci_components/st_form_widgets.dart
+﻿// lib/features/shared/hci_components/st_form_widgets.dart
 //
-// MUST StarTrack — Shared Form & HCI Components
+// MUST StarTrack â€” Shared Form & HCI Components
 //
 // These reusable widgets implement multiple HCI principles simultaneously:
 //
 //  StTextField
-//    • Affordance: labelled, bordered, focus animation
-//    • Feedback: real-time validation message as user types
-//    • Consistency: same appearance on all 73 screens
-//    • Universal Design: 56dp height min, semantic label
+//    â€¢ Affordance: labelled, bordered, focus animation
+//    â€¢ Feedback: real-time validation message as user types
+//    â€¢ Consistency: same appearance on all 73 screens
+//    â€¢ Universal Design: 56dp height min, semantic label
 //
 //  StButton / StOutlinedButton
-//    • Affordance: clear CTA colour (#1152d4)
-//    • Feedback: loading spinner replaces label during async op
-//    • Constraints: disabled state prevents double-submit
-//    • Universal Design: full-width, 56dp height (WCAG touch target)
+//    â€¢ Affordance: clear CTA colour (#1152d4)
+//    â€¢ Feedback: loading spinner replaces label during async op
+//    â€¢ Constraints: disabled state prevents double-submit
+//    â€¢ Universal Design: full-width, 56dp height (WCAG touch target)
 //
 //  ProgressStepper
-//    • Visibility: shows which step user is on and % complete
-//    • Mapping: step dots correspond to pages
+//    â€¢ Visibility: shows which step user is on and % complete
+//    â€¢ Mapping: step dots correspond to pages
 //
 //  SkillChipInput
-//    • Affordance: chips show items are removable
-//    • Feedback: chip appears instantly on Enter/comma
+//    â€¢ Affordance: chips show items are removable
+//    â€¢ Feedback: chip appears instantly on Enter/comma
 //
 //  PasswordStrengthBar
-//    • Feedback: real-time strength visualisation
+//    â€¢ Feedback: real-time strength visualisation
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// StTextField — Standard text input
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// StTextField â€” Standard text input
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class StTextField extends StatelessWidget {
   final String label;
@@ -54,6 +55,7 @@ class StTextField extends StatelessWidget {
   final FocusNode? focusNode;
   final bool autofocus;
   final String? initialValue;
+  final List<TextInputFormatter> inputFormatters;
 
   const StTextField({
     super.key,
@@ -74,6 +76,7 @@ class StTextField extends StatelessWidget {
     this.focusNode,
     this.autofocus = false,
     this.initialValue,
+    this.inputFormatters = const [],
   });
 
   @override
@@ -89,12 +92,12 @@ class StTextField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Label ───────────────────────────────────────────────────────────
+        // â”€â”€ Label â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         Padding(
           padding: const EdgeInsets.only(left: 2, bottom: 6),
           child: Text(
             label,
-            style: GoogleFonts.lexend(
+            style: GoogleFonts.plusJakartaSans(
               fontSize: 13,
               fontWeight: FontWeight.w600,
               color: theme.brightness == Brightness.dark
@@ -103,7 +106,7 @@ class StTextField extends StatelessWidget {
             ),
           ),
         ),
-        // ── Input ────────────────────────────────────────────────────────────
+        // â”€â”€ Input â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         TextFormField(
           controller: controller,
           initialValue: initialValue,
@@ -117,7 +120,8 @@ class StTextField extends StatelessWidget {
           textInputAction: textInputAction,
           focusNode: focusNode,
           autofocus: autofocus,
-          style: GoogleFonts.lexend(
+          inputFormatters: inputFormatters,
+          style: GoogleFonts.plusJakartaSans(
             fontSize: 15,
             fontWeight: FontWeight.w400,
             color: theme.brightness == Brightness.dark
@@ -128,7 +132,7 @@ class StTextField extends StatelessWidget {
             hintText: hint,
             helperText: helperText,
             helperMaxLines: 3,
-            helperStyle: GoogleFonts.lexend(
+            helperStyle: GoogleFonts.plusJakartaSans(
               fontSize: 11,
               color: AppColors.textSecondaryLight,
             ),
@@ -145,9 +149,9 @@ class StTextField extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// StDropdown — Consistent dropdown matching HTML select elements
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// StDropdown â€” Consistent dropdown matching HTML select elements
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class StDropdown<T> extends StatelessWidget {
   final String label;
@@ -179,7 +183,7 @@ class StDropdown<T> extends StatelessWidget {
           padding: const EdgeInsets.only(left: 2, bottom: 6),
           child: Text(
             label,
-            style: GoogleFonts.lexend(
+            style: GoogleFonts.plusJakartaSans(
               fontSize: 13,
               fontWeight: FontWeight.w600,
               color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
@@ -194,11 +198,11 @@ class StDropdown<T> extends StatelessWidget {
           onChanged: onChanged,
           validator: validator,
           hint: hint != null
-              ? Text(hint!, style: GoogleFonts.lexend(fontSize: 14, color: AppColors.textHintLight))
+              ? Text(hint!, style: GoogleFonts.plusJakartaSans(fontSize: 14, color: AppColors.textHintLight))
               : null,
           icon: const Icon(Icons.expand_more, color: AppColors.textSecondaryLight),
           iconSize: 18,
-          style: GoogleFonts.lexend(
+          style: GoogleFonts.plusJakartaSans(
             fontSize: 14,
             color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
           ),
@@ -213,9 +217,9 @@ class StDropdown<T> extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// StButton — Primary full-width CTA button
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// StButton â€” Primary full-width CTA button
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class StButton extends StatelessWidget {
   final String label;
@@ -268,9 +272,9 @@ class StButton extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// StOutlinedButton — Secondary / back button
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// StOutlinedButton â€” Secondary / back button
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class StOutlinedButton extends StatelessWidget {
   final String label;
@@ -314,9 +318,9 @@ class StOutlinedButton extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GoogleSignInButton — matches HTML prototype Google button
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// GoogleSignInButton â€” matches HTML prototype Google button
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class GoogleSignInButton extends StatelessWidget {
   final VoidCallback? onPressed;
@@ -356,12 +360,12 @@ class GoogleSignInButton extends StatelessWidget {
             : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Google G logo — built in pure Flutter, no asset needed
+                  // Google G logo â€” built in pure Flutter, no asset needed
                   _GoogleLogo(),
                   const SizedBox(width: 12),
                   Text(
                     label,
-                    style: GoogleFonts.lexend(
+                    style: GoogleFonts.plusJakartaSans(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
                       color: isDark
@@ -422,9 +426,9 @@ class _GoogleLogoPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ProgressStepper — 3-step progress indicator matching prototypes
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ProgressStepper â€” 3-step progress indicator matching prototypes
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class ProgressStepper extends StatelessWidget {
   final int currentStep; // 1, 2, or 3
@@ -454,7 +458,7 @@ class ProgressStepper extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // ── Step dots ────────────────────────────────────────────────────
+          // â”€â”€ Step dots â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: List.generate(totalSteps, (i) {
@@ -477,13 +481,13 @@ class ProgressStepper extends StatelessWidget {
             }),
           ),
           const SizedBox(height: 10),
-          // ── Step label + % ───────────────────────────────────────────────
+          // â”€â”€ Step label + % â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 'Step $currentStep of $totalSteps',
-                style: GoogleFonts.lexend(
+                style: GoogleFonts.plusJakartaSans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                   color: AppColors.textSecondaryLight,
@@ -498,7 +502,7 @@ class ProgressStepper extends StatelessWidget {
                 ),
                 child: Text(
                   '$pct% Complete',
-                  style: GoogleFonts.lexend(
+                  style: GoogleFonts.plusJakartaSans(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: AppColors.primary,
@@ -508,7 +512,7 @@ class ProgressStepper extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          // ── Linear progress bar ───────────────────────────────────────────
+          // â”€â”€ Linear progress bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           ClipRRect(
             borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
             child: LinearProgressIndicator(
@@ -524,9 +528,9 @@ class ProgressStepper extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SkillChipInput — tag input matching HTML prototype
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// SkillChipInput â€” tag input matching HTML prototype
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class SkillChipInput extends StatefulWidget {
   final String label;
@@ -592,7 +596,7 @@ class _SkillChipInputState extends State<SkillChipInput> {
           padding: const EdgeInsets.only(left: 2, bottom: 6),
           child: Text(
             widget.label,
-            style: GoogleFonts.lexend(
+            style: GoogleFonts.plusJakartaSans(
               fontSize: 13,
               fontWeight: FontWeight.w600,
               color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
@@ -628,10 +632,10 @@ class _SkillChipInputState extends State<SkillChipInput> {
                   child: TextField(
                     controller: _controller,
                     focusNode: _focusNode,
-                    style: GoogleFonts.lexend(fontSize: 13),
+                    style: GoogleFonts.plusJakartaSans(fontSize: 13),
                     decoration: InputDecoration(
                       hintText: _skills.isEmpty ? 'Add skill...' : '',
-                      hintStyle: GoogleFonts.lexend(
+                      hintStyle: GoogleFonts.plusJakartaSans(
                         fontSize: 13,
                         color: AppColors.textHintLight,
                       ),
@@ -655,8 +659,8 @@ class _SkillChipInputState extends State<SkillChipInput> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Press Enter or comma to add — up to ${widget.maxSkills} skills',
-          style: GoogleFonts.lexend(
+          'Press Enter or comma to add â€” up to ${widget.maxSkills} skills',
+          style: GoogleFonts.plusJakartaSans(
             fontSize: 11,
             color: AppColors.textSecondaryLight,
           ),
@@ -685,7 +689,7 @@ class _SkillChip extends StatelessWidget {
         children: [
           Text(
             label,
-            style: GoogleFonts.lexend(
+            style: GoogleFonts.plusJakartaSans(
               fontSize: 12,
               fontWeight: FontWeight.w500,
               color: AppColors.primary,
@@ -702,9 +706,9 @@ class _SkillChip extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PasswordStrengthBar — real-time password strength indicator
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// PasswordStrengthBar â€” real-time password strength indicator
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 enum PasswordStrength { empty, weak, fair, good, strong }
 
@@ -765,7 +769,7 @@ class PasswordStrengthBar extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           label,
-          style: GoogleFonts.lexend(
+          style: GoogleFonts.plusJakartaSans(
             fontSize: 11,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.08,
@@ -777,9 +781,9 @@ class PasswordStrengthBar extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// OrDivider — "── Or ──" separator between auth options
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// OrDivider â€” "â”€â”€ Or â”€â”€" separator between auth options
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class OrDivider extends StatelessWidget {
   const OrDivider({super.key});
@@ -793,7 +797,7 @@ class OrDivider extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(
             'Or',
-            style: GoogleFonts.lexend(
+            style: GoogleFonts.plusJakartaSans(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               letterSpacing: 0.08,
@@ -807,9 +811,9 @@ class OrDivider extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// InfoBanner — inline info / warning box (matches HTML prototype error boxes)
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// InfoBanner â€” inline info / warning box (matches HTML prototype error boxes)
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class InfoBanner extends StatelessWidget {
   final String message;
@@ -851,7 +855,7 @@ class InfoBanner extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: GoogleFonts.lexend(
+              style: GoogleFonts.plusJakartaSans(
                 fontSize: 12,
                 height: 1.5,
                 color: color,
@@ -863,3 +867,4 @@ class InfoBanner extends StatelessWidget {
     );
   }
 }
+

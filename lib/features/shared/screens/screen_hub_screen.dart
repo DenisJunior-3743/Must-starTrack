@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/constants/app_colors.dart';
@@ -98,7 +98,7 @@ class ScreenHubScreen extends StatelessWidget {
             ),
             child: Text(
               'All newly added screens are available here for fast QA and routing checks.',
-              style: GoogleFonts.lexend(
+              style: GoogleFonts.plusJakartaSans(
                 fontSize: 13,
                 color: AppColors.textSecondary(context),
               ),
@@ -117,11 +117,11 @@ class ScreenHubScreen extends StatelessWidget {
                   tileColor: AppColors.surface(context),
                   title: Text(
                     item.title,
-                    style: GoogleFonts.lexend(fontWeight: FontWeight.w600),
+                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
                   ),
                   subtitle: Text(
                     item.category,
-                    style: GoogleFonts.lexend(fontSize: 12),
+                    style: GoogleFonts.plusJakartaSans(fontSize: 12),
                   ),
                   trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
                   onTap: () {
@@ -148,3 +148,4 @@ class _HubItem {
   final String category;
   final Widget screen;
 }
+

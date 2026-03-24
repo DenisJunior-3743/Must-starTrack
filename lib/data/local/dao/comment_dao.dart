@@ -12,6 +12,7 @@ class CommentRecord {
   final DateTime createdAt;
   final String? authorName;
   final String? authorPhotoUrl;
+  final String? parentCommentId;
 
   const CommentRecord({
     required this.id,
@@ -21,6 +22,7 @@ class CommentRecord {
     required this.createdAt,
     this.authorName,
     this.authorPhotoUrl,
+    this.parentCommentId,
   });
 }
 
@@ -39,6 +41,7 @@ class CommentDao {
         c.author_id,
         c.content,
         c.created_at,
+        c.parent_comment_id,
         u.display_name AS author_name,
         u.photo_url AS author_photo_url
       FROM ${DatabaseSchema.tableComments} c
@@ -57,6 +60,7 @@ class CommentDao {
         createdAt: DateTime.tryParse(createdAtRaw ?? '') ?? DateTime.now(),
         authorName: row['author_name'] as String?,
         authorPhotoUrl: row['author_photo_url'] as String?,
+        parentCommentId: row['parent_comment_id'] as String?,
       );
     }).toList();
   }
@@ -66,6 +70,7 @@ class CommentDao {
     required String authorId,
     required String content,
     String? commentId,
+    String? parentCommentId,
   }) async {
     final db = await _db.database;
     final now = DateTime.now().toIso8601String();
@@ -79,6 +84,7 @@ class CommentDao {
           'post_id': postId,
           'author_id': authorId,
           'content': content,
+          'parent_comment_id': parentCommentId,
           'created_at': now,
           'updated_at': now,
           'sync_status': 0,
@@ -100,6 +106,7 @@ class CommentDao {
     required String authorId,
     required String content,
     required DateTime createdAt,
+    String? parentCommentId,
   }) async {
     final db = await _db.database;
     final existing = await db.query(
@@ -117,6 +124,7 @@ class CommentDao {
         'post_id': postId,
         'author_id': authorId,
         'content': content,
+        'parent_comment_id': parentCommentId,
         'created_at': createdAt.toIso8601String(),
         'updated_at': createdAt.toIso8601String(),
         'sync_status': 1,

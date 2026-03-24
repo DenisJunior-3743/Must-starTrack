@@ -22,8 +22,8 @@
 
 import 'package:dartz/dartz.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../core/errors/failures.dart';
@@ -133,10 +133,11 @@ class FirebaseAuthRepository implements AuthRepository {
       final fbUser = credential.user;
       if (fbUser == null) return const Left(UnexpectedFailure('No user returned'));
 
-      // Email verification gate
-      if (!fbUser.emailVerified && !kDebugMode) {
-        return const Left(EmailNotVerifiedFailure());
-      }
+      // Email verification gate skipped — SMTP not configured yet.
+      // Restore once institutional email relay is live.
+      // if (!fbUser.emailVerified && !kDebugMode) {
+      //   return const Left(EmailNotVerifiedFailure());
+      // }
 
       return _resolveAndCacheUser(fbUser);
     } on fb.FirebaseAuthException catch (e) {
@@ -265,7 +266,8 @@ class FirebaseAuthRepository implements AuthRepository {
             .collection('users')
             .doc(user.id)
             .set(user.toJson(), SetOptions(merge: true));
-      } catch (_) {
+      } catch (e) {
+        debugPrint('⚠️ Firestore users write failed (will sync later): $e');
         await _syncDao.enqueue(
           entity: 'users',
           entityId: user.id,
@@ -274,8 +276,9 @@ class FirebaseAuthRepository implements AuthRepository {
         );
       }
 
-      // Send email verification
-      await fbUser.sendEmailVerification();
+      // Email verification is intentionally skipped — SMTP not configured yet.
+      // Re-enable once the institutional SMTP relay is set up.
+      // await fbUser.sendEmailVerification();
 
       return Right(user);
     } on fb.FirebaseAuthException catch (e) {
@@ -317,7 +320,8 @@ class FirebaseAuthRepository implements AuthRepository {
               .collection('users')
               .doc(updated.id)
               .set(updated.toJson(), SetOptions(merge: true));
-        } catch (_) {
+        } catch (e) {
+          debugPrint('⚠️ Firestore lecturer role write failed (will sync later): $e');
           await _syncDao.enqueue(
             entity: 'users',
             entityId: updated.id,
@@ -471,9 +475,8 @@ class FirebaseAuthRepository implements AuthRepository {
       final existing = await _resolveAndCacheUser(fbUser);
       final existingUser = existing.fold((_) => null, (u) => u);
       if (existingUser != null) {
-        if (!fbUser.emailVerified) {
-          await fbUser.sendEmailVerification();
-        }
+        // Email verification skipped — SMTP not configured yet.
+        // if (!fbUser.emailVerified) await fbUser.sendEmailVerification();
         return existingUser;
       }
 
@@ -529,9 +532,8 @@ class FirebaseAuthRepository implements AuthRepository {
         );
       }
 
-      if (!fbUser.emailVerified) {
-        await fbUser.sendEmailVerification();
-      }
+      // Email verification skipped — SMTP not configured yet.
+      // if (!fbUser.emailVerified) await fbUser.sendEmailVerification();
 
       return user;
     } catch (_) {

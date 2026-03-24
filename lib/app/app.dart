@@ -38,6 +38,7 @@ import '../core/di/injection_container.dart';
 import '../core/router/app_router.dart';
 import '../core/router/route_guards.dart';
 import '../core/theme/app_theme.dart';
+import '../core/theme/theme_cubit.dart';
 import '../core/constants/app_strings.dart';
 
 import '../features/auth/bloc/auth_cubit.dart';
@@ -74,6 +75,11 @@ class _StarTrackAppState extends State<StarTrackApp> {
   Widget build(BuildContext context) {
     return MultiBlocProvider(
       providers: [
+        // ── Global: theme mode (light / dark / system) ────────────────────
+        BlocProvider<ThemeCubit>.value(
+          value: sl<ThemeCubit>(),
+        ),
+
         // ── Global: auth state ─────────────────────────────────────────────
         // Uses existing singleton from sl<> — does NOT create a new instance.
         BlocProvider<AuthCubit>.value(
@@ -90,41 +96,41 @@ class _StarTrackAppState extends State<StarTrackApp> {
           create: (_) => sl<MessageCubit>()..loadConversations(),
         ),
       ],
-      child: MaterialApp.router(
-        // ── Identity ────────────────────────────────────────────────────────
-        title: AppStrings.appFullName,
-        debugShowCheckedModeBanner: false,
+      child: BlocBuilder<ThemeCubit, ThemeMode>(
+        builder: (_, themeMode) => MaterialApp.router(
+          // ── Identity ──────────────────────────────────────────────────────
+          title: AppStrings.appFullName,
+          debugShowCheckedModeBanner: false,
 
-        // ── Theme ────────────────────────────────────────────────────────────
-        theme: AppTheme.light,
-        darkTheme: AppTheme.dark,
-        themeMode: ThemeMode.system,
+          // ── Theme ─────────────────────────────────────────────────────────
+          theme: AppTheme.light,
+          darkTheme: AppTheme.dark,
+          themeMode: themeMode,
 
-        // ── Router ───────────────────────────────────────────────────────────
-        routerConfig: _router,
+        // ── Router ─────────────────────────────────────────────────────────
+          routerConfig: _router,
 
-        // ── Locale ───────────────────────────────────────────────────────────
-        locale: const Locale('en', 'UG'),
-        supportedLocales: const [
-          Locale('en', 'UG'),
-          Locale('en', 'US'),
-        ],
+          // ── Locale ─────────────────────────────────────────────────────────
+          locale: const Locale('en', 'UG'),
+          supportedLocales: const [
+            Locale('en', 'UG'),
+            Locale('en', 'US'),
+          ],
 
-        // ── Builder: ensures MediaQuery is accessible for overlays ───────────
-        builder: (context, child) {
-          // Clamp system font scaling to [0.8, 1.3] for accessibility
-          // without breaking fixed-height layouts.
-          final mediaQuery = MediaQuery.of(context);
-          final constrained = mediaQuery.copyWith(
-            textScaler: TextScaler.linear(
-              mediaQuery.textScaler.scale(1.0).clamp(0.8, 1.3),
-            ),
-          );
-          return MediaQuery(
-            data: constrained,
-            child: child ?? const SizedBox.shrink(),
-          );
-        },
+          // ── Builder: ensures MediaQuery is accessible for overlays ──────────
+          builder: (context, child) {
+            final mediaQuery = MediaQuery.of(context);
+            final constrained = mediaQuery.copyWith(
+              textScaler: TextScaler.linear(
+                mediaQuery.textScaler.scale(1.0).clamp(0.8, 1.3),
+              ),
+            );
+            return MediaQuery(
+              data: constrained,
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
+        ),
       ),
     );
   }

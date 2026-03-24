@@ -1,6 +1,6 @@
-// lib/features/auth/screens/lecturer_register_screen.dart
+﻿// lib/features/auth/screens/lecturer_register_screen.dart
 //
-// MUST StarTrack — Lecturer / Staff Registration Screen
+// MUST StarTrack â€” Lecturer / Staff Registration Screen
 //
 // Single-step form for staff accounts.
 // Validates institutional email domains (@must, @staff.must, @std.must).
@@ -84,18 +84,21 @@ class _LecturerRegisterScreenState extends State<LecturerRegisterScreen> {
       return candidate;
     }
 
-    final requestedFrom = sanitizedFrom(
+    sanitizedFrom(
       GoRouterState.of(context).uri.queryParameters['from'],
     );
 
-    return BlocProvider(
-      create: (_) => AuthCubit(authRepository: sl(), guards: sl()),
+    return BlocProvider.value(
+      // Use the global singleton so sl<AuthCubit>().currentUser is set
+      // everywhere (e.g. create_post_screen) after lecturer registration.
+      value: sl<AuthCubit>(),
       child: BlocConsumer<AuthCubit, AuthState>(
         listener: (ctx, state) {
           if (state is AuthEmailVerificationSent) {
             ctx.go(RouteNames.passwordResetSent);
           } else if (state is AuthAuthenticated) {
-            ctx.go(requestedFrom ?? RouteNames.home);
+            // Lecturers always land on their dashboard after registration.
+            ctx.go(RouteNames.lecturerDashboard);
           } else if (state is AuthError) {
             ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
               content: Text(state.message),
@@ -122,11 +125,11 @@ class _LecturerRegisterScreenState extends State<LecturerRegisterScreen> {
 
                     // Branding header
                     Text('Join MUST StarTrack',
-                      style: GoogleFonts.lexend(
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 32, fontWeight: FontWeight.w700, letterSpacing: -0.5)),
                     const SizedBox(height: 8),
                     Text('Create your lecturer or staff account to manage academic tracks and student progress.',
-                      style: GoogleFonts.lexend(
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 14, color: AppColors.textSecondaryLight, height: 1.5)),
                     const SizedBox(height: 32),
 
@@ -219,12 +222,12 @@ class _LecturerRegisterScreenState extends State<LecturerRegisterScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(AppStrings.haveAccount,
-                          style: GoogleFonts.lexend(
+                          style: GoogleFonts.plusJakartaSans(
                             fontSize: 13, color: AppColors.textSecondaryLight)),
                         TextButton(
                           onPressed: () => ctx.go(RouteNames.login),
                           child: Text('Back to Login',
-                            style: GoogleFonts.lexend(
+                            style: GoogleFonts.plusJakartaSans(
                               fontSize: 13, fontWeight: FontWeight.w700,
                               color: AppColors.primary)),
                         ),
@@ -251,12 +254,12 @@ class _LecturerRegisterScreenState extends State<LecturerRegisterScreen> {
                                 ),
                                 const SizedBox(width: 8),
                                 Text(AppStrings.appFullName,
-                                  style: GoogleFonts.lexend(fontWeight: FontWeight.w700)),
+                                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
                               ],
                             ),
                             const SizedBox(height: 4),
                             Text(AppStrings.university,
-                              style: GoogleFonts.lexend(fontSize: 11, color: AppColors.textSecondaryLight)),
+                              style: GoogleFonts.plusJakartaSans(fontSize: 11, color: AppColors.textSecondaryLight)),
                           ],
                         ),
                       ),
@@ -272,3 +275,4 @@ class _LecturerRegisterScreenState extends State<LecturerRegisterScreen> {
     );
   }
 }
+

@@ -1,6 +1,6 @@
-// lib/features/auth/screens/forgot_password_screen.dart
+﻿// lib/features/auth/screens/forgot_password_screen.dart
 //
-// MUST StarTrack — Forgot Password Screen
+// MUST StarTrack â€” Forgot Password Screen
 //
 // Sends a password reset email to the provided MUST address.
 // HCI: single focused action, clear email format hint, loading state.
@@ -81,11 +81,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     const SizedBox(height: 24),
 
                     Text(AppStrings.resetPassword,
-                      style: GoogleFonts.lexend(
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 24, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
                     const SizedBox(height: 8),
                     Text('Enter your MUST email address and we\'ll send you a link to reset your password.',
-                      style: GoogleFonts.lexend(fontSize: 14, color: AppColors.textSecondaryLight, height: 1.5)),
+                      style: GoogleFonts.plusJakartaSans(fontSize: 14, color: AppColors.textSecondaryLight, height: 1.5)),
                     const SizedBox(height: 32),
 
                     StTextField(
@@ -120,7 +120,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       child: TextButton(
                         onPressed: () => ctx.pop(),
                         child: Text('Back to Login',
-                          style: GoogleFonts.lexend(
+                          style: GoogleFonts.plusJakartaSans(
                             fontSize: 13, fontWeight: FontWeight.w600,
                             color: AppColors.primary)),
                       ),
@@ -135,3 +135,4 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
   }
 }
+

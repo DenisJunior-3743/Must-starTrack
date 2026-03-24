@@ -25,6 +25,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'dart:async';
 
 import '../../../data/local/dao/notification_dao.dart';
+import '../../../data/local/dao/sync_queue_dao.dart';
+import '../../../data/remote/sync_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
 
 // ── States ────────────────────────────────────────────────────────────────────
@@ -81,14 +83,23 @@ class NotificationError extends NotificationState {
 class NotificationCubit extends Cubit<NotificationState> {
   final NotificationDao _dao;
   final AuthCubit _authCubit;
+  final SyncQueueDao _syncQueueDao;
+  final SyncService _syncService;
   late final StreamSubscription _authSub;
   late final StreamSubscription _daoSub;
 
   String? get _currentUserId => _authCubit.currentUser?.id;
 
-  NotificationCubit({required NotificationDao dao, required AuthCubit authCubit})
+  NotificationCubit({
+    required NotificationDao dao,
+    required AuthCubit authCubit,
+    required SyncQueueDao syncQueueDao,
+    required SyncService syncService,
+  })
       : _dao = dao,
         _authCubit = authCubit,
+        _syncQueueDao = syncQueueDao,
+        _syncService = syncService,
         super(const NotificationInitial()) {
     _authSub = _authCubit.stream.listen((state) {
       if (state is AuthAuthenticated) {
@@ -139,6 +150,16 @@ class NotificationCubit extends Cubit<NotificationState> {
   Future<void> markRead(String notificationId) async {
     final current = state;
     if (current is! NotificationsLoaded) return;
+    NotificationModel? target;
+    for (final notif in current.notifications) {
+      if (notif.id == notificationId) {
+        target = notif;
+        break;
+      }
+    }
+    if (target == null || target.isRead) {
+      return;
+    }
 
     // Optimistic update
     final updated = current.notifications.map((n) =>
@@ -156,6 +177,12 @@ class NotificationCubit extends Cubit<NotificationState> {
     emit(current.copyWith(notifications: updated, unreadCount: newUnread));
 
     await _dao.markAsRead(notificationId);
+    await _enqueueNotificationUpdate(
+      notificationId: notificationId,
+      payload: {
+        'is_read': true,
+      },
+    );
   }
 
   // ── Mark all read ─────────────────────────────────────────────────────────
@@ -163,6 +190,11 @@ class NotificationCubit extends Cubit<NotificationState> {
   Future<void> markAllRead() async {
     final current = state;
     if (current is! NotificationsLoaded) return;
+
+    final unread = current.notifications.where((n) => !n.isRead).toList();
+    if (unread.isEmpty) {
+      return;
+    }
 
     final updated = current.notifications.map((n) => NotificationModel(
       id: n.id, userId: n.userId, type: n.type,
@@ -176,6 +208,16 @@ class NotificationCubit extends Cubit<NotificationState> {
     final uid = _currentUserId;
     if (uid != null && uid.isNotEmpty) {
       await _dao.markAllRead(uid);
+      for (final notif in unread) {
+        await _enqueueNotificationUpdate(
+          notificationId: notif.id,
+          payload: {
+            'is_read': true,
+          },
+          triggerSync: false,
+        );
+      }
+      await _syncService.processPendingSync();
     }
   }
 
@@ -186,10 +228,34 @@ class NotificationCubit extends Cubit<NotificationState> {
     required String notificationId,
     required bool accepted,
   }) async {
-    await _dao.respondToCollabRequest(
+    final collabRequestId = await _dao.respondToCollabRequest(
       notificationId: notificationId,
       accepted: accepted,
     );
+    final currentUserId = _currentUserId;
+    final now = DateTime.now().toIso8601String();
+    await _enqueueNotificationUpdate(
+      notificationId: notificationId,
+      payload: {
+        'is_read': true,
+        'extra_json': '{"accepted":$accepted}',
+      },
+    );
+    if (collabRequestId != null && currentUserId != null && currentUserId.isNotEmpty) {
+      await _syncQueueDao.enqueue(
+        operation: 'update',
+        entity: 'collab_requests',
+        entityId: collabRequestId,
+        payload: {
+          'request_id': collabRequestId,
+          'status': accepted ? 'accepted' : 'rejected',
+          'responder_id': currentUserId,
+          'responded_at': now,
+          'updated_at': now,
+        },
+      );
+      await _syncService.processPendingSync();
+    }
 
     // Reload to reflect updated extra_json
     final current = state;
@@ -227,6 +293,25 @@ class NotificationCubit extends Cubit<NotificationState> {
     final uid = _currentUserId;
     if (uid == null || uid.isEmpty) return 0;
     return _dao.getUnreadCount(uid);
+  }
+
+  Future<void> _enqueueNotificationUpdate({
+    required String notificationId,
+    required Map<String, dynamic> payload,
+    bool triggerSync = true,
+  }) async {
+    await _syncQueueDao.enqueue(
+      operation: 'update',
+      entity: 'notifications',
+      entityId: notificationId,
+      payload: {
+        'notification_id': notificationId,
+        ...payload,
+      },
+    );
+    if (triggerSync) {
+      await _syncService.processPendingSync();
+    }
   }
 
   @override

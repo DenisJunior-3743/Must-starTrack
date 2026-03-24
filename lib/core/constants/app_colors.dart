@@ -28,6 +28,17 @@ abstract final class AppColors {
   /// Darker primary for pressed states.
   static const Color primaryDark = Color(0xFF0D3FA8);
 
+  // ── MUST University Accent Colors ─────────────────────────────────────────
+  /// Institutional green — achievement badges, success highlights, MUST branding.
+  static const Color mustGreen       = Color(0xFF1B8A4B);
+  static const Color mustGreenLight  = Color(0xFFE8F5EE);
+  static const Color mustGreenDark   = Color(0xFF0D5C30);
+
+  /// Gold accent — active nav indicator, streak highlights, premium badges.
+  static const Color mustGold        = Color(0xFFFFB300);
+  static const Color mustGoldLight   = Color(0xFFFFF8E1);
+  static const Color mustGoldDark    = Color(0xFFE65100);
+
   // ── Backgrounds ──────────────────────────────────────────────────────────
   /// Light mode scaffold/page background.
   static const Color backgroundLight = Color(0xFFF6F6F8);

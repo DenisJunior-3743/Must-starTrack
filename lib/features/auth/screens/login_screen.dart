@@ -1,6 +1,6 @@
-// lib/features/auth/screens/login_screen.dart
+﻿// lib/features/auth/screens/login_screen.dart
 //
-// MUST StarTrack — Login Screen (Phase 2)
+// MUST StarTrack â€” Login Screen (Phase 2)
 //
 // HCI: Affordance, Feedback, Constraints, Natural Mapping, Universal Design
 
@@ -14,6 +14,7 @@ import '../../../core/constants/app_dimensions.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/must_validators.dart';
 import '../../../core/di/injection_container.dart';
+import '../../../core/router/route_guards.dart';
 import '../../../core/router/route_names.dart';
 import '../../shared/hci_components/st_form_widgets.dart';
 import '../bloc/auth_cubit.dart';
@@ -62,12 +63,19 @@ class _LoginScreenState extends State<LoginScreen> {
       GoRouterState.of(context).uri.queryParameters['from'],
     );
 
-    return BlocProvider(
-      create: (_) => AuthCubit(authRepository: sl(), guards: sl()),
+    return BlocProvider.value(
+      // Use the global singleton so sl<AuthCubit>().currentUser is set
+      // everywhere (e.g. create_post_screen) after a successful login.
+      value: sl<AuthCubit>(),
       child: BlocConsumer<AuthCubit, AuthState>(
         listener: (ctx, state) {
           if (state is AuthAuthenticated) {
-            ctx.go(requestedFrom ?? RouteNames.home);
+            // Lecturers land on their dashboard; everyone else on the feed.
+            final role = sl<RouteGuards>().currentRole;
+            final dest = role == UserRole.lecturer
+                ? RouteNames.lecturerDashboard
+                : (requestedFrom ?? RouteNames.home);
+            ctx.go(dest);
           } else if (state is AuthError) {
             ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
               content: Text(state.message),
@@ -81,17 +89,38 @@ class _LoginScreenState extends State<LoginScreen> {
           return Scaffold(
             body: SafeArea(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: AppDimensions.screenHPadding),
+                padding: const EdgeInsets.fromLTRB(
+                  AppDimensions.screenHPadding,
+                  24,
+                  AppDimensions.screenHPadding,
+                  32,
+                ),
                 child: Form(
                   key: _formKey,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(height: 40),
+                      // Logo + branding hero card
+                      _Branding(),
+                      const SizedBox(height: 32),
 
-                      // Logo + branding
-                      Center(child: _Branding()),
-                      const SizedBox(height: 40),
+                      Text(
+                        'Welcome back',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Sign in to your account',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14,
+                          color: AppColors.textSecondaryLight,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
 
                       // Email
                       StTextField(
@@ -132,7 +161,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: TextButton(
                           onPressed: () => ctx.push(RouteNames.forgotPassword),
                           child: Text(AppStrings.forgotPassword,
-                              style: GoogleFonts.lexend(
+                              style: GoogleFonts.plusJakartaSans(
                                 fontSize: 13, fontWeight: FontWeight.w600,
                                 color: AppColors.primary,
                               )),
@@ -183,27 +212,65 @@ class _LoginScreenState extends State<LoginScreen> {
 class _Branding extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          width: 72, height: 72,
-          decoration: BoxDecoration(
-            color: AppColors.primaryTint10,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: const Icon(Icons.rocket_launch_rounded, size: 40, color: AppColors.primary),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF0D3FA8), Color(0xFF1152D4), Color(0xFF2563EB)],
         ),
-        const SizedBox(height: 16),
-        Text(AppStrings.appFullName,
-          style: GoogleFonts.lexend(
-            fontSize: 28, fontWeight: FontWeight.w700,
-            color: AppColors.primary, letterSpacing: -0.4,
-          )),
-        const SizedBox(height: 4),
-        Text(AppStrings.appTagline,
-          style: GoogleFonts.lexend(fontSize: 13, color: AppColors.textSecondaryLight),
-          textAlign: TextAlign.center),
-      ],
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.35),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.3),
+                width: 1.5,
+              ),
+            ),
+            child: const Icon(
+              Icons.auto_awesome_rounded,
+              size: 32,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            AppStrings.appFullName,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            AppStrings.appTagline,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 12,
+              color: Colors.white.withValues(alpha: 0.80),
+              height: 1.4,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -217,20 +284,20 @@ class _RegisterLinks extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(AppStrings.noAccount,
-              style: GoogleFonts.lexend(fontSize: 13, color: AppColors.textSecondaryLight)),
+              style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textSecondaryLight)),
             TextButton(
               onPressed: () => context.push(RouteNames.registerStep1),
               style: TextButton.styleFrom(padding: const EdgeInsets.only(left: 4)),
               child: Text('Register as Student',
-                style: GoogleFonts.lexend(
+                style: GoogleFonts.plusJakartaSans(
                   fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.primary)),
             ),
           ],
         ),
         TextButton(
           onPressed: () => context.push(RouteNames.lecturerRegister),
-          child: Text('Staff / Lecturer Registration →',
-            style: GoogleFonts.lexend(
+          child: Text('Staff / Lecturer Registration â†’',
+            style: GoogleFonts.plusJakartaSans(
               fontSize: 13, fontWeight: FontWeight.w600,
               color: AppColors.textSecondaryLight, decoration: TextDecoration.underline,
               decorationColor: AppColors.textSecondaryLight,
@@ -239,9 +306,10 @@ class _RegisterLinks extends StatelessWidget {
         TextButton(
           onPressed: () => context.go(RouteNames.guestDiscover),
           child: Text(AppStrings.exploreAsGuest,
-            style: GoogleFonts.lexend(fontSize: 12, color: AppColors.textSecondaryLight)),
+            style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.textSecondaryLight)),
         ),
       ],
     );
   }
 }
+
