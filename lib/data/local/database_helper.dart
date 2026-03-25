@@ -91,6 +91,52 @@ class DatabaseHelper {
       await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_notif_read ON ${DatabaseSchema.tableNotifications}(is_read)');
     }
+    if (oldVersion < 3) {
+      await db.execute(DatabaseSchema.createConversations);
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_conversations_user ON ${DatabaseSchema.tableConversations}(user_id)');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_conversations_time ON ${DatabaseSchema.tableConversations}(last_message_at DESC)');
+
+      await _ensureColumn(db, DatabaseSchema.tableMessages, 'conversation_id', 'TEXT');
+      await _ensureColumn(db, DatabaseSchema.tableMessages, 'message_type', "TEXT NOT NULL DEFAULT 'text'");
+      await _ensureColumn(db, DatabaseSchema.tableMessages, 'file_url', 'TEXT');
+      await _ensureColumn(db, DatabaseSchema.tableMessages, 'file_name', 'TEXT');
+      await _ensureColumn(db, DatabaseSchema.tableMessages, 'file_size', 'TEXT');
+      await _ensureColumn(db, DatabaseSchema.tableMessages, 'created_at', 'INTEGER');
+      await _ensureColumn(db, DatabaseSchema.tableMessages, 'is_read', 'INTEGER NOT NULL DEFAULT 0');
+      await _ensureColumn(db, DatabaseSchema.tableMessages, 'is_deleted', 'INTEGER NOT NULL DEFAULT 0');
+    }
+    if (oldVersion < 4) {
+      // Opportunity-specific columns on posts
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'area_of_expertise', 'TEXT');
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'max_participants', 'INTEGER DEFAULT 0');
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'join_count', 'INTEGER NOT NULL DEFAULT 0');
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'opportunity_deadline', 'TEXT');
+      // Post joins table for tracking opportunity participation
+      await db.execute(DatabaseSchema.createPostJoins);
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_post_joins_user ON ${DatabaseSchema.tablePostJoins}(user_id)');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_post_joins_post ON ${DatabaseSchema.tablePostJoins}(post_id)');
+    }
+    if (oldVersion < 5) {
+      // External links support - multiple links with descriptions
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'external_links', "TEXT DEFAULT '[]'");
+    }
+  }
+
+  Future<void> _ensureColumn(
+    Database db,
+    String table,
+    String column,
+    String definition,
+  ) async {
+    final rows = await db.rawQuery('PRAGMA table_info($table)');
+    final hasColumn = rows.any((row) => row['name'] == column);
+    if (!hasColumn) {
+      await db.execute('ALTER TABLE $table ADD COLUMN $column $definition');
+    }
   }
 
   // ── Utility ───────────────────────────────────────────────────────────────
@@ -127,6 +173,7 @@ class DatabaseHelper {
         DatabaseSchema.tableOpportunities,
         DatabaseSchema.tableNotifications,
         DatabaseSchema.tableMessages,
+        DatabaseSchema.tableConversations,
         DatabaseSchema.tableMessageThreads,
         DatabaseSchema.tableCollabRequests,
         DatabaseSchema.tableFollows,

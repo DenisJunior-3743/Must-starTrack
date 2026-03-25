@@ -76,6 +76,13 @@ class FirestoreService {
 
   // ── Post operations ───────────────────────────────────────────────────────
 
+  /// Fetches a single post by ID from Firestore. Returns null if not found.
+  Future<PostModel?> getPostById(String postId) async {
+    final doc = await _posts.doc(postId).get();
+    if (!doc.exists || doc.data() == null) return null;
+    return PostModel.fromJson({'id': doc.id, ...doc.data()!});
+  }
+
   /// Writes a post document (create or update).
   Future<void> setPost(PostModel post) async {
     await _posts.doc(post.id).set(post.toMap(), SetOptions(merge: true));
@@ -124,11 +131,14 @@ class FirestoreService {
   }) async {
     Query<Map<String, dynamic>> query = _posts
         .where('is_archived', isEqualTo: false)
+        .where('moderation_status', whereIn: [null, 'approved']) // Only show approved or unmoderated posts
         .orderBy('created_at', descending: true)
         .limit(pageSize);
 
     if (facultyFilter != null) {
-      query = query.where('faculty', isEqualTo: facultyFilter);
+      // 'faculties' is a Firestore array written by PostModel.toJson().
+      // array-contains supports multi-faculty opportunities correctly.
+      query = query.where('faculties', arrayContains: facultyFilter);
     }
     if (categoryFilter != null) {
       query = query.where('category', isEqualTo: categoryFilter);
@@ -198,30 +208,50 @@ class FirestoreService {
   /// Atomic update of conversation's last_message_at via transaction.
   Future<void> sendMessage(MessageModel message) async {
     final convoRef = _conversations.doc(message.conversationId);
-    final msgRef = convoRef
-        .collection('messages').doc(message.id);
+    final msgRef = convoRef.collection('messages').doc(message.id);
 
-    await _db.runTransaction((txn) async {
-      txn.set(msgRef, {
-        'id': message.id,
-        'sender_id': message.senderId,
-        'content': message.content,
-        'message_type': message.messageType,
-        'file_url': message.fileUrl,
-        'file_name': message.fileName,
-        'file_size': message.fileSize,
-        'created_at': FieldValue.serverTimestamp(),
-        'is_read': false,
-      });
+    // Parse user_id and peer_id from the conversation ID.
+    // Format: "{userId}_{peerId}_{timestamp}" — Firebase UIDs are alphanumeric
+    // and never contain underscores, so splitting on '_' is safe.
+    final parts = message.conversationId.split('_');
+    final convoUserId = parts.isNotEmpty ? parts[0] : message.senderId;
+    final convoPeerId = parts.length >= 2 ? parts[1] : '';
 
-      txn.set(convoRef, {
-        'last_message': message.content.length > 80
-            ? '${message.content.substring(0, 80)}…'
-            : message.content,
-        'last_message_at': FieldValue.serverTimestamp(),
-        'updated_at': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+    // Use separate writes instead of a transaction.  A transaction with
+    // SetOptions(merge:true) requires Firestore to internally READ the
+    // conversation document to apply the merge; if the doc doesn't exist
+    // yet, the READ rule fails and brings the whole transaction down even
+    // though the write rules would be satisfied.
+    await msgRef.set({
+      'id': message.id,
+      'sender_id': message.senderId,
+      'content': message.content,
+      'message_type': message.messageType,
+      'file_url': message.fileUrl,
+      'file_name': message.fileName,
+      'file_size': message.fileSize,
+      'created_at': FieldValue.serverTimestamp(),
+      'is_read': false,
     });
+
+    // Include user_id and peer_id so the Firestore create rule
+    // ("request.resource.data.user_id == uid()") is satisfied when the
+    // conversation document doesn't yet exist.
+    await convoRef.set({
+      'user_id': convoUserId,
+      'peer_id': convoPeerId,
+      'last_message': message.content.length > 80
+          ? '${message.content.substring(0, 80)}…'
+          : message.content,
+      'last_message_at': FieldValue.serverTimestamp(),
+      'updated_at': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    // Wait for the server to confirm the writes (not just local-cache
+    // acceptance). This throws if the server rejects with permission-denied
+    // or any other error, surfacing it to the caller instead of silently
+    // failing behind offline persistence.
+    await _db.waitForPendingWrites();
   }
 
   /// Streams new messages in real-time for the chat screen.
@@ -247,6 +277,38 @@ class FirestoreService {
                 isRead: data['is_read'] as bool? ?? false,
               );
             }).toList());
+  }
+
+  /// Deletes a conversation document and any message docs under it for the
+  /// current user's thread.
+  Future<void> deleteConversation(String conversationId) async {
+    final convoRef = _conversations.doc(conversationId);
+    final messageSnap = await convoRef.collection('messages').get();
+
+    for (final doc in messageSnap.docs) {
+      await doc.reference.delete();
+    }
+
+    await convoRef.delete();
+  }
+
+  /// Marks all incoming messages in a conversation as read for the current user.
+  Future<void> markConversationRead({
+    required String conversationId,
+    required String userId,
+  }) async {
+    final convoRef = _conversations.doc(conversationId);
+    final snapshot = await convoRef.collection('messages').get();
+
+    for (final doc in snapshot.docs) {
+      final data = doc.data();
+      final senderId = data['sender_id'] as String?;
+      final isRead = data['is_read'] as bool? ?? false;
+      if (senderId == null || senderId == userId || isRead) {
+        continue;
+      }
+      await doc.reference.update({'is_read': true});
+    }
   }
 
   // ── Notification operations ───────────────────────────────────────────────

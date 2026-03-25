@@ -21,6 +21,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/router/route_guards.dart';
+import 'lecturer_bottom_nav.dart';
 import 'startrack_bottom_nav.dart';
 
 class MainShell extends StatelessWidget {
@@ -29,21 +30,25 @@ class MainShell extends StatelessWidget {
 
   void _handleAddTap(BuildContext context) {
     final guards = sl<RouteGuards>();
-    if (guards.canCreatePost()) {
+
+    // Students, lecturers, admins and super-admins can all create content.
+    if (guards.canCreatePost() || guards.canPostOpportunity()) {
       context.push(RouteNames.createPost);
       return;
     }
 
-    if (guards.isAuthenticated) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Project upload is currently available for student accounts only.'),
-        ),
-      );
+    // Not authenticated → prompt to sign in.
+    if (!guards.isAuthenticated) {
+      _showAuthRequiredModal(context);
       return;
     }
 
-    _showAuthRequiredModal(context);
+    // Authenticated but role doesn't allow posting (edge case).
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Post creation is not available for your account type.'),
+      ),
+    );
   }
 
   Future<void> _showAuthRequiredModal(BuildContext context) async {
@@ -132,8 +137,7 @@ class MainShell extends StatelessWidget {
   StarTrackNavTab _currentTab(String location) {
     if (location.startsWith(RouteNames.peers)) return StarTrackNavTab.peers;
     if (location.startsWith(RouteNames.inbox)) return StarTrackNavTab.inbox;
-    if (location.startsWith(RouteNames.projects) ||
-        location.startsWith(RouteNames.notifications)) {
+    if (location.startsWith(RouteNames.projects)) {
       return StarTrackNavTab.projects;
     }
     if (location.startsWith(RouteNames.home) ||
@@ -143,11 +147,43 @@ class MainShell extends StatelessWidget {
     return StarTrackNavTab.none;
   }
 
+  LecturerNavTab _lecturerCurrentTab(String location) {
+    if (location.startsWith(RouteNames.lecturerDashboard) ||
+        location.startsWith(RouteNames.lecturerApplicants) ||
+        location.startsWith(RouteNames.lecturerRanking)) {
+      return LecturerNavTab.dashboard;
+    }
+    if (location.startsWith(RouteNames.lecturerSearch)) return LecturerNavTab.search;
+    if (location.startsWith(RouteNames.inbox)) return LecturerNavTab.inbox;
+    if (location.startsWith(RouteNames.home) ||
+        location.startsWith(RouteNames.discover)) {
+      return LecturerNavTab.feed;
+    }
+    return LecturerNavTab.none;
+  }
+
   @override
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
-    final currentTab = _currentTab(location);
+    final role = sl<RouteGuards>().currentRole;
 
+    // Lecturers get their own nav bar with role-specific destinations.
+    if (role == UserRole.lecturer) {
+      return Scaffold(
+        body: child,
+        bottomNavigationBar: LecturerBottomNav(
+          activeTab: _lecturerCurrentTab(location),
+          onFeedTap: () => context.go(RouteNames.home),
+          onDashboardTap: () => context.go(RouteNames.lecturerDashboard),
+          onAddTap: () => _handleAddTap(context),
+          onSearchTap: () => context.go(RouteNames.lecturerSearch),
+          onInboxTap: () => context.go(RouteNames.inbox),
+        ),
+      );
+    }
+
+    // Students, admins, super-admins — standard student nav.
+    final currentTab = _currentTab(location);
     return Scaffold(
       body: child,
       bottomNavigationBar: StarTrackBottomNav(

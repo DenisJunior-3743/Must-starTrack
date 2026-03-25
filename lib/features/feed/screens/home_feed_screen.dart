@@ -1,4 +1,4 @@
-// lib/features/feed/screens/home_feed_screen.dart
+﻿// lib/features/feed/screens/home_feed_screen.dart
 //
 // MUST StarTrack — Home Feed Screen (Phase 3)
 //
@@ -20,6 +20,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:timeago/timeago.dart' as timeago;
+import 'package:video_player/video_player.dart';
 import 'dart:io';
 
 import '../../../core/constants/app_colors.dart';
@@ -28,8 +29,14 @@ import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/router/route_guards.dart';
 import '../../../core/utils/media_path_utils.dart';
+import '../../../data/local/dao/activity_log_dao.dart';
+import '../../../data/local/dao/message_dao.dart';
+import '../../../data/local/dao/user_dao.dart';
 import '../../../data/models/post_model.dart';
+import '../../../data/remote/recommender_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
+import '../../shared/screens/offline_video_player_screen.dart';
+import '../../shared/widgets/settings_drawer.dart';
 import '../bloc/feed_cubit.dart';
 import '../../notifications/bloc/notification_cubit.dart';
 
@@ -74,6 +81,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
   Widget build(BuildContext context) {
     final cubit = _cubit ?? context.read<FeedCubit>();
     return Scaffold(
+      endDrawer: const SettingsDrawer(),
       body: RefreshIndicator(
         color: AppColors.primary,
         onRefresh: cubit.refresh,
@@ -103,7 +111,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                           'Projects You Might Like',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.lexend(
+                          style: GoogleFonts.plusJakartaSans(
                             fontSize: 17,
                             fontWeight: FontWeight.w700,
                           ),
@@ -118,7 +126,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                         ),
                         child: Text('View all',
-                          style: GoogleFonts.lexend(
+                          style: GoogleFonts.plusJakartaSans(
                             fontSize: 13, fontWeight: FontWeight.w600,
                             color: AppColors.primary)),
                       ),
@@ -130,6 +138,21 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
               // ── Feed ──────────────────────────────────────────────────────
               BlocBuilder<FeedCubit, FeedState>(
                 builder: (ctx, state) {
+                  if (state is FeedLoaded) {
+                    // Eagerly precache all image URLs so tiles render
+                    // instantly as the user scrolls (TikTok-style warm cache).
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!ctx.mounted) return;
+                      for (final post in state.posts) {
+                        for (final url in post.mediaUrls) {
+                          if (!_isVideoUrl(url) && url.startsWith('http')) {
+                            precacheImage(
+                              CachedNetworkImageProvider(url), ctx);
+                          }
+                        }
+                      }
+                    });
+                  }
                   if (state is FeedLoading) {
                     return const SliverFillRemaining(
                       child: Center(child: CircularProgressIndicator()),
@@ -144,14 +167,27 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                     );
                   }
                   if (state is FeedLoaded) {
+                    final isGuest = sl<AuthCubit>().currentUser == null;
                     if (state.posts.isEmpty) {
-                      return const SliverFillRemaining(child: _EmptyFeed());
+                      return SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _EmptyFeed(isGuest: isGuest),
+                      );
                     }
                     final authorGroups = _groupPostsByAuthor(state.posts);
+                    // Insert guest CTA after 2nd author group (or at end if
+                    // fewer groups exist). ctaAt == -1 means no CTA (authed).
+                    final ctaAt = isGuest
+                        ? authorGroups.length.clamp(0, 2)
+                        : -1;
                     return SliverList(
                       delegate: SliverChildBuilderDelegate(
                         (_, i) {
-                          if (i == authorGroups.length) {
+                          // Inject the branded CTA card at ctaAt slot.
+                          if (i == ctaAt) return const _GuestCtaBanner();
+                          // Shift group index past the injected CTA slot.
+                          final gi = (ctaAt >= 0 && i > ctaAt) ? i - 1 : i;
+                          if (gi == authorGroups.length) {
                             return state.isLoadingMore
                                 ? const Padding(
                                     padding: EdgeInsets.all(24),
@@ -163,16 +199,16 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
                                     ? const SizedBox(height: 80)
                                     : const _EndOfFeed();
                           }
-                          final group = authorGroups[i];
+                          final group = authorGroups[gi];
                           return _AuthorMediaShelf(
                             group: group,
                             onOpenPost: (post) => ctx.push('/project/${post.id}'),
-                            onOpenAuthor: () => ctx.push(
-                              '${RouteNames.profile}/${group.authorId}',
-                            ),
+                              onOpenAuthor: () => ctx.push(
+                                RouteNames.profile.replaceFirst(':userId', group.authorId),
+                              ),
                           );
                         },
-                        childCount: authorGroups.length + 1,
+                        childCount: authorGroups.length + (ctaAt >= 0 ? 2 : 1),
                       ),
                     );
                   }
@@ -235,6 +271,10 @@ class _AuthorMediaShelf extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final postRows = (group.posts.length / 2).ceil();
+    final postsGridHeight = (postRows * 178.0) + ((postRows - 1) * 12.0) + 30.0;
+    final tabViewHeight = postsGridHeight > 228 ? postsGridHeight : 228.0;
+
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       decoration: BoxDecoration(
@@ -251,6 +291,7 @@ class _AuthorMediaShelf extends StatelessWidget {
       ),
       child: DefaultTabController(
         length: 3,
+        initialIndex: 2,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -274,7 +315,7 @@ class _AuthorMediaShelf extends StatelessWidget {
                               group.authorName.isNotEmpty
                                   ? group.authorName[0].toUpperCase()
                                   : '?',
-                              style: GoogleFonts.lexend(
+                              style: GoogleFonts.plusJakartaSans(
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.primary,
                               ),
@@ -288,14 +329,14 @@ class _AuthorMediaShelf extends StatelessWidget {
                         children: [
                           Text(
                             group.authorName,
-                            style: GoogleFonts.lexend(
+                            style: GoogleFonts.plusJakartaSans(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
                           Text(
                             '${group.posts.length} posts',
-                            style: GoogleFonts.lexend(
+                            style: GoogleFonts.plusJakartaSans(
                               fontSize: 12,
                               color: AppColors.textSecondaryLight,
                             ),
@@ -305,7 +346,7 @@ class _AuthorMediaShelf extends StatelessWidget {
                     ),
                     Text(
                       timeago.format(group.leadPost.createdAt),
-                      style: GoogleFonts.lexend(
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 12,
                         color: AppColors.textSecondaryLight,
                       ),
@@ -326,7 +367,7 @@ class _AuthorMediaShelf extends StatelessWidget {
               ],
             ),
             SizedBox(
-              height: 228,
+              height: tabViewHeight,
               child: TabBarView(
                 children: [
                   _MediaStrip(
@@ -341,11 +382,9 @@ class _AuthorMediaShelf extends StatelessWidget {
                     emptyLabel: 'No videos shared yet.',
                     mode: _MediaStripMode.videos,
                   ),
-                  _MediaStrip(
+                  _PostsGrid(
                     posts: group.posts,
                     onOpenPost: onOpenPost,
-                    emptyLabel: 'No posts yet.',
-                    mode: _MediaStripMode.posts,
                   ),
                 ],
               ),
@@ -353,6 +392,48 @@ class _AuthorMediaShelf extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _PostsGrid extends StatelessWidget {
+  final List<PostModel> posts;
+  final void Function(PostModel post) onOpenPost;
+
+  const _PostsGrid({
+    required this.posts,
+    required this.onOpenPost,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (posts.isEmpty) {
+      return Center(
+        child: Text(
+          'No posts yet.',
+          style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondaryLight),
+        ),
+      );
+    }
+
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        mainAxisExtent: 178,
+      ),
+      itemCount: posts.length,
+      itemBuilder: (context, index) {
+        final post = posts[index];
+        return _MediaShelfTile(
+          post: post,
+          onTap: () => onOpenPost(post),
+          mode: _MediaStripMode.posts,
+        );
+      },
     );
   }
 }
@@ -378,7 +459,7 @@ class _MediaStrip extends StatelessWidget {
       return Center(
         child: Text(
           emptyLabel,
-          style: GoogleFonts.lexend(color: AppColors.textSecondaryLight),
+          style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondaryLight),
         ),
       );
     }
@@ -386,11 +467,33 @@ class _MediaStrip extends StatelessWidget {
     return ListView.separated(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-      itemBuilder: (_, index) => _MediaShelfTile(
-        post: posts[index],
-        onTap: () => onOpenPost(posts[index]),
-        mode: mode,
-      ),
+      itemBuilder: (context, index) {
+        final post = posts[index];
+        return _MediaShelfTile(
+          post: post,
+          onTap: () {
+            if (mode == _MediaStripMode.videos) {
+              final videoUrl = post.mediaUrls.where(_isVideoUrl).cast<String?>().firstWhere(
+                (_) => true,
+                orElse: () => null,
+              );
+              if (videoUrl != null) {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => OfflineVideoPlayerScreen(
+                      source: videoUrl,
+                      title: post.title,
+                    ),
+                  ),
+                );
+                return;
+              }
+            }
+            onOpenPost(post);
+          },
+          mode: mode,
+        );
+      },
       separatorBuilder: (_, __) => const SizedBox(width: 12),
       itemCount: posts.length,
     );
@@ -443,7 +546,9 @@ class _MediaShelfTile extends StatelessWidget {
                                 color: AppColors.primaryTint10,
                               ),
                             )
-                      : _MediaFallback(mode: mode),
+                      : mode == _MediaStripMode.videos && _videoUrl() != null
+                          ? _VideoThumbTile(url: _videoUrl()!)
+                          : _MediaFallback(mode: mode),
                 ),
               ),
             ),
@@ -452,7 +557,7 @@ class _MediaShelfTile extends StatelessWidget {
               post.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.lexend(
+              style: GoogleFonts.plusJakartaSans(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
               ),
@@ -462,7 +567,7 @@ class _MediaShelfTile extends StatelessWidget {
               post.category ?? post.type,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.lexend(
+              style: GoogleFonts.plusJakartaSans(
                 fontSize: 11,
                 color: AppColors.textSecondaryLight,
               ),
@@ -474,15 +579,106 @@ class _MediaShelfTile extends StatelessWidget {
   }
 
   String? _previewUrl() {
-    if (mode == _MediaStripMode.videos) {
-      return null;
-    }
+    if (mode == _MediaStripMode.videos) return null;
     for (final url in post.mediaUrls) {
-      if (!_isVideoUrl(url)) {
-        return url;
-      }
+      if (!_isVideoUrl(url)) return url;
     }
     return null;
+  }
+
+  String? _videoUrl() {
+    for (final url in post.mediaUrls) {
+      if (_isVideoUrl(url)) return url;
+    }
+    return null;
+  }
+}
+
+class _VideoThumbTile extends StatefulWidget {
+  final String url;
+  const _VideoThumbTile({required this.url});
+
+  @override
+  State<_VideoThumbTile> createState() => _VideoThumbTileState();
+}
+
+class _VideoThumbTileState extends State<_VideoThumbTile> {
+  VideoPlayerController? _ctrl;
+  bool _ready = false;
+  bool _error = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    try {
+      final ctrl = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+      await ctrl.initialize();
+      if (!mounted) {
+        ctrl.dispose();
+        return;
+      }
+      // Seek to first frame and pause — shows a real thumbnail, not a black screen.
+      await ctrl.seekTo(Duration.zero);
+      setState(() {
+        _ctrl = ctrl;
+        _ready = true;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _error = true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_error) return const _MediaFallback(mode: _MediaStripMode.videos);
+    if (!_ready || _ctrl == null) {
+      return Container(
+        color: AppColors.primaryTint10,
+        child: const Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
+    }
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        FittedBox(
+          fit: BoxFit.cover,
+          clipBehavior: Clip.hardEdge,
+          child: SizedBox(
+            width: _ctrl!.value.size.width,
+            height: _ctrl!.value.size.height,
+            child: VideoPlayer(_ctrl!),
+          ),
+        ),
+        Center(
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: const BoxDecoration(
+              color: Colors.black45,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.play_arrow_rounded,
+                color: Colors.white, size: 26),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -591,7 +787,7 @@ class _FeedAppBar extends StatelessWidget {
                     const SizedBox(width: 8),
                     Text(
                       guards.isAuthenticated ? 'Session Active' : 'Welcome',
-                      style: GoogleFonts.lexend(
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
                       ),
@@ -603,7 +799,7 @@ class _FeedAppBar extends StatelessWidget {
                   guards.isAuthenticated
                       ? 'You already have an active session. Continue to your main screen.'
                       : 'Sign in if you already have an account, or register to get started.',
-                  style: GoogleFonts.lexend(height: 1.35),
+                  style: GoogleFonts.plusJakartaSans(height: 1.35),
                 ),
                 const SizedBox(height: 16),
                 if (!guards.isAuthenticated) ...[
@@ -673,7 +869,7 @@ class _FeedAppBar extends StatelessWidget {
                       icon: const Icon(Icons.logout_rounded, size: 18,
                           color: AppColors.danger),
                       label: Text('Log out',
-                        style: GoogleFonts.lexend(
+                        style: GoogleFonts.plusJakartaSans(
                           fontWeight: FontWeight.w600,
                           color: AppColors.danger)),
                       style: OutlinedButton.styleFrom(
@@ -720,7 +916,7 @@ class _FeedAppBar extends StatelessWidget {
                               'Recommended for You',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.lexend(
+                              style: GoogleFonts.plusJakartaSans(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.primary,
@@ -766,7 +962,7 @@ class _FeedAppBar extends StatelessWidget {
                                     child: Text(
                                       unread > 99 ? '99+' : '$unread',
                                       textAlign: TextAlign.center,
-                                      style: GoogleFonts.lexend(
+                                      style: GoogleFonts.plusJakartaSans(
                                         fontSize: 9,
                                         fontWeight: FontWeight.w700,
                                         color: Colors.white,
@@ -792,11 +988,23 @@ class _FeedAppBar extends StatelessWidget {
                       onPressed: () => _showAuthEntryModal(context),
                       tooltip: 'Account',
                     ),
+                    // Hamburger — opens the settings end-drawer
+                    IconButton(
+                      constraints: const BoxConstraints.tightFor(
+                        width: 34,
+                        height: 34,
+                      ),
+                      padding: EdgeInsets.zero,
+                      iconSize: 20,
+                      icon: const Icon(Icons.menu_rounded),
+                      onPressed: () => Scaffold.of(context).openEndDrawer(),
+                      tooltip: 'Settings',
+                    ),
                   ],
                 ),
                 const SizedBox(height: 2),
                 Text('Hi $greetingName 👋',
-                  style: GoogleFonts.lexend(
+                  style: GoogleFonts.plusJakartaSans(
                     fontSize: 23,
                     fontWeight: FontWeight.w700,
                     letterSpacing: -0.3,
@@ -805,7 +1013,7 @@ class _FeedAppBar extends StatelessWidget {
                   'Based on your research interests and skills',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.lexend(
+                  style: GoogleFonts.plusJakartaSans(
                     fontSize: 12,
                     color: AppColors.textSecondaryLight,
                   ),
@@ -862,7 +1070,7 @@ class _FilterChips extends StatelessWidget {
                     avatar: const Icon(Icons.close, size: 14),
                     onPressed: cubit.clearFilters,
                     backgroundColor: AppColors.danger.withValues(alpha: 0.10),
-                    labelStyle: GoogleFonts.lexend(
+                    labelStyle: GoogleFonts.plusJakartaSans(
                       fontSize: 12, color: AppColors.danger,
                       fontWeight: FontWeight.w600),
                   ),
@@ -891,7 +1099,7 @@ class _Chip extends StatelessWidget {
         selected: active,
         onSelected: (_) => onTap(),
         selectedColor: AppColors.primary,
-        labelStyle: GoogleFonts.lexend(
+        labelStyle: GoogleFonts.plusJakartaSans(
           fontSize: 13,
           fontWeight: FontWeight.w600,
           color: active ? Colors.white : AppColors.textSecondaryLight,
@@ -913,62 +1121,112 @@ class _Chip extends StatelessWidget {
 // Collaborator suggestions horizontal strip
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _CollaboratorStrip extends StatelessWidget {
+class _CollaboratorStrip extends StatefulWidget {
   const _CollaboratorStrip();
 
- 
-  static const _placeholders = [
-    ('Elena V.', 'Python'),
-    ('Marcus C.', 'Data Viz'),
-    ('Julian H.', 'ML'),
-    ('Sia P.', 'Stats'),
-    ('Omar K.', 'Flutter'),
-  ];
+  @override
+  State<_CollaboratorStrip> createState() => _CollaboratorStripState();
+}
+
+class _CollaboratorStripState extends State<_CollaboratorStrip> {
+  late final Future<List<RecommendedUser>> _future = _loadRecommendations();
+
+  Future<List<RecommendedUser>> _loadRecommendations() async {
+    final currentUserId = sl<AuthCubit>().currentUser?.id;
+    if (currentUserId == null || currentUserId.isEmpty) {
+      return const [];
+    }
+
+    final userDao = sl<UserDao>();
+    final currentUser = await userDao.getUserById(currentUserId);
+    if (currentUser == null || currentUser.profile == null) {
+      return const [];
+    }
+
+    final allStudents = await userDao.getAllUsers(
+      role: UserRole.student.name,
+      includeSuspended: false,
+      pageSize: 120,
+    );
+    final accepted = await sl<MessageDao>().getAcceptedCollaborators(
+      userId: currentUserId,
+      limit: 100,
+    );
+    final searchTerms = await sl<ActivityLogDao>().getRecentSearchTerms(
+      currentUserId,
+    );
+
+    final excludedIds = accepted.map((item) => item.peerId).toSet();
+    return sl<RecommenderService>()
+        .rankCollaborators(
+          currentUser: currentUser,
+          candidates: allStudents,
+          excludedUserIds: excludedIds,
+          recentSearchTerms: searchTerms,
+        )
+        .take(8)
+        .toList();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
-          child: Row(
-            children: [
-              const Icon(Icons.group_add_rounded, size: 20, color: AppColors.primary),
-              const SizedBox(width: 8),
-              Text('Potential Collaborators',
-                style: GoogleFonts.lexend(
-                  fontSize: 17, fontWeight: FontWeight.w700)),
-            ],
-          ),
-        ),
-        SizedBox(
-          height: 140,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: _placeholders.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (_, i) {
-              final (name, skill) = _placeholders[i];
-              return _CollaboratorCard(name: name, skill: skill);
-            },
-          ),
-        ),
-      ],
+    return FutureBuilder<List<RecommendedUser>>(
+      future: _future,
+      builder: (context, snapshot) {
+        final items = snapshot.data ?? const <RecommendedUser>[];
+        if (items.isEmpty && snapshot.connectionState == ConnectionState.done) {
+          return const SizedBox.shrink();
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.group_add_rounded, size: 20, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Text('Potential Collaborators',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 17, fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+            SizedBox(
+              height: 150,
+              child: snapshot.connectionState != ConnectionState.done
+                  ? const Center(child: CircularProgressIndicator())
+                  : ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: items.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 12),
+                      itemBuilder: (_, i) => _CollaboratorCard(item: items[i]),
+                    ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
 
 class _CollaboratorCard extends StatelessWidget {
-  final String name;
-  final String skill;
+  final RecommendedUser item;
 
-  const _CollaboratorCard({required this.name, required this.skill});
+  const _CollaboratorCard({required this.item});
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final user = item.user;
+    final name = user.displayName ?? user.email;
+    final skill = item.matchedSkills.isNotEmpty
+        ? item.matchedSkills.first
+        : (user.profile?.skills.isNotEmpty == true
+            ? user.profile!.skills.first
+            : 'Student');
     return Container(
       width: 120,
       padding: const EdgeInsets.all(12),
@@ -986,21 +1244,29 @@ class _CollaboratorCard extends StatelessWidget {
           CircleAvatar(
             radius: 24,
             backgroundColor: AppColors.primaryTint10,
-            child: Text(
-              name[0],
-              style: GoogleFonts.lexend(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primary,
-              ),
-            ),
+            backgroundImage: user.photoUrl != null
+                ? CachedNetworkImageProvider(user.photoUrl!)
+                : null,
+            child: user.photoUrl == null
+                ? Text(
+                    name[0].toUpperCase(),
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                  )
+                : null,
           ),
           const SizedBox(height: 6),
-          Text(name,
-            style: GoogleFonts.lexend(fontSize: 12, fontWeight: FontWeight.w600),
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis),
+          InkWell(
+            onTap: () => context.push(RouteNames.profile.replaceFirst(':userId', user.id)),
+            child: Text(name,
+              style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+          ),
           const SizedBox(height: 3),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1009,9 +1275,21 @@ class _CollaboratorCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
             ),
             child: Text(skill,
-              style: GoogleFonts.lexend(
+              style: GoogleFonts.plusJakartaSans(
                 fontSize: 9, fontWeight: FontWeight.w600, color: AppColors.primary),
               maxLines: 1),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            item.reasons.contains('complementary_skills')
+                ? 'Strong complement'
+                : 'Shared interests',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 9,
+              color: AppColors.textSecondaryLight,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -1024,45 +1302,60 @@ class _CollaboratorCard extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _EmptyFeed extends StatelessWidget {
-  const _EmptyFeed();
+  final bool isGuest;
+  const _EmptyFeed({this.isGuest = false});
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.search_off_rounded, size: 64, color: AppColors.primary),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No posts yet',
-                      style: GoogleFonts.lexend(fontSize: 18, fontWeight: FontWeight.w700),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Be the first to share a project!',
-                      style: GoogleFonts.lexend(
-                        fontSize: 14,
-                        color: AppColors.textSecondaryLight,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isGuest ? Icons.explore_rounded : Icons.search_off_rounded,
+              size: 64,
+              color: AppColors.primary,
             ),
-          ),
-        );
-      },
+            const SizedBox(height: 16),
+            Text(
+              isGuest ? 'Discover MUST Projects' : 'No posts yet',
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 18, fontWeight: FontWeight.w700),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isGuest
+                  ? 'Projects are loading. Pull down to refresh, or join the community to collaborate.'
+                  : 'Be the first to share a project!',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 14,
+                color: AppColors.textSecondaryLight,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            if (isGuest) ...[
+              const SizedBox(height: 24),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FilledButton(
+                    onPressed: () => context.push(RouteNames.registerStep1),
+                    child: const Text('Create Account'),
+                  ),
+                  const SizedBox(width: 12),
+                  OutlinedButton(
+                    onPressed: () => context.push(RouteNames.login),
+                    child: const Text('Sign In'),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1086,11 +1379,11 @@ class _ErrorView extends StatelessWidget {
             children: [
               const Icon(Icons.wifi_off_rounded, size: 56, color: AppColors.danger),
               const SizedBox(height: 16),
-              Text('Could not load feed', style: GoogleFonts.lexend(fontWeight: FontWeight.w700)),
+              Text('Could not load feed', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
               const SizedBox(height: 4),
               Text(
                 message,
-                style: GoogleFonts.lexend(fontSize: 12, color: AppColors.textSecondaryLight),
+                style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.textSecondaryLight),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
@@ -1116,9 +1409,131 @@ class _EndOfFeed extends StatelessWidget {
       padding: const EdgeInsets.all(32),
       child: Center(
         child: Text("You're all caught up! ✨",
-          style: GoogleFonts.lexend(
+          style: GoogleFonts.plusJakartaSans(
             fontSize: 14, color: AppColors.textSecondaryLight)),
       ),
     );
   }
 }
+
+// ── Guest call-to-action banner ────────────────────────────────────────────────
+// Shown between the 2nd and 3rd author groups for unauthenticated visitors.
+// Mirrors the login hero gradient, giving a consistent brand feel.
+
+class _GuestCtaBanner extends StatelessWidget {
+  const _GuestCtaBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0D3FA8), Color(0xFF1152D4), Color(0xFF2563EB)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.30),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.auto_awesome_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Join MUST StarTrack',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Like projects, collaborate with peers, and showcase your skills to the entire MUST community.',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 13,
+                height: 1.45,
+                color: Colors.white.withValues(alpha: 0.88),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onPressed: () => context.push(RouteNames.registerStep1),
+                    child: Text(
+                      'Create Account',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: const BorderSide(color: Colors.white60, width: 1.5),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    onPressed: () => context.push(RouteNames.login),
+                    child: Text(
+                      'Sign In',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

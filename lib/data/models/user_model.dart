@@ -72,6 +72,11 @@ class UserModel extends Equatable {
     lastSeenAt: j['lastSeenAt'] != null ? DateTime.tryParse(j['lastSeenAt'] as String) : null,
     createdAt: DateTime.parse(j['createdAt'] as String),
     updatedAt: DateTime.parse(j['updatedAt'] as String),
+    profile: j['profile'] is Map<String, dynamic>
+        ? ProfileModel.fromJson(j['profile'] as Map<String, dynamic>)
+        : j['profile'] is Map
+            ? ProfileModel.fromJson(Map<String, dynamic>.from(j['profile'] as Map))
+            : null,
   );
 
   Map<String, dynamic> toJson() => {
@@ -80,6 +85,7 @@ class UserModel extends Equatable {
     'isEmailVerified': isEmailVerified, 'isSuspended': isSuspended,
     'isBanned': isBanned, 'lastSeenAt': lastSeenAt?.toIso8601String(),
     'createdAt': createdAt.toIso8601String(), 'updatedAt': updatedAt.toIso8601String(),
+    if (profile != null) 'profile': profile!.toJson(),
   };
 
   String get firstName => displayName?.split(' ').first ?? '';

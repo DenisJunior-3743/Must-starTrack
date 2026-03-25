@@ -38,7 +38,7 @@ class FeaturePlaceholderScreen extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: GoogleFonts.lexend(
+                  style: GoogleFonts.plusJakartaSans(
                     fontSize: 22,
                     fontWeight: FontWeight.w700,
                     color: AppColors.primary,
@@ -47,7 +47,7 @@ class FeaturePlaceholderScreen extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   subtitle,
-                  style: GoogleFonts.lexend(
+                  style: GoogleFonts.plusJakartaSans(
                     fontSize: 14,
                     height: 1.4,
                     color: AppColors.textSecondary(context),
@@ -62,11 +62,11 @@ class FeaturePlaceholderScreen extends StatelessWidget {
                   leading: const Icon(Icons.check_circle_outline_rounded, color: AppColors.primary),
                   title: Text(
                     section,
-                    style: GoogleFonts.lexend(fontWeight: FontWeight.w600),
+                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
                   ),
                   subtitle: Text(
                     'Integrated into the screen flow and ready for data binding.',
-                    style: GoogleFonts.lexend(fontSize: 12),
+                    style: GoogleFonts.plusJakartaSans(fontSize: 12),
                   ),
                 ),
               )),
@@ -83,3 +83,4 @@ class FeaturePlaceholderScreen extends StatelessWidget {
     );
   }
 }
+

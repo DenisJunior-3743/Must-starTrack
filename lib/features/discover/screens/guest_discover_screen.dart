@@ -1,6 +1,6 @@
-// lib/features/discover/screens/guest_discover_screen.dart
+﻿// lib/features/discover/screens/guest_discover_screen.dart
 //
-// MUST StarTrack — Guest Discover Screen
+// MUST StarTrack â€” Guest Discover Screen
 //
 // Shows the discover feed in read-only mode.
 // Interaction actions (like, collaborate) trigger a login nudge.
@@ -67,7 +67,7 @@ class _GuestDiscoverScreenState extends State<GuestDiscoverScreen> {
                     color: AppColors.primary, size: 22),
                 const SizedBox(width: 8),
                 Text('MUST StarTrack',
-                  style: GoogleFonts.lexend(
+                  style: GoogleFonts.plusJakartaSans(
                     fontWeight: FontWeight.w700, color: AppColors.primary)),
               ],
             ),
@@ -75,7 +75,7 @@ class _GuestDiscoverScreenState extends State<GuestDiscoverScreen> {
               TextButton(
                 onPressed: () => context.go(RouteNames.login),
                 child: Text('Sign In',
-                  style: GoogleFonts.lexend(
+                  style: GoogleFonts.plusJakartaSans(
                     fontWeight: FontWeight.w700, color: AppColors.primary)),
               ),
             ],
@@ -103,11 +103,11 @@ class _GuestDiscoverScreenState extends State<GuestDiscoverScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('You\'re browsing as a Guest',
-                          style: GoogleFonts.lexend(
+                          style: GoogleFonts.plusJakartaSans(
                             color: Colors.white, fontWeight: FontWeight.w700,
                             fontSize: 14)),
                         Text('Sign in to like, follow and collaborate.',
-                          style: GoogleFonts.lexend(
+                          style: GoogleFonts.plusJakartaSans(
                             color: Colors.white70, fontSize: 12)),
                       ],
                     ),
@@ -121,7 +121,7 @@ class _GuestDiscoverScreenState extends State<GuestDiscoverScreen> {
                         borderRadius: BorderRadius.circular(AppDimensions.radiusSm)),
                     ),
                     child: Text('Join',
-                      style: GoogleFonts.lexend(
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 13, fontWeight: FontWeight.w700,
                         color: AppColors.primary)),
                   ),
@@ -142,11 +142,11 @@ class _GuestDiscoverScreenState extends State<GuestDiscoverScreen> {
                     const Icon(Icons.public_rounded, size: 60, color: AppColors.primary),
                     const SizedBox(height: 16),
                     Text('No public posts yet.',
-                      style: GoogleFonts.lexend(fontSize: 16, fontWeight: FontWeight.w700)),
+                      style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 8),
                     TextButton(
                       onPressed: () => context.go(RouteNames.login),
-                      child: const Text('Sign in to see all content →'),
+                      child: const Text('Sign in to see all content â†’'),
                     ),
                   ],
                 ),
@@ -172,9 +172,9 @@ class _GuestDiscoverScreenState extends State<GuestDiscoverScreen> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Login nudge bottom sheet
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _LoginNudgeSheet extends StatelessWidget {
   @override
@@ -200,12 +200,12 @@ class _LoginNudgeSheet extends StatelessWidget {
             const Icon(Icons.lock_rounded, size: 48, color: AppColors.primary),
             const SizedBox(height: 12),
             Text('Join MUST StarTrack',
-              style: GoogleFonts.lexend(
+              style: GoogleFonts.plusJakartaSans(
                 fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
             const SizedBox(height: 8),
             Text(
               'Sign in with your MUST email to like posts, follow students, send collaboration requests and more.',
-              style: GoogleFonts.lexend(
+              style: GoogleFonts.plusJakartaSans(
                 fontSize: 14, color: AppColors.textSecondaryLight, height: 1.5),
               textAlign: TextAlign.center,
             ),
@@ -222,7 +222,7 @@ class _LoginNudgeSheet extends StatelessWidget {
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: Text('Continue Browsing',
-                style: GoogleFonts.lexend(
+                style: GoogleFonts.plusJakartaSans(
                   fontSize: 13, color: AppColors.textSecondaryLight)),
             ),
           ],
@@ -231,3 +231,4 @@ class _LoginNudgeSheet extends StatelessWidget {
     );
   }
 }
+

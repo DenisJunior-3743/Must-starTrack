@@ -16,6 +16,13 @@ class PostModel extends Equatable {
   final List<String> tags;
   final String? faculty;
   final String? program;
+
+  /// Splits the comma-joined faculty string into a list.
+  /// For projects this is a single entry; for opportunities it may have many.
+  List<String> get faculties {
+    if (faculty == null || faculty!.trim().isEmpty) return const [];
+    return faculty!.split(',').map((f) => f.trim()).where((f) => f.isNotEmpty).toList();
+  }
   final List<String> skillsUsed;
 
   final List<String> mediaUrls;
@@ -34,7 +41,15 @@ class PostModel extends Equatable {
 
   final bool isArchived;
   final bool isLikedByMe;
+  final bool isDislikedByMe;
   final bool isSavedByMe;
+
+  // ── Opportunity-specific fields ──────────────────────────────────────────
+  final String? areaOfExpertise;
+  final int? maxParticipants;
+  final int joinCount;
+  final bool isJoinedByMe;
+  final DateTime? opportunityDeadline;
 
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -66,12 +81,55 @@ class PostModel extends Equatable {
     this.viewCount = 0,
     this.isArchived = false,
     this.isLikedByMe = false,
+    this.isDislikedByMe = false,
     this.isSavedByMe = false,
+    this.areaOfExpertise,
+    this.maxParticipants,
+    this.joinCount = 0,
+    this.isJoinedByMe = false,
+    this.opportunityDeadline,
     required this.createdAt,
     required this.updatedAt,
   });
 
   factory PostModel.fromJson(Map<String, dynamic> j) {
+    String? toNullableString(dynamic value) {
+      if (value == null) return null;
+      if (value is String) {
+        final trimmed = value.trim();
+        return trimmed.isEmpty ? null : trimmed;
+      }
+      return value.toString();
+    }
+
+    String toRequiredString(dynamic value, {String fallback = ''}) {
+      return toNullableString(value) ?? fallback;
+    }
+
+    int? toNullableInt(dynamic value) {
+      if (value == null) return null;
+      if (value is int) return value;
+      if (value is double) return value.toInt();
+      if (value is String) return int.tryParse(value.trim());
+      return null;
+    }
+
+    int toInt(dynamic value, {int fallback = 0}) {
+      return toNullableInt(value) ?? fallback;
+    }
+
+    bool toBool(dynamic value, {bool fallback = false}) {
+      if (value == null) return fallback;
+      if (value is bool) return value;
+      if (value is int) return value == 1;
+      if (value is String) {
+        final normalized = value.trim().toLowerCase();
+        if (normalized == '1' || normalized == 'true') return true;
+        if (normalized == '0' || normalized == 'false') return false;
+      }
+      return fallback;
+    }
+
     List<String> toStringList(dynamic v) {
       if (v is List) {
         return v.map((e) => e.toString()).toList();
@@ -99,21 +157,21 @@ class PostModel extends Equatable {
     }
 
     return PostModel(
-      id: (j['id'] ?? '') as String,
-      authorId: (j['authorId'] ?? j['author_id'] ?? '') as String,
-      authorName: (j['authorName'] ?? j['author_name']) as String?,
-      authorPhotoUrl: (j['authorPhotoUrl'] ?? j['author_photo_url']) as String?,
-      authorRole: (j['authorRole'] ?? j['author_role']) as String?,
-      type: (j['type'] ?? 'project') as String,
-      title: (j['title'] ?? '') as String,
-      description: (j['description']) as String?,
-      category: (j['category']) as String?,
+      id: toRequiredString(j['id']),
+      authorId: toRequiredString(j['authorId'] ?? j['author_id']),
+      authorName: toNullableString(j['authorName'] ?? j['author_name']),
+      authorPhotoUrl: toNullableString(j['authorPhotoUrl'] ?? j['author_photo_url']),
+      authorRole: toNullableString(j['authorRole'] ?? j['author_role']),
+      type: toRequiredString(j['type'], fallback: 'project'),
+      title: toRequiredString(j['title']),
+      description: toNullableString(j['description']),
+      category: toNullableString(j['category']),
       tags: toStringList(j['tags']),
-      faculty: (j['faculty']) as String?,
-      program: (j['program']) as String?,
+      faculty: toNullableString(j['faculty']),
+      program: toNullableString(j['program']),
       skillsUsed: toStringList(j['skillsUsed'] ?? j['skills_used']),
       mediaUrls: toStringList(j['mediaUrls'] ?? j['media_urls']),
-      youtubeUrl: (j['youtubeUrl'] ?? j['youtube_url']) as String?,
+      youtubeUrl: toNullableString(j['youtubeUrl'] ?? j['youtube_url']),
       externalLinks: toLinkList(j['externalLinks'] ?? j['external_links']),
       visibility: PostVisibility.values.firstWhere(
         (v) => v.name == (j['visibility']?.toString() ?? 'public'),
@@ -123,21 +181,25 @@ class PostModel extends Equatable {
         (v) => v.name == (j['moderationStatus']?.toString() ?? j['moderation_status']?.toString() ?? 'approved'),
         orElse: () => ModerationStatus.approved,
       ),
-      trustScore: (j['trustScore'] ?? j['trust_score'] ?? 100) as int,
-      likeCount: (j['likeCount'] ?? j['like_count'] ?? 0) as int,
-      dislikeCount: (j['dislikeCount'] ?? j['dislike_count'] ?? 0) as int,
-      commentCount: (j['commentCount'] ?? j['comment_count'] ?? 0) as int,
-      shareCount: (j['shareCount'] ?? j['share_count'] ?? 0) as int,
-      viewCount: (j['viewCount'] ?? j['view_count'] ?? 0) as int,
-      isArchived: (j['isArchived'] ?? j['is_archived'] ?? false) is int
-          ? (j['isArchived'] ?? j['is_archived']) == 1
-          : (j['isArchived'] ?? j['is_archived'] ?? false) as bool,
-      isLikedByMe: (j['isLikedByMe'] ?? j['is_liked_by_me'] ?? false) is int
-          ? (j['isLikedByMe'] ?? j['is_liked_by_me']) == 1
-          : (j['isLikedByMe'] ?? j['is_liked_by_me'] ?? false) as bool,
-      isSavedByMe: (j['isSavedByMe'] ?? j['is_saved_by_me'] ?? false) is int
-          ? (j['isSavedByMe'] ?? j['is_saved_by_me']) == 1
-          : (j['isSavedByMe'] ?? j['is_saved_by_me'] ?? false) as bool,
+        trustScore: toInt(j['trustScore'] ?? j['trust_score'], fallback: 100),
+        likeCount: toInt(j['likeCount'] ?? j['like_count']),
+        dislikeCount: toInt(j['dislikeCount'] ?? j['dislike_count']),
+        commentCount: toInt(j['commentCount'] ?? j['comment_count']),
+        shareCount: toInt(j['shareCount'] ?? j['share_count']),
+        viewCount: toInt(j['viewCount'] ?? j['view_count']),
+        isArchived: toBool(j['isArchived'] ?? j['is_archived']),
+        isLikedByMe: toBool(j['isLikedByMe'] ?? j['is_liked_by_me']),
+        isDislikedByMe: toBool(j['isDislikedByMe'] ?? j['is_disliked_by_me']),
+        isSavedByMe: toBool(j['isSavedByMe'] ?? j['is_saved_by_me']),
+        areaOfExpertise: toNullableString(j['areaOfExpertise'] ?? j['area_of_expertise']),
+        maxParticipants: toNullableInt(j['maxParticipants'] ?? j['max_participants']),
+        joinCount: toInt(j['joinCount'] ?? j['join_count']),
+        isJoinedByMe: toBool(j['isJoinedByMe'] ?? j['is_joined_by_me']),
+      opportunityDeadline: j['opportunityDeadline'] != null
+          ? DateTime.tryParse(j['opportunityDeadline'].toString())
+          : j['opportunity_deadline'] != null
+              ? DateTime.tryParse(j['opportunity_deadline'].toString())
+              : null,
       createdAt: parseTime(createdRaw),
       updatedAt: parseTime(updatedRaw),
     );
@@ -155,6 +217,9 @@ class PostModel extends Equatable {
         'category': category,
         'tags': tags,
         'faculty': faculty,
+        // faculties is an array for Firestore array-contains queries.
+        // For projects it holds one entry; for opportunities it may hold many.
+        'faculties': faculties,
         'program': program,
         'skillsUsed': skillsUsed,
         'mediaUrls': mediaUrls,
@@ -170,7 +235,13 @@ class PostModel extends Equatable {
         'viewCount': viewCount,
         'isArchived': isArchived,
         'isLikedByMe': isLikedByMe,
+        'isDislikedByMe': isDislikedByMe,
         'isSavedByMe': isSavedByMe,
+        'areaOfExpertise': areaOfExpertise,
+        'maxParticipants': maxParticipants,
+        'joinCount': joinCount,
+        'isJoinedByMe': isJoinedByMe,
+        'opportunityDeadline': opportunityDeadline?.toIso8601String(),
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
       };
@@ -202,7 +273,13 @@ class PostModel extends Equatable {
         'view_count': viewCount,
         'is_archived': isArchived,
         'is_liked_by_me': isLikedByMe,
+        'is_disliked_by_me': isDislikedByMe,
         'is_saved_by_me': isSavedByMe,
+        'area_of_expertise': areaOfExpertise,
+        'max_participants': maxParticipants,
+        'join_count': joinCount,
+        'is_joined_by_me': isJoinedByMe,
+        'opportunity_deadline': opportunityDeadline?.toIso8601String(),
         'created_at': createdAt.millisecondsSinceEpoch,
         'updated_at': updatedAt.millisecondsSinceEpoch,
       };
@@ -234,7 +311,13 @@ class PostModel extends Equatable {
     int? viewCount,
     bool? isArchived,
     bool? isLikedByMe,
+    bool? isDislikedByMe,
     bool? isSavedByMe,
+    String? areaOfExpertise,
+    int? maxParticipants,
+    int? joinCount,
+    bool? isJoinedByMe,
+    DateTime? opportunityDeadline,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -265,7 +348,13 @@ class PostModel extends Equatable {
       viewCount: viewCount ?? this.viewCount,
       isArchived: isArchived ?? this.isArchived,
       isLikedByMe: isLikedByMe ?? this.isLikedByMe,
+      isDislikedByMe: isDislikedByMe ?? this.isDislikedByMe,
       isSavedByMe: isSavedByMe ?? this.isSavedByMe,
+      areaOfExpertise: areaOfExpertise ?? this.areaOfExpertise,
+      maxParticipants: maxParticipants ?? this.maxParticipants,
+      joinCount: joinCount ?? this.joinCount,
+      isJoinedByMe: isJoinedByMe ?? this.isJoinedByMe,
+      opportunityDeadline: opportunityDeadline ?? this.opportunityDeadline,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

@@ -21,7 +21,7 @@
 
 abstract final class DatabaseSchema {
   static const String databaseName = 'must_startrack.db';
-  static const int databaseVersion = 2;
+  static const int databaseVersion = 5;
 
   // ── Table Names ────────────────────────────────────────────────────────────
   static const String tableUsers             = 'users';
@@ -33,9 +33,11 @@ abstract final class DatabaseSchema {
   static const String tableFollows           = 'follows';
   static const String tableCollabRequests    = 'collab_requests';
   static const String tableMessages          = 'messages';
+  static const String tableConversations     = 'conversations';
   static const String tableMessageThreads    = 'message_threads';
   static const String tableNotifications     = 'notifications';
   static const String tableOpportunities     = 'opportunities';
+  static const String tablePostJoins         = 'post_joins';
   static const String tableSyncQueue         = 'sync_queue';
   static const String tableModerationQueue   = 'moderation_queue';
   static const String tableProjectMilestones = 'project_milestones';
@@ -123,6 +125,7 @@ abstract final class DatabaseSchema {
       images           TEXT DEFAULT '[]',
       videos           TEXT DEFAULT '[]',
       youtube_link     TEXT,
+      external_links   TEXT DEFAULT '[]',
       external_link    TEXT,
       github_link      TEXT,
       visibility       TEXT NOT NULL DEFAULT 'public',
@@ -134,6 +137,10 @@ abstract final class DatabaseSchema {
       share_count      INTEGER NOT NULL DEFAULT 0,
       view_count       INTEGER NOT NULL DEFAULT 0,
       is_cached        INTEGER NOT NULL DEFAULT 1,
+      area_of_expertise TEXT,
+      max_participants INTEGER DEFAULT 0,
+      join_count       INTEGER NOT NULL DEFAULT 0,
+      opportunity_deadline TEXT,
       created_at       TEXT NOT NULL,
       updated_at       TEXT NOT NULL,
       sync_status      INTEGER NOT NULL DEFAULT 0,
@@ -220,6 +227,24 @@ abstract final class DatabaseSchema {
     )
   ''';
 
+  /// Legacy-compatible conversations table still used by the current inbox.
+  static const String createConversations = '''
+    CREATE TABLE IF NOT EXISTS $tableConversations (
+      id                TEXT PRIMARY KEY,
+      user_id           TEXT NOT NULL,
+      peer_id           TEXT NOT NULL,
+      peer_name         TEXT,
+      peer_photo_url    TEXT,
+      last_message      TEXT,
+      last_message_at   INTEGER,
+      unread_count      INTEGER NOT NULL DEFAULT 0,
+      is_peer_lecturer  INTEGER NOT NULL DEFAULT 0,
+      created_at        TEXT,
+      updated_at        TEXT,
+      sync_status       INTEGER NOT NULL DEFAULT 0
+    )
+  ''';
+
   /// Message Threads — one record per conversation pair.
   static const String createMessageThreads = '''
     CREATE TABLE IF NOT EXISTS $tableMessageThreads (
@@ -241,13 +266,21 @@ abstract final class DatabaseSchema {
     CREATE TABLE IF NOT EXISTS $tableMessages (
       id          TEXT PRIMARY KEY,
       thread_id   TEXT NOT NULL,
+      conversation_id TEXT,
       sender_id   TEXT NOT NULL,
       content     TEXT NOT NULL,
+      message_type TEXT NOT NULL DEFAULT 'text',
+      file_url    TEXT,
+      file_name   TEXT,
+      file_size   TEXT,
       media_url   TEXT,
       status      TEXT NOT NULL DEFAULT 'sending',
+      created_at  INTEGER,
       sent_at     TEXT NOT NULL,
       delivered_at TEXT,
       read_at     TEXT,
+      is_read     INTEGER NOT NULL DEFAULT 0,
+      is_deleted  INTEGER NOT NULL DEFAULT 0,
       is_queued   INTEGER NOT NULL DEFAULT 0,
       sync_status INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (thread_id)  REFERENCES $tableMessageThreads(id) ON DELETE CASCADE,
@@ -458,6 +491,20 @@ abstract final class DatabaseSchema {
     )
   ''';
 
+  /// Post Joins — tracks which users have joined an opportunity post.
+  static const String createPostJoins = '''
+    CREATE TABLE IF NOT EXISTS $tablePostJoins (
+      id          TEXT PRIMARY KEY,
+      user_id     TEXT NOT NULL,
+      post_id     TEXT NOT NULL,
+      created_at  TEXT NOT NULL,
+      sync_status INTEGER NOT NULL DEFAULT 0,
+      UNIQUE (user_id, post_id),
+      FOREIGN KEY (user_id) REFERENCES $tableUsers(id) ON DELETE CASCADE,
+      FOREIGN KEY (post_id) REFERENCES $tablePosts(id) ON DELETE CASCADE
+    )
+  ''';
+
   // ─────────────────────────────────────────────────────────────────────────
   // INDEX STATEMENTS — for frequently queried columns
   // ─────────────────────────────────────────────────────────────────────────
@@ -468,6 +515,8 @@ abstract final class DatabaseSchema {
     'CREATE INDEX IF NOT EXISTS idx_posts_status  ON $tablePosts(status)',
     'CREATE INDEX IF NOT EXISTS idx_posts_created ON $tablePosts(created_at DESC)',
     'CREATE INDEX IF NOT EXISTS idx_comments_post ON $tableComments(post_id)',
+    'CREATE INDEX IF NOT EXISTS idx_conversations_user ON $tableConversations(user_id)',
+    'CREATE INDEX IF NOT EXISTS idx_conversations_time ON $tableConversations(last_message_at DESC)',
     'CREATE INDEX IF NOT EXISTS idx_messages_thread ON $tableMessages(thread_id)',
     'CREATE INDEX IF NOT EXISTS idx_messages_sent ON $tableMessages(sent_at DESC)',
     'CREATE INDEX IF NOT EXISTS idx_notif_user ON $tableNotifications(user_id)',
@@ -477,6 +526,8 @@ abstract final class DatabaseSchema {
     'CREATE INDEX IF NOT EXISTS idx_follows_follower ON $tableFollows(follower_id)',
     'CREATE INDEX IF NOT EXISTS idx_follows_followee ON $tableFollows(followee_id)',
     'CREATE INDEX IF NOT EXISTS idx_activity_user ON $tableActivityLogs(user_id)',
+    'CREATE INDEX IF NOT EXISTS idx_post_joins_user ON $tablePostJoins(user_id)',
+    'CREATE INDEX IF NOT EXISTS idx_post_joins_post ON $tablePostJoins(post_id)',
   ];
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -493,6 +544,7 @@ abstract final class DatabaseSchema {
     createDislikes,
     createFollows,
     createCollabRequests,
+    createConversations,
     createMessageThreads,
     createMessages,
     createNotifications,
@@ -507,5 +559,6 @@ abstract final class DatabaseSchema {
     createSearchHistory,
     createDraftPosts,
     createAchievements,
+    createPostJoins,
   ];
 }

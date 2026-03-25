@@ -1,38 +1,45 @@
-// lib/features/profile/bloc/profile_cubit.dart
+﻿// lib/features/profile/bloc/profile_cubit.dart
 //
-// MUST StarTrack — Profile Cubit (Phase 4)
+// MUST StarTrack â€” Profile Cubit (Phase 4)
 //
 // Manages state for ProfileScreen and EditProfileScreen.
 //
 // States:
-//   ProfileInitial   — nothing loaded yet
-//   ProfileLoading   — loading from SQLite / Firestore
-//   ProfileLoaded    — user + posts + follow status loaded
-//   ProfileUpdating  — save in progress (edit profile)
-//   ProfileError     — error with message
+//   ProfileInitial   â€” nothing loaded yet
+//   ProfileLoading   â€” loading from SQLite / Firestore
+//   ProfileLoaded    â€” user + posts + follow status loaded
+//   ProfileUpdating  â€” save in progress (edit profile)
+//   ProfileError     â€” error with message
 //
 // Key methods:
-//   loadProfile(userId)      — loads user + posts from SQLite
-//   toggleFollow(userId)     — optimistic follow/unfollow
-//   updateProfile(data)      — writes to SQLite + enqueues Firestore sync
-//   uploadPhoto(file)        — Phase 5: Firebase Storage upload
+//   loadProfile(userId)      â€” loads user + posts from SQLite
+//   toggleFollow(userId)     â€” optimistic follow/unfollow
+//   updateProfile(data)      â€” writes to SQLite + Firestore; uploads photo to Cloudinary
 //
 // Architecture note:
 //   ProfileCubit reads from UserDao + PostDao (local SQLite).
-//   On mutation it calls SyncQueueDao.enqueue() so changes propagate to
-//   Firestore when connectivity is available (offline-first guarantee).
+//   On mutation it writes directly to Firestore immediately (profile changes
+//   are user-critical), and also persists locally so offline reads work.
 
 import 'package:equatable/equatable.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:uuid/uuid.dart';
 import 'dart:io';
 
 import '../../../data/local/dao/post_dao.dart';
+import '../../../data/local/dao/sync_queue_dao.dart';
 import '../../../data/local/dao/user_dao.dart';
 import '../../../data/local/database_helper.dart';
+import '../../../data/local/schema/database_schema.dart';
 import '../../../data/models/post_model.dart';
+import '../../../data/models/profile_model.dart';
 import '../../../data/models/user_model.dart';
+import '../../../data/remote/cloudinary_service.dart';
+import '../../../data/remote/firestore_service.dart';
+import '../../auth/bloc/auth_cubit.dart';
 
-// ── States ────────────────────────────────────────────────────────────────────
+// â”€â”€ States â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 abstract class ProfileState extends Equatable {
   const ProfileState();
@@ -53,12 +60,18 @@ class ProfileLoaded extends ProfileState {
   final List<PostModel> posts;
   final bool isOwnProfile;
   final bool isFollowing;
+  final int followerCount;
+  final int followingCount;
+  final int collabCount;
 
   const ProfileLoaded({
     required this.user,
     required this.posts,
     required this.isOwnProfile,
     this.isFollowing = false,
+    this.followerCount = 0,
+    this.followingCount = 0,
+    this.collabCount = 0,
   });
 
   ProfileLoaded copyWith({
@@ -66,15 +79,21 @@ class ProfileLoaded extends ProfileState {
     List<PostModel>? posts,
     bool? isOwnProfile,
     bool? isFollowing,
+    int? followerCount,
+    int? followingCount,
+    int? collabCount,
   }) => ProfileLoaded(
     user: user ?? this.user,
     posts: posts ?? this.posts,
     isOwnProfile: isOwnProfile ?? this.isOwnProfile,
     isFollowing: isFollowing ?? this.isFollowing,
+    followerCount: followerCount ?? this.followerCount,
+    followingCount: followingCount ?? this.followingCount,
+    collabCount: collabCount ?? this.collabCount,
   );
 
   @override
-  List<Object?> get props => [user, posts, isOwnProfile, isFollowing];
+  List<Object?> get props => [user, posts, isOwnProfile, isFollowing, followerCount, followingCount, collabCount];
 }
 
 class ProfileUpdating extends ProfileState {
@@ -89,23 +108,34 @@ class ProfileError extends ProfileState {
   List<Object?> get props => [message];
 }
 
-// ── Cubit ─────────────────────────────────────────────────────────────────────
+// â”€â”€ Cubit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class ProfileCubit extends Cubit<ProfileState> {
   final UserDao _userDao;
   final PostDao _postDao;
+  final AuthCubit _authCubit;
+  final SyncQueueDao _syncQueue;
+  final CloudinaryService _cloudinary;
+  final FirestoreService _firestore;
 
-  // inject from AuthCubit in Phase 5
-  static const _currentUserId = 'current_user';
+  String? get _currentUserId => _authCubit.currentUser?.id;
 
   ProfileCubit({
     required UserDao userDao,
     required PostDao postDao,
+    required AuthCubit authCubit,
+    required SyncQueueDao syncQueue,
+    required CloudinaryService cloudinary,
+    required FirestoreService firestore,
   })  : _userDao = userDao,
         _postDao = postDao,
+        _authCubit = authCubit,
+        _syncQueue = syncQueue,
+        _cloudinary = cloudinary,
+        _firestore = firestore,
         super(const ProfileInitial());
 
-  // ── Load profile ──────────────────────────────────────────────────────────
+  // â”€â”€ Load profile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /// Loads [userId]'s profile from local SQLite.
   /// Pass null for the current user's own profile.
@@ -113,8 +143,13 @@ class ProfileCubit extends Cubit<ProfileState> {
     emit(const ProfileLoading());
 
     try {
-      final uid = userId ?? _currentUserId;
-      final isOwn = uid == _currentUserId;
+      final currentUid = _currentUserId;
+      final uid = userId ?? currentUid;
+      if (uid == null) {
+        emit(const ProfileError('Not signed in.'));
+        return;
+      }
+      final isOwn = uid == currentUid;
 
       // Read user + posts concurrently
       final results = await Future.wait([
@@ -126,58 +161,101 @@ class ProfileCubit extends Cubit<ProfileState> {
       final posts = results[1] as List<PostModel>;
 
       if (user == null) {
-        // Phase 5: fallback to Firestore fetch
         emit(const ProfileError('User not found. Check your connection.'));
         return;
       }
 
-      // check follows table for isFollowing
+      // Query follow status + counts from DB
+      final db = await DatabaseHelper.instance.database;
+      bool isFollowing = false;
+      if (!isOwn && currentUid != null) {
+        final rows = await db.query(
+          DatabaseSchema.tableFollows,
+          where: 'follower_id = ? AND followee_id = ?',
+          whereArgs: [currentUid, uid],
+          limit: 1,
+        );
+        isFollowing = rows.isNotEmpty;
+      }
+
+      final followerRows = await db.rawQuery(
+        'SELECT COUNT(*) as cnt FROM ${DatabaseSchema.tableFollows} WHERE followee_id = ?',
+        [uid],
+      );
+      final followingRows = await db.rawQuery(
+        'SELECT COUNT(*) as cnt FROM ${DatabaseSchema.tableFollows} WHERE follower_id = ?',
+        [uid],
+      );
+      final collabRows = await db.rawQuery(
+        'SELECT COUNT(*) as cnt FROM ${DatabaseSchema.tableCollabRequests} WHERE (sender_id = ? OR receiver_id = ?) AND status = ?',
+        [uid, uid, 'accepted'],
+      );
+
+      final followerCount = followerRows.first['cnt'] as int? ?? 0;
+      final followingCount = followingRows.first['cnt'] as int? ?? 0;
+      final collabCount = collabRows.first['cnt'] as int? ?? 0;
+
       emit(ProfileLoaded(
         user: user,
         posts: posts,
         isOwnProfile: isOwn,
-        isFollowing: false,
+        isFollowing: isFollowing,
+        followerCount: followerCount,
+        followingCount: followingCount,
+        collabCount: collabCount,
       ));
     } catch (e) {
       emit(ProfileError('Failed to load profile: $e'));
     }
   }
 
-  // ── Toggle follow / unfollow ──────────────────────────────────────────────
+  // â”€â”€ Toggle follow / unfollow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /// Optimistic update: flips isFollowing immediately, then persists.
   Future<void> toggleFollow() async {
     final current = state;
     if (current is! ProfileLoaded) return;
+    final uid = _currentUserId;
+    if (uid == null) return;
 
     // 1. Optimistic flip
     final newFollowing = !current.isFollowing;
-    emit(current.copyWith(isFollowing: newFollowing));
+    final followerDelta = newFollowing ? 1 : -1;
+    emit(current.copyWith(
+      isFollowing: newFollowing,
+      followerCount: (current.followerCount + followerDelta).clamp(0, 999999),
+    ));
 
     try {
       // 2. Persist to local SQLite follows table
       final db = await DatabaseHelper.instance.database;
       if (newFollowing) {
-        await db.insert('follows', {
-          'follower_id': _currentUserId,
-          'following_id': current.user.id,
-          'created_at': DateTime.now().millisecondsSinceEpoch,
+        await db.insert(DatabaseSchema.tableFollows, {
+          'id': const Uuid().v4(),
+          'follower_id': uid,
+          'followee_id': current.user.id,
+          'created_at': DateTime.now().millisecondsSinceEpoch.toString(),
+          'sync_status': 0,
         });
       } else {
-        await db.delete('follows',
-          where: 'follower_id = ? AND following_id = ?',
-          whereArgs: [_currentUserId, current.user.id]);
+        await db.delete(DatabaseSchema.tableFollows,
+          where: 'follower_id = ? AND followee_id = ?',
+          whereArgs: [uid, current.user.id]);
       }
-      // 3. Phase 5: SyncQueueDao.enqueue('follows', current.user.id, ...)
     } catch (e) {
       // Rollback on failure
-      emit(current.copyWith(isFollowing: !newFollowing));
+      emit(current.copyWith(
+        isFollowing: !newFollowing,
+        followerCount: current.followerCount,
+      ));
     }
   }
 
-  // ── Update profile ────────────────────────────────────────────────────────
+  // â”€â”€ Update profile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  /// Saves edited profile data to SQLite then emits reloaded state.
+  /// Saves edited profile data to SQLite + Firestore.
+  /// If [photo] is provided it is first uploaded to Cloudinary and the
+  /// resulting URL replaces [photoUrl].
   Future<void> updateProfile({
     required String displayName,
     String? bio,
@@ -187,7 +265,7 @@ class ProfileCubit extends Cubit<ProfileState> {
     List<String>? skills,
     Map<String, String>? portfolioLinks,
     String? visibility,
-    File? photo, // Phase 5: upload to Firebase Storage
+    File? photo,
   }) async {
     final current = state;
     if (current is! ProfileLoaded) return;
@@ -195,41 +273,83 @@ class ProfileCubit extends Cubit<ProfileState> {
     emit(const ProfileUpdating());
 
     try {
-      // Build updated user
+      String? resolvedPhotoUrl = current.user.photoUrl;
+
+      // Upload new photo to Cloudinary if provided
+      if (photo != null) {
+        if (_cloudinary.isConfigured) {
+          resolvedPhotoUrl = await _cloudinary.uploadFile(
+            photo,
+            folder: 'avatars',
+          );
+        } else {
+          debugPrint('[ProfileCubit] Cloudinary not configured â€“ skipping photo upload.');
+        }
+      }
+
+      // Build updated user + profile
       final oldProfile = current.user.profile;
+      final now = DateTime.now();
+      final nextProfile = (oldProfile ?? ProfileModel(
+        id: current.user.id,
+        userId: current.user.id,
+        createdAt: now,
+        updatedAt: now,
+      )).copyWith(
+        bio: bio,
+        faculty: faculty,
+        programName: programme,
+        yearOfStudy: yearOfStudy,
+        skills: skills,
+        portfolioLinks: portfolioLinks,
+        profileVisibility: visibility,
+        updatedAt: now,
+      );
       final updated = current.user.copyWith(
         displayName: displayName,
-        updatedAt: DateTime.now(),
-        profile: oldProfile?.copyWith(
-          bio: bio,
-          faculty: faculty,
-          programName: programme,
-          yearOfStudy: yearOfStudy,
-          skills: skills,
-          portfolioLinks: portfolioLinks,
-          profileVisibility: visibility,
-        ),
+        photoUrl: resolvedPhotoUrl,
+        updatedAt: now,
+        profile: nextProfile,
       );
 
+      // 1. Persist locally
       await _userDao.updateUser(updated);
-      // Phase 5: SyncQueueDao.enqueue('users', updated.id, updated.toJson())
 
-      // Reload posts (they may have been unchanged)
-      final posts = await _postDao.getPostsByAuthor(
-          updated.id, pageSize: 30);
+      // 2. Push to Firestore immediately (profile changes are user-critical)
+      try {
+        await _firestore.setUser(updated);
+      } catch (e) {
+        debugPrint('[ProfileCubit] Firestore upsert failed, enqueueing for sync: $e');
+        // Fallback: enqueue for later sync
+        await _syncQueue.enqueue(
+          operation: 'update',
+          entity: DatabaseSchema.tableUsers,
+          entityId: updated.id,
+          payload: updated.toJson(),
+        );
+      }
+
+      // 3. Update AuthCubit in-memory user so other screens see the new photo
+      _authCubit.updateCurrentUser(updated);
+
+      // Reload posts (unchanged but re-query to keep state consistent)
+      final posts = await _postDao.getPostsByAuthor(updated.id, pageSize: 30);
 
       emit(ProfileLoaded(
         user: updated,
         posts: posts,
         isOwnProfile: current.isOwnProfile,
         isFollowing: current.isFollowing,
+        followerCount: current.followerCount,
+        followingCount: current.followingCount,
+        collabCount: current.collabCount,
       ));
     } catch (e) {
       emit(ProfileError('Failed to save profile: $e'));
     }
   }
 
-  // ── Reload ────────────────────────────────────────────────────────────────
+  // â”€â”€ Reload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Future<void> reload() async {
     final current = state;

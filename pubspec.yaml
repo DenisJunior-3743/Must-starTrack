@@ -76,6 +76,8 @@ dependencies:
   # ── Media ──────────────────────────────────────────────────
   # image_picker: camera + gallery access
   image_picker: ^1.1.2
+  # image_cropper: WhatsApp-style square crop before upload
+  image_cropper: ^7.0.0
   # flutter_image_compress: compress images to ≤1.5MB limit
   flutter_image_compress: ^2.2.0
   # video_compress: compress videos to ≤2 min / size limits
@@ -137,6 +139,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.3
   # bloc_test: unit-tests for BLoC state machines
   bloc_test: ^9.1.7
   # mocktail: mock dependencies in tests
@@ -158,3 +161,18 @@ flutter:
 
   # Note: Lexend is loaded via google_fonts package at runtime,
   # no manual font declaration needed.
+
+# ─────────────────────────────────────────────────────────────
+# LAUNCHER ICONS
+# ─────────────────────────────────────────────────────────────
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: 'assets/icons/icon.png'
+  min_sdk_android: 21
+  web:
+    generate: false
+  windows:
+    generate: false
+  macos:
+    generate: false

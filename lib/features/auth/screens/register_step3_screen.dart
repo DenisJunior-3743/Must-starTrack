@@ -1,10 +1,10 @@
-// lib/features/auth/screens/register_step3_screen.dart
+﻿// lib/features/auth/screens/register_step3_screen.dart
 //
-// MUST StarTrack — Registration Step 3: Security & Authentication
+// MUST StarTrack â€” Registration Step 3: Security & Authentication
 //
 // Collects: password, confirm password, terms agreement.
 // Includes: password strength meter, Google signup alternative.
-// Submits: all collected data to AuthCubit → AuthRepository.
+// Submits: all collected data to AuthCubit â†’ AuthRepository.
 //
 // HCI: real-time strength bar, check-before-submit constraint,
 //      terms must be accepted (constraint), verification email notice.
@@ -80,8 +80,10 @@ class _RegisterStep3ScreenState extends State<RegisterStep3Screen> {
       widget.combinedData['returnTo']?.toString(),
     );
 
-    return BlocProvider(
-      create: (_) => AuthCubit(authRepository: sl(), guards: sl()),
+    return BlocProvider.value(
+      // Use the global singleton so sl<AuthCubit>().currentUser is set
+      // everywhere (e.g. create_post_screen) after registration completes.
+      value: sl<AuthCubit>(),
       child: BlocConsumer<AuthCubit, AuthState>(
         listener: (ctx, state) {
           if (state is AuthEmailVerificationSent) {
@@ -120,17 +122,17 @@ class _RegisterStep3ScreenState extends State<RegisterStep3Screen> {
                           const SizedBox(height: 20),
 
                           Text('Secure Your Account',
-                            style: GoogleFonts.lexend(
+                            style: GoogleFonts.plusJakartaSans(
                               fontSize: 24, fontWeight: FontWeight.w700,
                               letterSpacing: -0.3,
                             )),
                           const SizedBox(height: 4),
                           Text('Set a strong password for your MUST StarTrack account.',
-                            style: GoogleFonts.lexend(
+                            style: GoogleFonts.plusJakartaSans(
                               fontSize: 13, color: AppColors.textSecondaryLight)),
                           const SizedBox(height: 24),
 
-                          // ── Password ───────────────────────────────────────
+                          // â”€â”€ Password â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                           StTextField(
                             label: AppStrings.password,
                             hint: 'Enter your password',
@@ -155,7 +157,7 @@ class _RegisterStep3ScreenState extends State<RegisterStep3Screen> {
                           ),
                           const SizedBox(height: AppDimensions.spacingMd),
 
-                          // ── Confirm password ───────────────────────────────
+                          // â”€â”€ Confirm password â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                           StTextField(
                             label: AppStrings.confirmPassword,
                             hint: 'Re-enter your password',
@@ -174,13 +176,13 @@ class _RegisterStep3ScreenState extends State<RegisterStep3Screen> {
                           ),
                           const SizedBox(height: 20),
 
-                          // ── Terms checkbox ─────────────────────────────────
+                          // â”€â”€ Terms checkbox â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                           _TermsCheckbox(
                             value: _termsAccepted,
                             onChanged: (v) => setState(() => _termsAccepted = v ?? false),
                           ),
 
-                          // ── Verification notice ────────────────────────────
+                          // â”€â”€ Verification notice â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                           const SizedBox(height: 12),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -191,7 +193,7 @@ class _RegisterStep3ScreenState extends State<RegisterStep3Screen> {
                               Expanded(
                                 child: Text(
                                   'A verification link will be sent to your institutional email.',
-                                  style: GoogleFonts.lexend(
+                                  style: GoogleFonts.plusJakartaSans(
                                     fontSize: 12, fontStyle: FontStyle.italic,
                                     color: AppColors.textSecondaryLight),
                                 ),
@@ -200,7 +202,7 @@ class _RegisterStep3ScreenState extends State<RegisterStep3Screen> {
                           ),
                           const SizedBox(height: 28),
 
-                          // ── Complete button ────────────────────────────────
+                          // â”€â”€ Complete button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                           StButton(
                             label: AppStrings.completeRegistration,
                             isLoading: loading,
@@ -208,11 +210,11 @@ class _RegisterStep3ScreenState extends State<RegisterStep3Screen> {
                           ),
                           const SizedBox(height: AppDimensions.spacingMd),
 
-                          // ── Or divider ─────────────────────────────────────
+                          // â”€â”€ Or divider â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                           const OrDivider(),
                           const SizedBox(height: AppDimensions.spacingMd),
 
-                          // ── Google signup ──────────────────────────────────
+                          // â”€â”€ Google signup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                           GoogleSignInButton(
                             label: 'Sign up with Google',
                             isLoading: loading,
@@ -282,7 +284,7 @@ class _TermsCheckbox extends StatelessWidget {
             padding: const EdgeInsets.only(top: 12),
             child: RichText(
               text: TextSpan(
-                style: GoogleFonts.lexend(
+                style: GoogleFonts.plusJakartaSans(
                   fontSize: 13, color: AppColors.textSecondaryLight),
                 children: [
                   const TextSpan(text: 'I agree to the '),
@@ -311,3 +313,4 @@ class _TermsCheckbox extends StatelessWidget {
     );
   }
 }
+

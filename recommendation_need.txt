@@ -1,0 +1,934 @@
+MUST StarTrack Recommender Algorithms Documentation
+
+Purpose
+
+This document explains how the current recommendation logic in MUST StarTrack works so that any group member can understand:
+
+1. what data the algorithms use,
+2. how scores are calculated,
+3. where each algorithm is used in the app,
+4. how Gemini is involved,
+5. what the current limitations are.
+
+The main implementation lives in:
+
+- lib/data/remote/recommender_service.dart
+- lib/data/local/dao/activity_log_dao.dart
+- lib/features/feed/bloc/feed_cubit.dart
+- lib/features/discover/screens/discover_screen.dart
+- lib/features/lecturer/bloc/lecturer_cubit.dart
+- lib/features/ai/screens/recommendations_screen.dart
+- lib/features/ai/screens/ai_nudges_screen.dart
+
+--------------------------------------------------
+1. High-Level Architecture
+--------------------------------------------------
+
+Our recommendation system is hybrid, but local-first.
+
+That means:
+
+1. We always compute a local score inside the app first.
+2. If Gemini is configured, we optionally rerank the top posts.
+3. If Gemini is unavailable, the local ranking still works.
+
+This design is important because the app is offline-first and should still behave intelligently even without cloud AI.
+
+At the moment, the recommender system has four practical use cases:
+
+1. Personalized feed ranking
+2. Discover search reranking
+3. Collaborator recommendation
+4. Lecturer applicant ranking
+
+It also powers two AI-facing screens:
+
+1. Recommendations screen
+2. AI nudges screen
+
+--------------------------------------------------
+2. Core Data Signals Used By The Algorithms
+--------------------------------------------------
+
+The algorithms do not guess randomly. They use real signals already stored in the app.
+
+User profile signals
+
+- skills
+- faculty
+- program name
+- bio presence
+- activity streak
+- total posts
+- total collaborations
+- total followers
+
+Post signals
+
+- post type: project or opportunity
+- category
+- faculty
+- program
+- skills used
+- tags
+- created time
+- like count
+- comment count
+- share count
+- area of expertise for opportunities
+
+Behavior signals from activity logs
+
+- view_post
+- like_post
+- comment_post
+- share_post
+- join_opportunity
+- search history terms
+
+Social and collaboration signals
+
+- accepted collaborators are excluded from collaborator recommendations
+- collaboration history contributes to profile activity and readiness
+
+--------------------------------------------------
+3. Signal Collection Layer
+--------------------------------------------------
+
+The signal collection layer is implemented in ActivityLogDao.
+
+Main responsibilities:
+
+1. logAction(...)
+   Saves user actions into activity_logs.
+
+2. logSearch(...)
+   Saves search terms into search_history and also records a matching activity log.
+
+3. getRecentCategorySignals(userId)
+   Looks at recent post-related actions and extracts categories the user has interacted with.
+
+4. getRecentSearchTerms(userId)
+   Returns recent search keywords for personalization.
+
+Why this matters:
+
+The recommender does not only rely on static profile fields. It also uses recent behavior so recommendations can adapt when a user starts exploring a new area.
+
+Example:
+
+If a student profile says Flutter and Mobile App, but the student recently searches for AI and interacts with Research posts, the ranking can start moving AI and Research content upward.
+
+--------------------------------------------------
+4. Main Recommendation Models
+--------------------------------------------------
+
+There are two result models in recommender_service.dart.
+
+4.1 RecommendedPost
+
+Fields:
+
+- post
+- score
+- reasons
+
+Meaning:
+
+This is used when ranking projects or opportunities.
+
+Example reasons:
+
+- skill_match
+- faculty_match
+- program_match
+- search_intent
+- collaborative_signal
+- opportunity_fit
+- gemini_rerank
+
+4.2 RecommendedUser
+
+Fields:
+
+- user
+- score
+- reasons
+- matchedSkills
+
+Meaning:
+
+This is used when ranking people, such as collaborators or applicants.
+
+--------------------------------------------------
+5. Algorithm 1: Local Post Ranking
+--------------------------------------------------
+
+Method:
+
+- rankLocally(...)
+
+Purpose:
+
+This is the base algorithm for ranking posts before any Gemini reranking happens.
+
+Inputs:
+
+- current user
+- candidate posts
+- recently viewed categories
+- recent search terms
+
+Step-by-step scoring
+
+Each candidate post starts with a base score:
+
+- base score = 0.05
+
+Then several weighted factors are added.
+
+5.1 Skill match
+
+We compare:
+
+- user.profile.skills
+- post.skillsUsed
+
+If there is overlap, we add:
+
+- 0.38 * normalized_skill_overlap
+
+Where normalized_skill_overlap is roughly the overlap count capped at 5 and divided by 5.
+
+Interpretation:
+
+This is the strongest signal in the current post recommender.
+
+5.2 Faculty match
+
+If the user's faculty matches the post faculty:
+
+- +0.14
+
+Interpretation:
+
+Same-faculty posts are considered more relevant.
+
+5.3 Program match
+
+If the user's program matches the post program:
+
+- +0.10
+
+Interpretation:
+
+Same-program posts get a moderate boost.
+
+5.4 Search intent match
+
+If recent search terms appear in the post title, description, category, faculty, program, tags, or skills:
+
+- +0.10
+
+Interpretation:
+
+Search behavior can temporarily shift recommendations even if the profile has not changed.
+
+5.5 Recency score
+
+The algorithm computes how recent the post is relative to a 14-day window.
+
+- recencyScore = 1.0 - (hours_since_post / (24 * 14))
+- clamped between 0 and 1
+- contribution = 0.13 * recencyScore
+
+Interpretation:
+
+Newer posts are preferred, but recency is not stronger than skill relevance.
+
+5.6 Engagement score
+
+We compute engagement using:
+
+- likes + comments * 2 + shares * 3
+
+Then normalize by 200 and clamp between 0 and 1.
+
+Contribution:
+
+- +0.10 * engagementScore
+
+Interpretation:
+
+Popular content gets a boost, but not enough to dominate relevance.
+
+5.7 Category behavior signal
+
+If the post category appears in the user's recent behavior-derived categories:
+
+- +0.08
+
+Reason added:
+
+- collaborative_signal
+
+Interpretation:
+
+This is the current lightweight collaborative or behavior signal.
+
+5.8 Opportunity skill fit
+
+If the post is an opportunity and there is skill overlap:
+
+- +0.07
+
+Reason added:
+
+- opportunity_fit
+
+Interpretation:
+
+Opportunities with matching skills are boosted above generic content.
+
+5.9 Final sorting
+
+Posts are sorted by:
+
+1. higher score first
+2. if scores tie, newer post first
+
+Summary of post-ranking weights
+
+- base: 0.05
+- skill overlap: up to 0.38
+- faculty match: 0.14
+- program match: 0.10
+- search intent: 0.10
+- recency: up to 0.13
+- engagement: up to 0.10
+- recent category signal: 0.08
+- opportunity fit: 0.07
+
+Practical meaning:
+
+Skill relevance is still the most important factor. Freshness, popularity, and recent behavior refine the ordering.
+
+--------------------------------------------------
+6. Algorithm 2: Hybrid Post Ranking With Gemini
+--------------------------------------------------
+
+Method:
+
+- rankHybrid(...)
+
+Purpose:
+
+This method first computes the local ranking, then optionally asks Gemini to rerank the top items.
+
+When Gemini is used
+
+Gemini is only used if:
+
+1. GeminiService exists,
+2. the API key is configured,
+3. there are ranked candidates to process.
+
+Process
+
+1. Run rankLocally(...)
+2. Keep the top 25 posts
+3. Send user profile and candidate post summaries to Gemini
+4. Gemini returns JSON with scores
+5. Blend the scores
+
+Blended score formula
+
+- finalScore = localScore * 0.65 + geminiScore * 0.35
+
+Reason added:
+
+- gemini_rerank
+
+Why this blend is useful
+
+We do not let Gemini replace the local algorithm completely. The local model remains the anchor. Gemini only adjusts the ordering.
+
+This protects the app from:
+
+- network failure
+- unstable model output
+- total loss of explainability
+
+Fallback behavior
+
+If Gemini throws an error or returns no useful ranking, the app silently falls back to the local ranking.
+
+--------------------------------------------------
+7. Algorithm 3: Collaborator Recommendation
+--------------------------------------------------
+
+Method:
+
+- rankCollaborators(...)
+
+Purpose:
+
+This ranks other students as potential collaborators.
+
+Inputs:
+
+- current user
+- candidate users
+- excluded user IDs
+- recent search terms
+
+Filtering before scoring
+
+Candidates are rejected if:
+
+- candidate is the current user
+- candidate is already excluded
+- candidate is not a student
+- candidate is inactive
+- candidate has no profile
+
+Step-by-step scoring
+
+Each candidate starts with:
+
+- base score = 0.05
+
+7.1 Shared skill match
+
+If both users share skills:
+
+- +0.34 * normalized_shared_skill_count
+
+Reason:
+
+- skill_match
+
+7.2 Complementary skill boost
+
+If they do not share skills but the candidate has useful different skills:
+
+- +0.18
+
+Reason:
+
+- complementary_skills
+
+Interpretation:
+
+This is important because collaboration is not always about identical skills. Sometimes complementarity is better.
+
+7.3 Faculty match
+
+If the faculty matches:
+
+- +0.12
+
+Reason:
+
+- faculty_match
+
+7.4 Program match
+
+If the program matches:
+
+- +0.08
+
+Reason:
+
+- program_match
+
+7.5 Activity score
+
+Contribution:
+
+- +0.16 * profileActivityScore
+
+The internal activity score combines:
+
+- activity streak
+- total posts
+- total collaborations
+
+Formula inside _scoreProfileActivity(...):
+
+- 45% streak
+- 30% total posts
+- 25% total collaborations
+
+7.6 Profile completeness score
+
+Contribution:
+
+- +0.08 * profileCompleteness
+
+Profile completeness checks whether the candidate has:
+
+- bio
+- faculty
+- program
+- skills
+
+7.7 Search intent match
+
+If recent search terms match the candidate's name, email, faculty, program, or skills:
+
+- +0.09
+
+Reason:
+
+- search_intent
+
+Output
+
+The method returns RecommendedUser objects with:
+
+- final score
+- reasons
+- matchedSkills
+
+Use in the app
+
+This powers the collaborator strip and the AI Recommendations screen.
+
+--------------------------------------------------
+8. Algorithm 4: Student Ranking For Lecturer Opportunities
+--------------------------------------------------
+
+Method:
+
+- rankStudentsForOpportunity(...)
+
+Purpose:
+
+This ranks applicants or candidate students against a specific opportunity.
+
+Inputs:
+
+- opportunity post
+- candidate users
+
+Opportunity reference signals
+
+The algorithm builds the opportunity skill set from:
+
+- opportunity.skillsUsed
+- opportunity.areaOfExpertise if present
+
+Step-by-step scoring
+
+Each candidate starts with:
+
+- base score = 0.08
+
+8.1 Skill match
+
+If candidate skills overlap with opportunity skills:
+
+- +0.42 * normalized_matched_skill_count
+
+Reason:
+
+- skill_match
+
+Interpretation:
+
+This is the strongest lecturer-side signal because the goal is fit to the specific opportunity.
+
+8.2 Faculty match
+
+If opportunity faculty equals candidate faculty:
+
+- +0.10
+
+Reason:
+
+- faculty_match
+
+8.3 Program match
+
+If opportunity program equals candidate program:
+
+- +0.08
+
+Reason:
+
+- program_match
+
+8.4 Activity score
+
+Contribution:
+
+- +0.16 * profileActivityScore
+
+8.5 Profile completeness
+
+Contribution:
+
+- +0.10 * profileCompleteness
+
+8.6 Collaboration readiness
+
+If the user has at least one previous collaboration:
+
+- +0.06
+
+Reason:
+
+- collaboration_ready
+
+Output
+
+The method returns RecommendedUser values sorted by fit.
+
+Use in the app
+
+This powers lecturer applicant ordering and fit explanations on applicant cards.
+
+--------------------------------------------------
+9. Lecturer Ranking Screen Logic
+--------------------------------------------------
+
+There are actually two lecturer ranking ideas in the current app.
+
+9.1 Opportunity-specific ranking
+
+This uses rankStudentsForOpportunity(...).
+
+It is the better recommendation-style ranking because it matches students to a specific opportunity.
+
+9.2 General student ranking
+
+In LecturerCubit.loadRanking(...), there is also a generic fit score for all students.
+
+This score uses:
+
+- skills count
+- activity streak
+- total posts
+- total collaborations
+- profile completeness
+
+Current general fit weights:
+
+- 25% skills volume
+- 20% streak
+- 20% posts
+- 20% collaborations
+- 15% completeness
+
+Interpretation:
+
+This is more of an overall student quality score than a true recommendation for a specific opportunity.
+
+--------------------------------------------------
+10. Where The Recommender Runs In The App
+--------------------------------------------------
+
+10.1 Feed
+
+File:
+
+- lib/features/feed/bloc/feed_cubit.dart
+
+How it works:
+
+1. Feed posts are loaded from the local DAO.
+2. User profile is loaded.
+3. Recent category signals are loaded.
+4. Recent search terms are loaded.
+5. First page uses rankHybrid(...)
+6. Later pages use rankLocally(...)
+
+Reason for this design:
+
+The first page is the most visible and deserves the most expensive ranking. Later pages stay cheaper.
+
+10.2 Discover
+
+File:
+
+- lib/features/discover/screens/discover_screen.dart
+
+How it works:
+
+1. User performs normal filtered search.
+2. Result list is fetched from PostDao.
+3. Current user profile is loaded.
+4. Recent categories and search terms are loaded.
+5. Results are reranked locally using rankLocally(...)
+6. Search queries are logged using logSearch(...)
+
+Interpretation:
+
+Discover remains query-driven, but the order becomes personalized.
+
+10.3 Collaborator strip on home screen
+
+File:
+
+- lib/features/feed/screens/home_feed_screen.dart
+
+How it works:
+
+1. Current user is loaded.
+2. All students are loaded.
+3. Accepted collaborators are loaded and excluded.
+4. Recent search terms are loaded.
+5. rankCollaborators(...) is applied.
+6. Top results are shown.
+
+10.4 Lecturer applicants
+
+File:
+
+- lib/features/lecturer/bloc/lecturer_cubit.dart
+
+How it works:
+
+1. Applicants for one opportunity are loaded.
+2. rankStudentsForOpportunity(...) is applied.
+3. The screen receives both ordered users and a recommendation map.
+
+10.5 Recommendations screen
+
+File:
+
+- lib/features/ai/screens/recommendations_screen.dart
+
+How it works:
+
+1. Loads current user
+2. Logs screen open
+3. Loads recent categories and search terms
+4. Loads feed posts and ranks them
+5. Separates ranked results into projects and opportunities
+6. Loads candidate students and collaborator exclusions
+7. Ranks collaborator suggestions
+8. Displays ranked sections with reasons and confidence percentages
+
+10.6 AI nudges screen
+
+File:
+
+- lib/features/ai/screens/ai_nudges_screen.dart
+
+How it works:
+
+1. Loads current user
+2. Logs screen open
+3. Loads own posts, collaborators, recent searches, and recent categories
+4. Loads and ranks opportunities
+5. Builds rule-based nudges from recommendation signals
+
+Important note:
+
+The nudges screen is not using a separate ML model yet. It is currently rule-based on top of recommendation data.
+
+--------------------------------------------------
+11. Explanation Of Helper Functions
+--------------------------------------------------
+
+11.1 _normalizeTerms(...)
+
+Lowercases and trims search terms so matching becomes more reliable.
+
+11.2 _matchesPostSearchIntent(...)
+
+Builds one searchable text string from a post using:
+
+- title
+- description
+- category
+- faculty
+- program
+- skills
+- tags
+
+If any recent search term appears inside this combined text, the post gets a search-intent boost.
+
+11.3 _matchesUserSearchIntent(...)
+
+Builds one searchable text string from a candidate user using:
+
+- name
+- email
+- faculty
+- program
+- skills
+
+If any recent search term appears, the user gets a search-intent boost.
+
+11.4 _scoreProfileActivity(...)
+
+Returns a normalized activity score from:
+
+- streak
+- posts
+- collaborations
+
+This is used for collaborator and lecturer recommendation quality.
+
+11.5 _scoreProfileCompleteness(...)
+
+Measures whether the user filled in:
+
+- bio
+- faculty
+- program
+- skills
+
+This prevents empty profiles from ranking too highly.
+
+--------------------------------------------------
+12. Why These Algorithms Make Sense For MUST StarTrack
+--------------------------------------------------
+
+This app is not a generic social media app. It is an academic collaboration and opportunity platform.
+
+So our algorithms prioritize:
+
+1. skill alignment
+2. faculty/program relevance
+3. opportunity fit
+4. evidence of activity
+5. recent exploration behavior
+
+This is better than using only popularity because:
+
+- the most liked post is not always the most relevant one
+- the most followed student is not always the best applicant
+- the best collaborator may be a complementary skill partner, not a clone of the current user
+
+--------------------------------------------------
+13. Current Limitations
+--------------------------------------------------
+
+The current system is solid for a Phase 5 classroom project, but it is not yet a full production recommender.
+
+Main limitations:
+
+1. Behavior history is still shallow
+   We use categories and recent searches, but not deeper collaborative filtering such as similar-user interaction graphs.
+
+2. No time decay on search terms beyond recency ordering
+   Recent searches are collected, but not explicitly weighted by exact age.
+
+3. No negative feedback model yet
+   Dislikes are logged in some flows, but are not yet reducing recommendation scores directly.
+
+4. Gemini is only reranking posts
+   Gemini is not yet reranking collaborators or applicants.
+
+5. Nudge generation is rule-based
+   It is explainable and stable, but not yet adaptive beyond the current signal checks.
+
+6. General lecturer fit ranking is not tied to a specific opportunity
+   It is still more of a leaderboard than a contextual recommendation.
+
+--------------------------------------------------
+14. Simple Worked Example
+--------------------------------------------------
+
+Assume a student has:
+
+- skills: Flutter, Firebase, UI/UX
+- faculty: Computing
+- program: Software Engineering
+- recent searches: AI, research
+- recent category interactions: Mobile App
+
+Now consider three posts.
+
+Post A
+
+- type: project
+- skills: Flutter, Firebase
+- category: Mobile App
+- faculty: Computing
+
+This post gets strong boosts from:
+
+- skill match
+- faculty match
+- category behavior signal
+- possibly engagement and recency
+
+Post B
+
+- type: opportunity
+- skills: Python, AI
+- category: Research
+- faculty: Computing
+
+This post may still score well because:
+
+- search intent matches AI and research
+- faculty matches
+- opportunity fit exists if any overlapping skill exists
+
+Post C
+
+- type: project
+- skills: Accounting
+- faculty: Business
+
+This likely scores low because:
+
+- weak skill overlap
+- no faculty match
+- no category signal
+- no search match
+
+Expected ranking:
+
+- Post A highest
+- Post B next
+- Post C lowest
+
+--------------------------------------------------
+15. What To Tell A Panel Or Groupmate In One Minute
+--------------------------------------------------
+
+You can summarize the recommender like this:
+
+"Our recommender is a local-first hybrid algorithm. It ranks posts and users using skill overlap, faculty/program match, recent behavior, profile quality, activity level, and engagement. The local algorithm always works offline. If Gemini is configured, it reranks the top content and blends its score with the local score. We use this for the home feed, discover page, collaborator suggestions, lecturer applicant matching, AI recommendations, and activity nudges."
+
+--------------------------------------------------
+16. Suggested Future Improvements
+--------------------------------------------------
+
+If we continue improving this system, the best next steps are:
+
+1. Add negative-feedback scoring from dislikes and skips
+2. Add stronger collaborative filtering from similar-user interactions
+3. Add explicit weighting decay for older searches and actions
+4. Use Gemini to explain why a post or applicant was recommended
+5. Add A/B testing for weight tuning
+6. Move Gemini calls behind a backend proxy for production safety
+
+--------------------------------------------------
+17. Final Conclusion
+--------------------------------------------------
+
+The current MUST StarTrack recommender system is already structured around explainable, academic-context recommendations.
+
+It is not random and it is not purely popularity-based.
+
+It is mainly driven by:
+
+- skill relevance
+- institutional relevance
+- recent intent
+- user activity quality
+- contextual opportunity fit
+
+Gemini is an enhancement layer, not the foundation.
+
+The foundation is the local ranking logic inside recommender_service.dart.
+
+That is the key architectural idea your groupmates should understand.

@@ -1,28 +1,28 @@
-// lib/features/super_admin/screens/super_admin_dashboard_screen.dart
+﻿// lib/features/super_admin/screens/super_admin_dashboard_screen.dart
 //
-// MUST StarTrack — Super Admin Analytics Dashboard (Phase 4)
+// MUST StarTrack â€” Super Admin Analytics Dashboard (Phase 4)
 //
 // Matches super_admin_analytics_dashboard.html exactly:
-//   • Header: admin avatar + title + settings
-//   • System Health Ticker: cloud sync status, server, active admins
-//   • Quick Stats 2×2 grid: Total Users, Active Today, Projects, Collabs
-//     — each card has icon, growth %, value
-//   • User Registration line chart (custom painter — no external chart lib)
-//   • Faculty Engagement animated progress bars
-//   • Trending Skills chip cloud (top = filled primary, rest = outlined)
-//   • Bottom nav: Overview | Users | Content | Settings
+//   â€¢ Header: admin avatar + title + settings
+//   â€¢ System Health Ticker: cloud sync status, server, active admins
+//   â€¢ Quick Stats 2Ã—2 grid: Total Users, Active Today, Projects, Collabs
+//     â€” each card has icon, growth %, value
+//   â€¢ User Registration line chart (custom painter â€” no external chart lib)
+//   â€¢ Faculty Engagement animated progress bars
+//   â€¢ Trending Skills chip cloud (top = filled primary, rest = outlined)
+//   â€¢ Bottom nav: Overview | Users | Content | Settings
 //
 // Engineering Metrics (requested by team for panel defence):
-//   • DAU / MAU ratio (stickiness metric)
-//   • Sync queue depth (infrastructure health)
-//   • Offline vs online session ratio
-//   • p95 feed load time (performance)
-//   • Collaboration rate = collabs / total_projects
+//   â€¢ DAU / MAU ratio (stickiness metric)
+//   â€¢ Sync queue depth (infrastructure health)
+//   â€¢ Offline vs online session ratio
+//   â€¢ p95 feed load time (performance)
+//   â€¢ Collaboration rate = collabs / total_projects
 //
 // HCI:
-//   • Chunking: ticker → stats → chart → faculty → skills
-//   • Visibility: green dot on sync status, growth badges
-//   • Affordance: navigation bar icons clearly labelled
+//   â€¢ Chunking: ticker â†’ stats â†’ chart â†’ faculty â†’ skills
+//   â€¢ Visibility: green dot on sync status, growth badges
+//   â€¢ Affordance: navigation bar icons clearly labelled
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -61,11 +61,11 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen>
 
   // Engineering metrics
   static const _engMetrics = [
-    _EngMetric('DAU/MAU Ratio', '34%', '+2%', Icons.people_alt_rounded, 'Stickiness — industry avg 20–30%'),
+    _EngMetric('DAU/MAU Ratio', '34%', '+2%', Icons.people_alt_rounded, 'Stickiness â€” industry avg 20â€“30%'),
     _EngMetric('Sync Queue Depth', '12 jobs', '-8', Icons.sync_rounded, 'Pending Firestore writes'),
     _EngMetric('Offline Sessions', '18%', '-3%', Icons.wifi_off_rounded, 'Users on 3G/no-network'),
     _EngMetric('p95 Feed Load', '340ms', '-20ms', Icons.speed_rounded, 'Feed render time on mid-range device'),
-    _EngMetric('Collab Rate', '16.6%', '+1.2%', Icons.handshake_rounded, 'Collabs ÷ Total Projects'),
+    _EngMetric('Collab Rate', '16.6%', '+1.2%', Icons.handshake_rounded, 'Collabs Ã· Total Projects'),
     _EngMetric('Avg Session', '8.4 min', '+0.6', Icons.timer_outlined, 'Mean active session length'),
   ];
 
@@ -99,7 +99,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // ── App bar ────────────────────────────────────────────────────────
+      // â”€â”€ App bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       appBar: AppBar(
         leadingWidth: 60,
         leading: const Padding(
@@ -114,10 +114,10 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('System Analytics',
-              style: GoogleFonts.lexend(
+              style: GoogleFonts.plusJakartaSans(
                 fontSize: 16, fontWeight: FontWeight.w700)),
             Text('MUST StarTrack Super Admin',
-              style: GoogleFonts.lexend(
+              style: GoogleFonts.plusJakartaSans(
                 fontSize: 10, fontWeight: FontWeight.w600,
                 color: AppColors.primary)),
           ],
@@ -136,11 +136,11 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── System health ticker ─────────────────────────────────────
+            // â”€â”€ System health ticker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _HealthTicker(),
             const SizedBox(height: 4),
 
-            // ── Quick stats 2×2 ──────────────────────────────────────────
+            // â”€â”€ Quick stats 2Ã—2 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             const _SectionLabel('PLATFORM OVERVIEW'),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -164,7 +164,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen>
               ),
             ),
 
-            // ── User registration chart ──────────────────────────────────
+            // â”€â”€ User registration chart â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             const _SectionLabel('USER REGISTRATION'),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -182,10 +182,10 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('User Registration',
-                                style: GoogleFonts.lexend(
+                                style: GoogleFonts.plusJakartaSans(
                                   fontSize: 14, fontWeight: FontWeight.w700)),
                               Text('Growth trend last 6 months',
-                                style: GoogleFonts.lexend(
+                                style: GoogleFonts.plusJakartaSans(
                                   fontSize: 11, color: AppColors.textSecondaryLight)),
                             ],
                           ),
@@ -194,10 +194,10 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen>
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text('12.4k',
-                              style: GoogleFonts.lexend(
+                              style: GoogleFonts.plusJakartaSans(
                                 fontSize: 20, fontWeight: FontWeight.w700)),
-                            Text('Jan – Jun',
-                              style: GoogleFonts.lexend(
+                            Text('Jan â€“ Jun',
+                              style: GoogleFonts.plusJakartaSans(
                                 fontSize: 10, fontWeight: FontWeight.w700,
                                 color: AppColors.success)),
                           ],
@@ -215,7 +215,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen>
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: ['Jan','Feb','Mar','Apr','May','Jun'].map((m) =>
-                        Text(m, style: GoogleFonts.lexend(
+                        Text(m, style: GoogleFonts.plusJakartaSans(
                           fontSize: 10, color: AppColors.textSecondaryLight,
                           fontWeight: FontWeight.w600))).toList(),
                     ),
@@ -224,7 +224,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen>
               ),
             ),
 
-            // ── Faculty engagement ───────────────────────────────────────
+            // â”€â”€ Faculty engagement â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             const _SectionLabel('FACULTY ENGAGEMENT'),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -242,10 +242,10 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen>
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(label, style: GoogleFonts.lexend(
+                              Text(label, style: GoogleFonts.plusJakartaSans(
                                 fontSize: 12, fontWeight: FontWeight.w600)),
                               Text('${(pct * 100).toInt()}%',
-                                style: GoogleFonts.lexend(
+                                style: GoogleFonts.plusJakartaSans(
                                   fontSize: 12, fontWeight: FontWeight.w700,
                                   color: AppColors.primary)),
                             ],
@@ -271,7 +271,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen>
               ),
             ),
 
-            // ── Trending skills ──────────────────────────────────────────
+            // â”€â”€ Trending skills â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             const _SectionLabel('TRENDING SKILLS'),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -292,7 +292,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen>
                         blurRadius: 8, offset: const Offset(0, 3))] : [],
                     ),
                     child: Text(e.value,
-                      style: GoogleFonts.lexend(
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 12, fontWeight: FontWeight.w600,
                         color: isTop ? Colors.white : AppColors.textPrimaryLight)),
                   );
@@ -300,7 +300,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen>
               ),
             ),
 
-            // ── Engineering metrics ──────────────────────────────────────
+            // â”€â”€ Engineering metrics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             const _SectionLabel('ENGINEERING METRICS'),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -318,7 +318,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen>
         ),
       ),
 
-      // ── Bottom nav ────────────────────────────────────────────────────
+      // â”€â”€ Bottom nav â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
@@ -354,7 +354,7 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen>
   );
 }
 
-// ── System health ticker ──────────────────────────────────────────────────────
+// â”€â”€ System health ticker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _HealthTicker extends StatelessWidget {
   @override
@@ -414,7 +414,7 @@ class _Pill extends StatelessWidget {
           if (icon != null)
             Icon(icon, size: 14, color: fg),
           const SizedBox(width: 6),
-          Text(label, style: GoogleFonts.lexend(
+          Text(label, style: GoogleFonts.plusJakartaSans(
             fontSize: 12, fontWeight: FontWeight.w600, color: fg)),
         ],
       ),
@@ -422,7 +422,7 @@ class _Pill extends StatelessWidget {
   }
 }
 
-// ── Section label ─────────────────────────────────────────────────────────────
+// â”€â”€ Section label â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _SectionLabel extends StatelessWidget {
   final String text;
@@ -432,13 +432,13 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.fromLTRB(16, 24, 16, 10),
     child: Text(text,
-      style: GoogleFonts.lexend(
+      style: GoogleFonts.plusJakartaSans(
         fontSize: 11, fontWeight: FontWeight.w700,
         color: AppColors.textSecondaryLight, letterSpacing: 0.1)),
   );
 }
 
-// ── Stat card ─────────────────────────────────────────────────────────────────
+// â”€â”€ Stat card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _StatCard extends StatelessWidget {
   final IconData icon;
@@ -476,15 +476,15 @@ class _StatCard extends StatelessWidget {
                   color: AppColors.primaryTint10,
                   borderRadius: BorderRadius.circular(AppDimensions.radiusSm)),
                 child: Icon(icon, color: AppColors.primary, size: 18)),
-              Text(growth, style: GoogleFonts.lexend(
+              Text(growth, style: GoogleFonts.plusJakartaSans(
                 fontSize: 11, fontWeight: FontWeight.w700,
                 color: AppColors.success)),
             ],
           ),
-          Text(label.toUpperCase(), style: GoogleFonts.lexend(
+          Text(label.toUpperCase(), style: GoogleFonts.plusJakartaSans(
             fontSize: 9, fontWeight: FontWeight.w700,
             color: AppColors.textSecondaryLight, letterSpacing: 0.08)),
-          Text(value, style: GoogleFonts.lexend(
+          Text(value, style: GoogleFonts.plusJakartaSans(
             fontSize: 20, fontWeight: FontWeight.w700)),
         ],
       ),
@@ -492,7 +492,7 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-// ── Engineering metric card ───────────────────────────────────────────────────
+// â”€â”€ Engineering metric card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _EngMetric {
   final String label;
@@ -528,7 +528,7 @@ class _EngMetricCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Icon(metric.icon, color: AppColors.primary, size: 18),
-                Text(metric.delta, style: GoogleFonts.lexend(
+                Text(metric.delta, style: GoogleFonts.plusJakartaSans(
                   fontSize: 10, fontWeight: FontWeight.w700,
                   color: isPositive ? AppColors.success : AppColors.danger)),
               ],
@@ -536,9 +536,9 @@ class _EngMetricCard extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(metric.value, style: GoogleFonts.lexend(
+                Text(metric.value, style: GoogleFonts.plusJakartaSans(
                   fontSize: 18, fontWeight: FontWeight.w700)),
-                Text(metric.label, style: GoogleFonts.lexend(
+                Text(metric.label, style: GoogleFonts.plusJakartaSans(
                   fontSize: 10, color: AppColors.textSecondaryLight,
                   fontWeight: FontWeight.w600)),
               ],
@@ -550,13 +550,13 @@ class _EngMetricCard extends StatelessWidget {
   }
 }
 
-// ── Line chart custom painter ─────────────────────────────────────────────────
+// â”€â”€ Line chart custom painter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _ChartPainter extends CustomPainter {
   final Color color;
   const _ChartPainter({required this.color});
 
-  // Data points matching the SVG path in the HTML prototype (normalised 0–1)
+  // Data points matching the SVG path in the HTML prototype (normalised 0â€“1)
   static const _points = [
     0.73, 0.14, 0.27, 0.62, 0.22, 0.67, 0.41, 0.30, 0.81, 0.99, 0.01, 0.54, 0.86, 0.17,
   ];
@@ -606,3 +606,4 @@ class _ChartPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter old) => false;
 }
+

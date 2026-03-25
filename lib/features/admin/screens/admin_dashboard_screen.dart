@@ -1,23 +1,23 @@
-// lib/features/admin/screens/admin_dashboard_screen.dart
+﻿// lib/features/admin/screens/admin_dashboard_screen.dart
 //
-// MUST StarTrack — Admin Moderation Dashboard (Phase 4)
+// MUST StarTrack â€” Admin Moderation Dashboard (Phase 4)
 //
 // Matches admin_moderation_dashboard.html exactly:
-//   • Sticky header: shield icon + notifications bell (with red dot)
-//   • Summary cards: Pending Reviews | Flagged Posts | Reported Users
-//   • Flagged content list:
+//   â€¢ Sticky header: shield icon + notifications bell (with red dot)
+//   â€¢ Summary cards: Pending Reviews | Flagged Posts | Reported Users
+//   â€¢ Flagged content list:
 //     - Title + reported-by
 //     - Risk badge (High Risk amber / Medium / Low)
 //     - Violation type with icon
 //     - Review + more-options buttons
-//   • Multi-select mode: floating action bar (Approve / Reject / Ban)
-//   • Bottom tab bar: Overview | Queue | Users | Logs | Settings
+//   â€¢ Multi-select mode: floating action bar (Approve / Reject / Ban)
+//   â€¢ Bottom tab bar: Overview | Queue | Users | Logs | Settings
 //
 // HCI:
-//   • Feedback: select mode activates instantly on long-press
-//   • Visibility: risk badge colour codes severity (amber/grey)
-//   • Constraint: bulk actions only appear when items are selected
-//   • Affordance: "Review" CTA clearly primary action per card
+//   â€¢ Feedback: select mode activates instantly on long-press
+//   â€¢ Visibility: risk badge colour codes severity (amber/grey)
+//   â€¢ Constraint: bulk actions only appear when items are selected
+//   â€¢ Affordance: "Review" CTA clearly primary action per card
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -26,7 +26,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 
 
-// ── Flagged item model ────────────────────────────────────────────────────────
+// â”€â”€ Flagged item model â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 enum _Risk { high, medium, low }
 enum _Violation { inappropriate, suspicious, spam, other }
@@ -45,7 +45,7 @@ class _FlaggedItem {
   });
 }
 
-// ── Screen ────────────────────────────────────────────────────────────────────
+// â”€â”€ Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -78,7 +78,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       violation: _Violation.spam,
     ),
     _FlaggedItem(
-      id: 'f4', title: '"Free money giveaway — click here"',
+      id: 'f4', title: '"Free money giveaway â€” click here"',
       reportedBy: '@safety_bot', risk: _Risk.high,
       violation: _Violation.suspicious,
     ),
@@ -125,7 +125,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           child: Icon(Icons.shield_outlined, color: AppColors.primary),
         ),
         title: Text('Moderation Dashboard',
-          style: GoogleFonts.lexend(fontWeight: FontWeight.w700)),
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
         actions: [
           Stack(
             children: [
@@ -148,14 +148,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       body: ListView(
         padding: EdgeInsets.only(bottom: hasSelected ? 196 : 96),
         children: [
-          // ── Summary cards ────────────────────────────────────────
+          // â”€â”€ Summary cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('SUMMARY OVERVIEW',
-                  style: GoogleFonts.lexend(
+                  style: GoogleFonts.plusJakartaSans(
                     fontSize: 11, fontWeight: FontWeight.w700,
                     color: AppColors.textSecondaryLight, letterSpacing: 0.08)),
                 const SizedBox(height: 12),
@@ -187,13 +187,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
           ),
 
-          // ── Flagged content ───────────────────────────────────────
+          // â”€â”€ Flagged content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
                 Text('FLAGGED CONTENT',
-                  style: GoogleFonts.lexend(
+                  style: GoogleFonts.plusJakartaSans(
                     fontSize: 11, fontWeight: FontWeight.w700,
                     color: AppColors.textSecondaryLight, letterSpacing: 0.08)),
                 const Spacer(),
@@ -204,7 +204,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     color: AppColors.primaryTint10,
                     borderRadius: BorderRadius.circular(AppDimensions.radiusFull)),
                   child: Text('${_items.length} New',
-                    style: GoogleFonts.lexend(
+                    style: GoogleFonts.plusJakartaSans(
                       fontSize: 11, fontWeight: FontWeight.w700,
                       color: AppColors.primary)),
                 ),
@@ -238,7 +238,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             )
           : null,
 
-      // ── Admin bottom nav ────────────────────────────────────────────────
+      // â”€â”€ Admin bottom nav â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedTab,
         onDestinationSelected: (i) => setState(() => _selectedTab = i),
@@ -269,7 +269,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 }
 
-// ── Summary card ──────────────────────────────────────────────────────────────
+// â”€â”€ Summary card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _SummaryCard extends StatelessWidget {
   final IconData icon;
@@ -299,10 +299,10 @@ class _SummaryCard extends StatelessWidget {
         children: [
           Icon(icon, color: iconColor, size: 28),
           const SizedBox(height: 8),
-          Text(value, style: GoogleFonts.lexend(
+          Text(value, style: GoogleFonts.plusJakartaSans(
             fontSize: 22, fontWeight: FontWeight.w700)),
           const SizedBox(height: 2),
-          Text(label, style: GoogleFonts.lexend(
+          Text(label, style: GoogleFonts.plusJakartaSans(
             fontSize: 11, color: AppColors.textSecondaryLight)),
         ],
       ),
@@ -310,7 +310,7 @@ class _SummaryCard extends StatelessWidget {
   }
 }
 
-// ── Flagged card ──────────────────────────────────────────────────────────────
+// â”€â”€ Flagged card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _FlaggedCard extends StatelessWidget {
   final _FlaggedItem item;
@@ -365,11 +365,11 @@ class _FlaggedCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(item.title,
-                          style: GoogleFonts.lexend(
+                          style: GoogleFonts.plusJakartaSans(
                             fontSize: 15, fontWeight: FontWeight.w700)),
                         const SizedBox(height: 3),
                         Text('Reported by: ${item.reportedBy}',
-                          style: GoogleFonts.lexend(
+                          style: GoogleFonts.plusJakartaSans(
                             fontSize: 11, color: AppColors.textSecondaryLight)),
                       ],
                     ),
@@ -380,7 +380,7 @@ class _FlaggedCard extends StatelessWidget {
                       color: riskBg,
                       borderRadius: BorderRadius.circular(4)),
                     child: Text(riskLabel.toUpperCase(),
-                      style: GoogleFonts.lexend(
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 9, fontWeight: FontWeight.w800,
                         color: riskFg, letterSpacing: 0.08)),
                   ),
@@ -394,7 +394,7 @@ class _FlaggedCard extends StatelessWidget {
                   Icon(violIcon, size: 16, color: AppColors.danger),
                   const SizedBox(width: 6),
                   Text(violLabel,
-                    style: GoogleFonts.lexend(
+                    style: GoogleFonts.plusJakartaSans(
                       fontSize: 13, fontWeight: FontWeight.w600,
                       color: AppColors.danger)),
                 ],
@@ -415,7 +415,7 @@ class _FlaggedCard extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(vertical: 10),
                         ),
                         child: Text('Review',
-                          style: GoogleFonts.lexend(fontWeight: FontWeight.w700)),
+                          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
                       ),
                     ),
                   ),
@@ -443,7 +443,7 @@ class _FlaggedCard extends StatelessWidget {
   }
 }
 
-// ── Bulk action bar ───────────────────────────────────────────────────────────
+// â”€â”€ Bulk action bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _BulkActionBar extends StatelessWidget {
   final int count;
@@ -478,13 +478,13 @@ class _BulkActionBar extends StatelessWidget {
                     color: AppColors.primary, size: 18),
                 const SizedBox(width: 8),
                 Text('$count item${count > 1 ? 's' : ''} selected',
-                  style: GoogleFonts.lexend(
+                  style: GoogleFonts.plusJakartaSans(
                     color: Colors.white, fontWeight: FontWeight.w600)),
                 const Spacer(),
                 TextButton(
                   onPressed: onDeselect,
                   child: Text('Deselect',
-                    style: GoogleFonts.lexend(
+                    style: GoogleFonts.plusJakartaSans(
                       fontSize: 11, fontWeight: FontWeight.w700,
                       color: Colors.white60)),
                 ),
@@ -541,7 +541,7 @@ class _BulkBtn extends StatelessWidget {
               Icon(icon, color: color, size: 22),
               const SizedBox(height: 4),
               Text(label.toUpperCase(),
-                style: GoogleFonts.lexend(
+                style: GoogleFonts.plusJakartaSans(
                   fontSize: 9, fontWeight: FontWeight.w800,
                   color: color, letterSpacing: 0.08)),
             ],
@@ -551,3 +551,4 @@ class _BulkBtn extends StatelessWidget {
     );
   }
 }
+

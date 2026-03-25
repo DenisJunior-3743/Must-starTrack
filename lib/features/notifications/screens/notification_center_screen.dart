@@ -1,36 +1,38 @@
-// lib/features/notifications/screens/notification_center_screen.dart
+﻿// lib/features/notifications/screens/notification_center_screen.dart
 //
-// MUST StarTrack — Notification Center Screen (Phase 4)
+// MUST StarTrack â€” Notification Center Screen (Phase 4)
 //
 // Matches notification_center.html exactly:
-//   • Sticky header with settings button
-//   • Tab bar: All | Requests | Opportunities | System
-//   • Per-notification: avatar, body text with rich spans, timestamp
-//   • Unread indicator (blue dot + tinted background)
-//   • Collaboration request: Accept / Decline inline actions
-//   • Opportunity: icon + department label
-//   • Achievement: fire icon + streak info
-//   • Endorsement: skill name highlighted
-//   • System: info icon
-//   • Mark all read button
+//   â€¢ Sticky header with settings button
+//   â€¢ Tab bar: All | Requests | Opportunities | System
+//   â€¢ Per-notification: avatar, body text with rich spans, timestamp
+//   â€¢ Unread indicator (blue dot + tinted background)
+//   â€¢ Collaboration request: Accept / Decline inline actions
+//   â€¢ Opportunity: icon + department label
+//   â€¢ Achievement: fire icon + streak info
+//   â€¢ Endorsement: skill name highlighted
+//   â€¢ System: info icon
+//   â€¢ Mark all read button
 //
 // HCI:
-//   • Feedback: Accept/Decline buttons resolve inline (no navigation)
-//   • Chunking: tabs group notifications by type (reduces cognitive load)
-//   • Visibility: unread dot + tinted row for unread items
+//   â€¢ Feedback: Accept/Decline buttons resolve inline (no navigation)
+//   â€¢ Chunking: tabs group notifications by type (reduces cognitive load)
+//   â€¢ Visibility: unread dot + tinted row for unread items
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
+import '../../../core/router/route_names.dart';
 import '../../../data/local/dao/notification_dao.dart';
 import '../bloc/notification_cubit.dart';
 
 
-// ── Screen ────────────────────────────────────────────────────────────────────
+// â”€â”€ Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class NotificationCenterScreen extends StatefulWidget {
   const NotificationCenterScreen({super.key});
@@ -43,7 +45,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabCtrl;
 
-  // Tab index → notification type filter (null = all)
+  // Tab index â†’ notification type filter (null = all)
   static const _tabFilters = <String?>[null, 'collaboration', 'opportunity', 'system'];
 
   @override
@@ -86,7 +88,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                     'Notifications',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.lexend(fontWeight: FontWeight.w700),
+                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
                   ),
                 ),
                 if (unread > 0) ...[
@@ -99,7 +101,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                       borderRadius: BorderRadius.circular(AppDimensions.radiusFull)),
                     child: Text('$unread',
                       textAlign: TextAlign.center,
-                      style: GoogleFonts.lexend(
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white)),
                   ),
                 ],
@@ -110,12 +112,12 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                 TextButton(
                   onPressed: () => context.read<NotificationCubit>().markAllRead(),
                   child: Text('Mark all read',
-                    style: GoogleFonts.lexend(
+                    style: GoogleFonts.plusJakartaSans(
                       fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary)),
                 ),
               IconButton(
                 icon: const Icon(Icons.settings_outlined),
-                onPressed: () {},
+                onPressed: () => context.push(Routes.notificationSettings),
                 tooltip: 'Notification settings',
               ),
             ],
@@ -148,7 +150,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
   }
 }
 
-// ── Notification list ─────────────────────────────────────────────────────────
+// â”€â”€ Notification list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _NotifList extends StatelessWidget {
   final List<NotificationModel> notifs;
@@ -166,7 +168,7 @@ class _NotifList extends StatelessWidget {
                 size: 56, color: AppColors.primary),
             const SizedBox(height: 12),
             Text('All caught up!',
-              style: GoogleFonts.lexend(
+              style: GoogleFonts.plusJakartaSans(
                 fontSize: 16, fontWeight: FontWeight.w700)),
           ],
         ),
@@ -179,7 +181,7 @@ class _NotifList extends StatelessWidget {
   }
 }
 
-// ── Notification tile ─────────────────────────────────────────────────────────
+// â”€â”€ Notification tile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _NotifTile extends StatelessWidget {
   final NotificationModel notif;
@@ -192,6 +194,26 @@ class _NotifTile extends StatelessWidget {
     return v as bool;
   }
 
+  void _navigateToEntity(BuildContext context) {
+    final eid = notif.entityId;
+    if (eid == null || eid.isEmpty) return;
+    switch (notif.type) {
+      case 'collaboration':
+      case 'opportunity':
+      case 'achievement':
+        // entityId is a postId
+        context.push('/project/$eid');
+      case 'message':
+        // entityId is a threadId
+        context.push('/chat/$eid');
+      case 'endorsement':
+        // entityId is a userId
+        context.push('/profile/$eid');
+      default:
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return InkWell(
@@ -199,6 +221,7 @@ class _NotifTile extends StatelessWidget {
         if (!notif.isRead) {
           context.read<NotificationCubit>().markRead(notif.id);
         }
+        _navigateToEntity(context);
       },
       child: Container(
         color: notif.isRead
@@ -225,7 +248,7 @@ class _NotifTile extends StatelessWidget {
                       Column(
                         children: [
                           Text(timeago.format(notif.createdAt),
-                            style: GoogleFonts.lexend(
+                            style: GoogleFonts.plusJakartaSans(
                               fontSize: 10, color: AppColors.textSecondaryLight)),
                           if (!notif.isRead)
                             Padding(
@@ -242,7 +265,7 @@ class _NotifTile extends StatelessWidget {
                   if (notif.detail != null) ...[
                     const SizedBox(height: 4),
                     Text(notif.detail!,
-                      style: GoogleFonts.lexend(
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 12, color: AppColors.textSecondaryLight)),
                   ],
                   // Accept / Decline for collaboration requests
@@ -257,7 +280,7 @@ class _NotifTile extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 16, vertical: 8),
                             minimumSize: Size.zero,
-                            textStyle: GoogleFonts.lexend(
+                            textStyle: GoogleFonts.plusJakartaSans(
                               fontSize: 12, fontWeight: FontWeight.w700)),
                           child: const Text('Accept'),
                         ),
@@ -269,7 +292,7 @@ class _NotifTile extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 16, vertical: 8),
                             minimumSize: Size.zero,
-                            textStyle: GoogleFonts.lexend(
+                            textStyle: GoogleFonts.plusJakartaSans(
                               fontSize: 12, fontWeight: FontWeight.w700)),
                           child: const Text('Decline'),
                         ),
@@ -288,7 +311,7 @@ class _NotifTile extends StatelessWidget {
                           color: _accepted! ? AppColors.success : AppColors.danger),
                         const SizedBox(width: 4),
                         Text(_accepted! ? 'Request accepted' : 'Request declined',
-                          style: GoogleFonts.lexend(
+                          style: GoogleFonts.plusJakartaSans(
                             fontSize: 12, fontWeight: FontWeight.w600,
                             color: _accepted! ? AppColors.success : AppColors.danger)),
                       ],
@@ -318,7 +341,7 @@ class _Leading extends StatelessWidget {
             ? NetworkImage(notif.senderPhotoUrl!) : null,
         child: notif.senderPhotoUrl == null
             ? Text(notif.senderName![0].toUpperCase(),
-                style: GoogleFonts.lexend(
+                style: GoogleFonts.plusJakartaSans(
                   fontSize: 18, fontWeight: FontWeight.w700,
                   color: AppColors.primary))
             : null,
@@ -348,7 +371,7 @@ class _BodyText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final base = GoogleFonts.lexend(fontSize: 13, height: 1.4);
+    final base = GoogleFonts.plusJakartaSans(fontSize: 13, height: 1.4);
     final bold = base.copyWith(fontWeight: FontWeight.w700);
 
     if (notif.senderName != null) {
@@ -368,3 +391,4 @@ class _BodyText extends StatelessWidget {
       color: Theme.of(context).textTheme.bodyMedium?.color));
   }
 }
+

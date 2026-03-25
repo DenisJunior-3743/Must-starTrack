@@ -1,11 +1,11 @@
-// lib/features/auth/screens/register_step2_screen.dart
+﻿// lib/features/auth/screens/register_step2_screen.dart
 //
-// MUST StarTrack — Registration Step 2: University Information
+// MUST StarTrack â€” Registration Step 2: University Information
 //
 // Collects: registration number, admission year, faculty, program,
 //           year of study, student email.
 // Cross-validates reg number against email prefix.
-// The most important validation step — data matches official MUST records.
+// The most important validation step â€” data matches official MUST records.
 //
 // HCI: inline reg-number format hint, cross-field validation on submit,
 //      error banner if inconsistency detected.
@@ -226,17 +226,17 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('University Information',
-                          style: GoogleFonts.lexend(
+                          style: GoogleFonts.plusJakartaSans(
                             fontSize: 24, fontWeight: FontWeight.w700,
                             color: AppColors.textPrimaryLight, letterSpacing: -0.3,
                           )),
                         const SizedBox(height: 4),
                         Text('Match your official admission letter exactly.',
-                          style: GoogleFonts.lexend(
+                          style: GoogleFonts.plusJakartaSans(
                             fontSize: 13, color: AppColors.textSecondaryLight)),
                         const SizedBox(height: 24),
 
-                        // ── Registration number ────────────────────────────
+                        // â”€â”€ Registration number â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         StTextField(
                           label: AppStrings.registrationNumber,
                           hint: '2023/BCS/001/PS',
@@ -252,7 +252,7 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
                         ),
                         const SizedBox(height: AppDimensions.spacingMd),
 
-                        // ── Admission year ─────────────────────────────────
+                        // â”€â”€ Admission year â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         StDropdown<String>(
                           label: AppStrings.admissionYear,
                           value: _admissionYear,
@@ -267,7 +267,7 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
                         ),
                         const SizedBox(height: AppDimensions.spacingMd),
 
-                        // ── Faculty ────────────────────────────────────────
+                        // â”€â”€ Faculty â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         StDropdown<String>(
                           label: AppStrings.faculty,
                           value: _faculty,
@@ -285,7 +285,7 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
                         ),
                         const SizedBox(height: AppDimensions.spacingMd),
 
-                        // ── Program ────────────────────────────────────────
+                        // â”€â”€ Program â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         StDropdown<String>(
                           label: AppStrings.programName,
                           value: _selectedProgramCode,
@@ -313,7 +313,7 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
                         ),
                         const SizedBox(height: AppDimensions.spacingMd),
 
-                        // ── Year of study ──────────────────────────────────
+                        // â”€â”€ Year of study â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         StDropdown<int>(
                           label: AppStrings.yearOfStudy,
                           value: _yearOfStudy,
@@ -325,7 +325,7 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
                         ),
                         const SizedBox(height: AppDimensions.spacingMd),
 
-                        // ── Institutional email ────────────────────────────
+                        // â”€â”€ Institutional email â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         StTextField(
                           label: 'Institutional Email',
                           hint: 'username@std.must.ac.ug',
@@ -339,13 +339,13 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
                           validator: MustValidators.validateStudentEmail,
                         ),
 
-                        // ── Cross-validation error ─────────────────────────
+                        // â”€â”€ Cross-validation error â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         if (_crossValidationError != null) ...[
                           const SizedBox(height: 12),
                           InfoBanner.error(message: _crossValidationError!),
                         ],
 
-                        // ── Info note ──────────────────────────────────────
+                        // â”€â”€ Info note â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         const SizedBox(height: 16),
                         const InfoBanner.warning(
                           message: 'Ensure all university details match your official admission letter to avoid delays in profile verification.',
@@ -424,3 +424,4 @@ class _StepFooter extends StatelessWidget {
     );
   }
 }
+

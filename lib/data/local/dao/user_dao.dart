@@ -28,11 +28,22 @@ class UserDao {
   /// Insert a new user. Throws if email already exists (UNIQUE constraint).
   Future<void> insertUser(UserModel user) async {
     final db = await _db.database;
-    await db.insert(
-      DatabaseSchema.tableUsers,
-      user.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.transaction((txn) async {
+      await txn.insert(
+        DatabaseSchema.tableUsers,
+        user.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+
+      final profile = user.profile;
+      if (profile != null) {
+        await txn.insert(
+          DatabaseSchema.tableProfiles,
+          profile.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
   }
 
   /// Fetch a user by their local UUID.
@@ -83,12 +94,26 @@ class UserDao {
     final map = user.toMap()
       ..['updated_at'] = DateTime.now().toIso8601String()
       ..['sync_status'] = 0; // mark as needing sync
-    await db.update(
-      DatabaseSchema.tableUsers,
-      map,
-      where: 'id = ?',
-      whereArgs: [user.id],
-    );
+    await db.transaction((txn) async {
+      await txn.update(
+        DatabaseSchema.tableUsers,
+        map,
+        where: 'id = ?',
+        whereArgs: [user.id],
+      );
+
+      final profile = user.profile;
+      if (profile != null) {
+        final profileMap = profile.toMap()
+          ..['updated_at'] = DateTime.now().toIso8601String()
+          ..['sync_status'] = 0;
+        await txn.insert(
+          DatabaseSchema.tableProfiles,
+          profileMap,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
   }
 
   /// Soft-deletes by marking the user as suspended.

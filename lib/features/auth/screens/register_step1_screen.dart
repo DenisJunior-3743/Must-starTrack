@@ -1,6 +1,6 @@
-// lib/features/auth/screens/register_step1_screen.dart
+﻿// lib/features/auth/screens/register_step1_screen.dart
 //
-// MUST StarTrack — Registration Step 1: Biographical Data
+// MUST StarTrack â€” Registration Step 1: Biographical Data
 //
 // Collects: full name, gender, phone, short bio, skills.
 // Data is stored in memory and passed to Step 2 via GoRouter extra.
@@ -91,17 +91,17 @@ class _RegisterStep1ScreenState extends State<RegisterStep1Screen> {
                       children: [
                         // Step heading
                         Text('Your Profile',
-                          style: GoogleFonts.lexend(
+                          style: GoogleFonts.plusJakartaSans(
                             fontSize: 24, fontWeight: FontWeight.w700,
                             color: AppColors.textPrimaryLight, letterSpacing: -0.3,
                           )),
                         const SizedBox(height: 4),
                         Text('Tell us about yourself',
-                          style: GoogleFonts.lexend(
+                          style: GoogleFonts.plusJakartaSans(
                             fontSize: 14, color: AppColors.textSecondaryLight)),
                         const SizedBox(height: 24),
 
-                        // ── Full Name ──────────────────────────────────────
+                        // â”€â”€ Full Name â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         StTextField(
                           label: AppStrings.fullName,
                           hint: 'Enter your legal full name',
@@ -112,7 +112,7 @@ class _RegisterStep1ScreenState extends State<RegisterStep1Screen> {
                         ),
                         const SizedBox(height: AppDimensions.spacingMd),
 
-                        // ── Gender + Phone side-by-side ────────────────────
+                        // â”€â”€ Gender + Phone side-by-side â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         Row(
                           children: [
                             Expanded(
@@ -141,7 +141,7 @@ class _RegisterStep1ScreenState extends State<RegisterStep1Screen> {
                         ),
                         const SizedBox(height: AppDimensions.spacingMd),
 
-                        // ── Short Bio ──────────────────────────────────────
+                        // â”€â”€ Short Bio â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         StTextField(
                           label: AppStrings.biography,
                           hint: 'Tell us about yourself, your interests and goals...',
@@ -151,7 +151,7 @@ class _RegisterStep1ScreenState extends State<RegisterStep1Screen> {
                         ),
                         const SizedBox(height: AppDimensions.spacingMd),
 
-                        // ── Skills tag input ───────────────────────────────
+                        // â”€â”€ Skills tag input â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         SkillChipInput(
                           initialSkills: _skills,
                           onChanged: (s) => setState(() => _skills = s),
@@ -161,7 +161,7 @@ class _RegisterStep1ScreenState extends State<RegisterStep1Screen> {
                         const SizedBox(height: 16),
                         Text(
                           'All data is securely handled according to MUST StarTrack privacy guidelines.',
-                          style: GoogleFonts.lexend(
+                          style: GoogleFonts.plusJakartaSans(
                             fontSize: 11, color: AppColors.textSecondaryLight),
                           textAlign: TextAlign.center,
                         ),
@@ -174,7 +174,7 @@ class _RegisterStep1ScreenState extends State<RegisterStep1Screen> {
             ),
           ),
 
-          // ── Sticky footer CTA ──────────────────────────────────────────
+          // â”€â”€ Sticky footer CTA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           bottomNavigationBar: _StickyFooter(
             onNext: () => _next(ctx),
             showBack: false,
@@ -185,9 +185,9 @@ class _RegisterStep1ScreenState extends State<RegisterStep1Screen> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Sticky footer — reused across all 3 steps
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Sticky footer â€” reused across all 3 steps
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _StickyFooter extends StatelessWidget {
   final VoidCallback onNext;
@@ -244,3 +244,4 @@ class _StickyFooter extends StatelessWidget {
     );
   }
 }
+

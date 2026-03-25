@@ -1,18 +1,18 @@
-// lib/features/discover/screens/discover_screen.dart
+﻿// lib/features/discover/screens/discover_screen.dart
 //
-// MUST StarTrack — Discover Screen (Phase 3)
+// MUST StarTrack â€” Discover Screen (Phase 3)
 //
 // Matches search_discovery_filters.html exactly:
-//   • Sticky search bar with filter button
-//   • Recent searches pills (stored locally)
-//   • Trending skills horizontal scroll (icon + label)
-//   • Advanced filter panel: faculty, program, category grid, skill chips, recency
-//   • Results list (PostCard) with live debounced search
+//   â€¢ Sticky search bar with filter button
+//   â€¢ Recent searches pills (stored locally)
+//   â€¢ Trending skills horizontal scroll (icon + label)
+//   â€¢ Advanced filter panel: faculty, program, category grid, skill chips, recency
+//   â€¢ Results list (PostCard) with live debounced search
 //
 // HCI:
-//   • Recognition over Recall: recent searches shown before user types
-//   • Progressive disclosure: advanced filters hidden until needed
-//   • Feedback: debounced search starts immediately on type
+//   â€¢ Recognition over Recall: recent searches shown before user types
+//   â€¢ Progressive disclosure: advanced filters hidden until needed
+//   â€¢ Feedback: debounced search starts immediately on type
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -20,9 +20,14 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
+import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_names.dart';
+import '../../../data/local/dao/activity_log_dao.dart';
 import '../../../data/local/dao/post_dao.dart';
+import '../../../data/local/dao/user_dao.dart';
 import '../../../data/models/post_model.dart';
+import '../../../data/remote/recommender_service.dart';
+import '../../auth/bloc/auth_cubit.dart';
 import '../../shared/hci_components/post_card.dart';
 import '../../shared/hci_components/st_form_widgets.dart';
 
@@ -44,6 +49,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   // Filter state
   String? _filterFaculty;
   String? _filterCategory;
+  String? _filterType; // 'project' | 'opportunity' | null (all)
   String _filterRecency = 'any';
   List<String> _filterSkills = [];
 
@@ -82,14 +88,39 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   Future<void> _search(String query) async {
     setState(() => _loading = true);
     try {
-      final results = await _postDao.searchPosts(
+      var results = await _postDao.searchPosts(
         query: query,
         faculty: _filterFaculty,
         category: _filterCategory,
+        type: _filterType,
         skills: _filterSkills,
         recency: _filterRecency,
         pageSize: 30,
       );
+      final currentUserId = sl<AuthCubit>().currentUser?.id;
+      if (currentUserId != null && currentUserId.isNotEmpty) {
+        final currentUser = await sl<UserDao>().getUserById(currentUserId);
+        if (currentUser != null && currentUser.profile != null) {
+          final recentCategories =
+              await sl<ActivityLogDao>().getRecentCategorySignals(currentUserId);
+          final recentTerms =
+              await sl<ActivityLogDao>().getRecentSearchTerms(currentUserId);
+          final ranked = sl<RecommenderService>().rankLocally(
+            user: currentUser,
+            candidates: results,
+            recentlyViewedCategories: recentCategories,
+            recentSearchTerms: recentTerms,
+          );
+          results = ranked.map((entry) => entry.post).toList();
+        }
+        if (query.trim().isNotEmpty) {
+          await sl<ActivityLogDao>().logSearch(
+            userId: currentUserId,
+            query: query,
+            type: 'discover',
+          );
+        }
+      }
       setState(() { _results = results; _loading = false; });
     } catch (_) {
       setState(() => _loading = false);
@@ -115,14 +146,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          // ── Sticky search header ────────────────────────────────────────
+          // â”€â”€ Sticky search header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           SliverAppBar(
             pinned: true,
             floating: true,
             snap: true,
             backgroundColor: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.95),
             elevation: 0,
-            expandedHeight: 110,
+            expandedHeight: 132,
             flexibleSpace: FlexibleSpaceBar(
               background: SafeArea(
                 child: Padding(
@@ -133,7 +164,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                       Row(
                         children: [
                           Text('Discover',
-                            style: GoogleFonts.lexend(
+                            style: GoogleFonts.plusJakartaSans(
                               fontSize: 24, fontWeight: FontWeight.w700,
                               color: AppColors.primary, letterSpacing: -0.3)),
                           const Spacer(),
@@ -156,7 +187,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                               },
                               decoration: InputDecoration(
                                 hintText: 'Search projects, skills, or students',
-                                hintStyle: GoogleFonts.lexend(fontSize: 13),
+                                hintStyle: GoogleFonts.plusJakartaSans(fontSize: 13),
                                 prefixIcon: const Icon(Icons.search_rounded),
                                 contentPadding: const EdgeInsets.symmetric(vertical: 12),
                               ),
@@ -188,7 +219,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             ),
           ),
 
-          // ── Body ────────────────────────────────────────────────────────
+          // â”€â”€ Body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           SliverToBoxAdapter(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -249,17 +280,43 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         const Icon(Icons.grid_view_rounded,
                             size: 18, color: AppColors.primary),
                         const SizedBox(width: 8),
-                        Text(_loading ? 'Searching…' : '${_results.length} results',
-                          style: GoogleFonts.lexend(
+                        Text(_loading ? 'Searchingâ€¦' : '${_results.length} results',
+                          style: GoogleFonts.plusJakartaSans(
                             fontSize: 14, fontWeight: FontWeight.w700)),
                       ],
                     ),
                   ),
+
+                // Post type filter chips
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      _TypeChip(
+                        label: 'All',
+                        selected: _filterType == null,
+                        onTap: () { setState(() => _filterType = null); _search(_searchCtrl.text); },
+                      ),
+                      const SizedBox(width: 8),
+                      _TypeChip(
+                        label: 'Projects',
+                        selected: _filterType == 'project',
+                        onTap: () { setState(() => _filterType = 'project'); _search(_searchCtrl.text); },
+                      ),
+                      const SizedBox(width: 8),
+                      _TypeChip(
+                        label: 'Opportunities',
+                        selected: _filterType == 'opportunity',
+                        onTap: () { setState(() => _filterType = 'opportunity'); _search(_searchCtrl.text); },
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
 
-          // ── Results ──────────────────────────────────────────────────────
+          // â”€â”€ Results â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           if (_loading)
             const SliverFillRemaining(
               child: Center(child: CircularProgressIndicator()),
@@ -274,7 +331,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   return PostCard(
                     post: post,
                     onTap: () => context.push('/project/${post.id}'),
-                    onAuthorTap: () => context.push('${RouteNames.profile}/${post.authorId}'),
+                    onAuthorTap: () => context.push(
+                      RouteNames.profile.replaceFirst(':userId', post.authorId),
+                    ),
                   );
                 },
                 childCount: _results.length,
@@ -288,9 +347,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Recent searches
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _RecentSearches extends StatelessWidget {
   final List<String> items;
@@ -313,14 +372,14 @@ class _RecentSearches extends StatelessWidget {
           child: Row(
             children: [
               Text('RECENT SEARCHES',
-                style: GoogleFonts.lexend(
+                style: GoogleFonts.plusJakartaSans(
                   fontSize: 11, fontWeight: FontWeight.w700,
                   color: AppColors.textSecondaryLight, letterSpacing: 0.08)),
               const Spacer(),
               TextButton(
                 onPressed: onClear,
                 child: Text('Clear All',
-                  style: GoogleFonts.lexend(
+                  style: GoogleFonts.plusJakartaSans(
                     fontSize: 12, fontWeight: FontWeight.w600,
                     color: AppColors.primary)),
               ),
@@ -345,7 +404,7 @@ class _RecentSearches extends StatelessWidget {
                     const Icon(Icons.history_rounded, size: 14,
                         color: AppColors.textSecondaryLight),
                     const SizedBox(width: 6),
-                    Text(q, style: GoogleFonts.lexend(fontSize: 13, fontWeight: FontWeight.w500)),
+                    Text(q, style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w500)),
                   ],
                 ),
               ),
@@ -358,9 +417,9 @@ class _RecentSearches extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Trending skills
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _TrendingSkills extends StatelessWidget {
   final List<(String, IconData, Color)> skills;
@@ -376,7 +435,7 @@ class _TrendingSkills extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
           child: Text('TRENDING SKILLS',
-            style: GoogleFonts.lexend(
+            style: GoogleFonts.plusJakartaSans(
               fontSize: 11, fontWeight: FontWeight.w700,
               color: AppColors.textSecondaryLight, letterSpacing: 0.08)),
         ),
@@ -403,7 +462,7 @@ class _TrendingSkills extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(label,
-                      style: GoogleFonts.lexend(
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 10, fontWeight: FontWeight.w600)),
                   ],
                 ),
@@ -417,9 +476,9 @@ class _TrendingSkills extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Advanced filter panel
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _AdvancedFilters extends StatelessWidget {
   final List<String> faculties;
@@ -464,7 +523,7 @@ class _AdvancedFilters extends StatelessWidget {
           Row(
             children: [
               Text('Advanced Filters',
-                style: GoogleFonts.lexend(fontSize: 16, fontWeight: FontWeight.w700)),
+                style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w700)),
               const Spacer(),
               const Icon(Icons.expand_less_rounded, color: AppColors.textSecondaryLight),
             ],
@@ -502,7 +561,7 @@ class _AdvancedFilters extends StatelessWidget {
                     borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
                   ),
                   child: Text(cat,
-                    style: GoogleFonts.lexend(
+                    style: GoogleFonts.plusJakartaSans(
                       fontSize: 12, fontWeight: FontWeight.w600,
                       color: active ? AppColors.primary : AppColors.textSecondaryLight)),
                 ),
@@ -541,7 +600,7 @@ class _AdvancedFilters extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16)),
               child: Text('Apply Filters',
-                style: GoogleFonts.lexend(fontWeight: FontWeight.w700, fontSize: 15)),
+                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 15)),
             ),
           ),
         ],
@@ -559,7 +618,7 @@ class _FilterLabel extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(label.toUpperCase(),
-        style: GoogleFonts.lexend(
+        style: GoogleFonts.plusJakartaSans(
           fontSize: 10, fontWeight: FontWeight.w700,
           color: AppColors.textSecondaryLight, letterSpacing: 0.08)),
     );
@@ -591,7 +650,7 @@ class _RecencyBtn extends StatelessWidget {
           ),
           child: Text(label,
             textAlign: TextAlign.center,
-            style: GoogleFonts.lexend(
+            style: GoogleFonts.plusJakartaSans(
               fontSize: 11, fontWeight: FontWeight.w600,
               color: active ? Colors.white : AppColors.textSecondaryLight)),
         ),
@@ -613,12 +672,44 @@ class _EmptyResults extends StatelessWidget {
           const Icon(Icons.search_off_rounded, size: 60, color: AppColors.primary),
           const SizedBox(height: 16),
           Text('No results for "$query"',
-            style: GoogleFonts.lexend(fontSize: 16, fontWeight: FontWeight.w700)),
+            style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           Text('Try different keywords or adjust filters.',
-            style: GoogleFonts.lexend(fontSize: 13, color: AppColors.textSecondaryLight)),
+            style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textSecondaryLight)),
         ],
       ),
     );
   }
 }
+
+class _TypeChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  const _TypeChip({required this.label, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary : AppColors.surfaceLight,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? AppColors.primary : AppColors.borderLight),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: selected ? Colors.white : AppColors.textSecondaryLight,
+          ),
+        ),
+      ),
+    );
+  }
+}
+

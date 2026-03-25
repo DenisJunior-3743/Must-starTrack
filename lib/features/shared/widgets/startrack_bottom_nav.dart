@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/constants/app_colors.dart';
@@ -99,7 +99,7 @@ class StarTrackBottomNav extends StatelessWidget {
             Expanded(
               child: _NavItem(
                 icon: Icons.folder_open_rounded,
-                label: 'Projects',
+                label: 'My Projects',
                 active: activeTab == StarTrackNavTab.projects,
                 onTap: onProjectsTap,
               ),
@@ -141,12 +141,16 @@ class _NavItem extends StatelessWidget {
             color: active ? activeColor : idleColor,
           ),
           const SizedBox(height: 2),
-          Text(
-            label,
-            style: GoogleFonts.lexend(
-              fontSize: 11,
-              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-              color: active ? activeColor : idleColor,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              maxLines: 1,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 11,
+                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                color: active ? activeColor : idleColor,
+              ),
             ),
           ),
         ],
@@ -154,3 +158,4 @@ class _NavItem extends StatelessWidget {
     );
   }
 }
+

@@ -1,15 +1,15 @@
-// lib/features/shared/hci_components/post_card.dart
+﻿// lib/features/shared/hci_components/post_card.dart
 //
-// MUST StarTrack — PostCard Widget
+// MUST StarTrack â€” PostCard Widget
 //
 // Reused across: Home Feed, Discover, Profile, Search results.
 // One component = one source of truth for post appearance.
 //
 // HCI principles:
-//   • Affordance: like/bookmark buttons have clear tap targets (48dp)
-//   • Feedback: like button animates scale on tap; count updates instantly
-//   • Chunking: author row → media → title → skills → actions (F-pattern)
-//   • Universal Design: semantic labels, min 48dp touch targets
+//   â€¢ Affordance: like/bookmark buttons have clear tap targets (48dp)
+//   â€¢ Feedback: like button animates scale on tap; count updates instantly
+//   â€¢ Chunking: author row â†’ media â†’ title â†’ skills â†’ actions (F-pattern)
+//   â€¢ Universal Design: semantic labels, min 48dp touch targets
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -107,13 +107,13 @@ class _PostCardState extends State<PostCard>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Author row ─────────────────────────────────────────────────
+            // â”€â”€ Author row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _AuthorRow(post: post, onAuthorTap: widget.onAuthorTap),
 
-            // ── Hero image (if media) ──────────────────────────────────────
+            // â”€â”€ Hero image (if media) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if (post.mediaUrls.isNotEmpty) _HeroImage(url: post.mediaUrls.first),
 
-            // ── Content ────────────────────────────────────────────────────
+            // â”€â”€ Content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: Column(
@@ -127,7 +127,7 @@ class _PostCardState extends State<PostCard>
                         const SizedBox(width: 6),
                         Text(
                           post.category!,
-                          style: GoogleFonts.lexend(
+                          style: GoogleFonts.plusJakartaSans(
                             fontSize: 11,
                             color: AppColors.textSecondaryLight,
                           ),
@@ -140,7 +140,7 @@ class _PostCardState extends State<PostCard>
                   // Title
                   Text(
                     post.title,
-                    style: GoogleFonts.lexend(
+                    style: GoogleFonts.plusJakartaSans(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       height: 1.3,
@@ -158,7 +158,7 @@ class _PostCardState extends State<PostCard>
                     const SizedBox(height: 6),
                     Text(
                       post.description!,
-                      style: GoogleFonts.lexend(
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 13,
                         color: AppColors.textSecondaryLight,
                         height: 1.5,
@@ -177,7 +177,7 @@ class _PostCardState extends State<PostCard>
               ),
             ),
 
-            // ── Collaborate CTA (project detail variant) ───────────────────
+            // â”€â”€ Collaborate CTA (project detail variant) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if (widget.showCollabButton && widget.onCollaborate != null) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -199,7 +199,7 @@ class _PostCardState extends State<PostCard>
               ),
             ],
 
-            // ── Action bar ─────────────────────────────────────────────────
+            // â”€â”€ Action bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _ActionBar(
               post: post,
               likeScale: _likeScale,
@@ -213,9 +213,9 @@ class _PostCardState extends State<PostCard>
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Author row
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _AuthorRow extends StatelessWidget {
   final PostModel post;
@@ -243,7 +243,7 @@ class _AuthorRow extends StatelessWidget {
                       (post.authorName?.isNotEmpty == true)
                           ? post.authorName![0].toUpperCase()
                           : '?',
-                      style: GoogleFonts.lexend(
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                         color: AppColors.primary,
@@ -258,14 +258,14 @@ class _AuthorRow extends StatelessWidget {
                 children: [
                   Text(
                     post.authorName ?? 'Unknown',
-                    style: GoogleFonts.lexend(
+                    style: GoogleFonts.plusJakartaSans(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                   Text(
                     timeago.format(post.createdAt),
-                    style: GoogleFonts.lexend(
+                    style: GoogleFonts.plusJakartaSans(
                       fontSize: 11,
                       color: AppColors.textSecondaryLight,
                     ),
@@ -284,7 +284,7 @@ class _AuthorRow extends StatelessWidget {
                 ),
                 child: Text(
                   'Lecturer',
-                  style: GoogleFonts.lexend(
+                  style: GoogleFonts.plusJakartaSans(
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
                     color: AppColors.roleLecturer,
@@ -298,9 +298,9 @@ class _AuthorRow extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Hero image with gradient overlay
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _HeroImage extends StatelessWidget {
   final String url;
@@ -369,9 +369,9 @@ bool _isVideoUrl(String url) {
   return isVideoMediaPath(url);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Type badge
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _TypeBadge extends StatelessWidget {
   final String type;
@@ -393,7 +393,7 @@ class _TypeBadge extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: GoogleFonts.lexend(
+        style: GoogleFonts.plusJakartaSans(
           fontSize: 10,
           fontWeight: FontWeight.w700,
           color: color,
@@ -404,9 +404,9 @@ class _TypeBadge extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Skills row
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _SkillsRow extends StatelessWidget {
   final List<String> skills;
@@ -427,23 +427,23 @@ class _SkillsRow extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
           ),
           child: Text(s,
-            style: GoogleFonts.lexend(
+            style: GoogleFonts.plusJakartaSans(
               fontSize: 11, fontWeight: FontWeight.w500,
               color: AppColors.textSecondaryLight,
             )),
         )),
         if (overflow > 0)
           Text('+$overflow more',
-            style: GoogleFonts.lexend(
+            style: GoogleFonts.plusJakartaSans(
               fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w600)),
       ],
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Action bar — like, comment, share, bookmark
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Action bar â€” like, comment, share, bookmark
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _ActionBar extends StatelessWidget {
   final PostModel post;
@@ -556,7 +556,7 @@ class _ActionBtn extends StatelessWidget {
                 const SizedBox(width: 4),
                 Text(
                   label!,
-                  style: GoogleFonts.lexend(
+                  style: GoogleFonts.plusJakartaSans(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                     color: AppColors.textSecondaryLight,
@@ -571,9 +571,9 @@ class _ActionBtn extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Collaborator bubble row (matches HTML prototype)
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class CollaboratorBubbles extends StatelessWidget {
   final List<String?> photoUrls;
@@ -613,7 +613,7 @@ class CollaboratorBubbles extends StatelessWidget {
               backgroundColor: AppColors.primaryTint10,
               child: Text(
                 '+$overflow',
-                style: GoogleFonts.lexend(
+                style: GoogleFonts.plusJakartaSans(
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
                   color: AppColors.primary,
