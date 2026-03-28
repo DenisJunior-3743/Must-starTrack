@@ -29,19 +29,37 @@ class UserDao {
   Future<void> insertUser(UserModel user) async {
     final db = await _db.database;
     await db.transaction((txn) async {
-      await txn.insert(
+      final userMap = user.toMap();
+      final updatedUsers = await txn.update(
         DatabaseSchema.tableUsers,
-        user.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+        userMap,
+        where: 'id = ?',
+        whereArgs: [user.id],
       );
+      if (updatedUsers == 0) {
+        await txn.insert(
+          DatabaseSchema.tableUsers,
+          userMap,
+          conflictAlgorithm: ConflictAlgorithm.abort,
+        );
+      }
 
       final profile = user.profile;
       if (profile != null) {
-        await txn.insert(
+        final profileMap = profile.toMap();
+        final updatedProfiles = await txn.update(
           DatabaseSchema.tableProfiles,
-          profile.toMap(),
-          conflictAlgorithm: ConflictAlgorithm.replace,
+          profileMap,
+          where: 'user_id = ?',
+          whereArgs: [profile.userId],
         );
+        if (updatedProfiles == 0) {
+          await txn.insert(
+            DatabaseSchema.tableProfiles,
+            profileMap,
+            conflictAlgorithm: ConflictAlgorithm.abort,
+          );
+        }
       }
     });
   }
@@ -126,6 +144,16 @@ class UserDao {
         'updated_at': DateTime.now().toIso8601String(),
         'sync_status': 0,
       },
+      where: 'id = ?',
+      whereArgs: [userId],
+    );
+  }
+
+  /// Hard-deletes a user row. Cascades to profile and dependent rows.
+  Future<void> deleteUser(String userId) async {
+    final db = await _db.database;
+    await db.delete(
+      DatabaseSchema.tableUsers,
       where: 'id = ?',
       whereArgs: [userId],
     );

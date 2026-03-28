@@ -67,8 +67,8 @@ class _RegisterStep1ScreenState extends State<RegisterStep1Screen> {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => AuthCubit(authRepository: sl(), guards: sl()),
+    return BlocProvider.value(
+      value: sl<AuthCubit>(),
       child: Builder(builder: (ctx) {
         return Scaffold(
           appBar: AppBar(

@@ -1342,11 +1342,19 @@ class _EmptyFeed extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   FilledButton(
+                    style: FilledButton.styleFrom(
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                     onPressed: () => context.push(RouteNames.registerStep1),
                     child: const Text('Create Account'),
                   ),
                   const SizedBox(width: 12),
                   OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                     onPressed: () => context.push(RouteNames.login),
                     child: const Text('Sign In'),
                   ),

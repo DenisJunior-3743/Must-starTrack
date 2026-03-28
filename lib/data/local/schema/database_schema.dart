@@ -21,33 +21,33 @@
 
 abstract final class DatabaseSchema {
   static const String databaseName = 'must_startrack.db';
-  static const int databaseVersion = 5;
+  static const int databaseVersion = 8;
 
   // ── Table Names ────────────────────────────────────────────────────────────
-  static const String tableUsers             = 'users';
-  static const String tableProfiles          = 'profiles';
-  static const String tablePosts             = 'posts';
-  static const String tableComments          = 'comments';
-  static const String tableLikes             = 'likes';
-  static const String tableDislikes          = 'dislikes';
-  static const String tableFollows           = 'follows';
-  static const String tableCollabRequests    = 'collab_requests';
-  static const String tableMessages          = 'messages';
-  static const String tableConversations     = 'conversations';
-  static const String tableMessageThreads    = 'message_threads';
-  static const String tableNotifications     = 'notifications';
-  static const String tableOpportunities     = 'opportunities';
-  static const String tablePostJoins         = 'post_joins';
-  static const String tableSyncQueue         = 'sync_queue';
-  static const String tableModerationQueue   = 'moderation_queue';
+  static const String tableUsers = 'users';
+  static const String tableProfiles = 'profiles';
+  static const String tablePosts = 'posts';
+  static const String tableComments = 'comments';
+  static const String tableLikes = 'likes';
+  static const String tableDislikes = 'dislikes';
+  static const String tableFollows = 'follows';
+  static const String tableCollabRequests = 'collab_requests';
+  static const String tableMessages = 'messages';
+  static const String tableConversations = 'conversations';
+  static const String tableMessageThreads = 'message_threads';
+  static const String tableNotifications = 'notifications';
+  static const String tableOpportunities = 'opportunities';
+  static const String tablePostJoins = 'post_joins';
+  static const String tableSyncQueue = 'sync_queue';
+  static const String tableModerationQueue = 'moderation_queue';
   static const String tableProjectMilestones = 'project_milestones';
-  static const String tableTasks             = 'tasks';
-  static const String tableEndorsements      = 'endorsements';
-  static const String tableActivityLogs      = 'activity_logs';
-  static const String tableDeviceTokens      = 'device_tokens';
-  static const String tableSearchHistory     = 'search_history';
-  static const String tableDraftPosts        = 'draft_posts';
-  static const String tableAchievements      = 'achievements';
+  static const String tableTasks = 'tasks';
+  static const String tableEndorsements = 'endorsements';
+  static const String tableActivityLogs = 'activity_logs';
+  static const String tableDeviceTokens = 'device_tokens';
+  static const String tableSearchHistory = 'search_history';
+  static const String tableDraftPosts = 'draft_posts';
+  static const String tableAchievements = 'achievements';
 
   // ─────────────────────────────────────────────────────────────────────────
   // CREATE TABLE STATEMENTS
@@ -137,6 +137,9 @@ abstract final class DatabaseSchema {
       share_count      INTEGER NOT NULL DEFAULT 0,
       view_count       INTEGER NOT NULL DEFAULT 0,
       is_cached        INTEGER NOT NULL DEFAULT 1,
+      is_archived      INTEGER NOT NULL DEFAULT 0,
+      moderation_status TEXT DEFAULT 'approved',
+      trust_score      INTEGER NOT NULL DEFAULT 100,
       area_of_expertise TEXT,
       max_participants INTEGER DEFAULT 0,
       join_count       INTEGER NOT NULL DEFAULT 0,

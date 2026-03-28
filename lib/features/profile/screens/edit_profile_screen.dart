@@ -45,33 +45,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   List<String> _skills = [];
   String _visibility = 'public';
 
-  File? _newPhoto;           // picked + cropped local file
+  File? _newPhoto; // picked + cropped local file
   String? _existingPhotoUrl; // current Cloudinary URL from DB
   bool _saving = false;
   bool _dirty = false;
-  bool _seeded = false;      // true once fields are populated from cubit
+  bool _seeded = false; // true once fields are populated from cubit
+  bool _avatarPressed = false; // drives zoom-on-press animation
 
   final _picker = ImagePicker();
-
-  static const _faculties = [
-    'Computing and Informatics',
-    'Applied Sciences and Technology',
-    'Medicine',
-    'Business and Management Sciences',
-    'Science',
-  ];
-
-  static const _programmes = [
-    'B.Sc. Computer Science',
-    'B.Sc. Software Engineering',
-    'B.Sc. Information Technology',
-    'B.Eng. Electrical Engineering',
-    'B.Sc. Data Science',
-    'B.Sc. Nursing',
-    'MBChB Medicine and Surgery',
-    'B.Sc. Business Administration',
-    'Other',
-  ];
 
   @override
   void dispose() {
@@ -89,7 +70,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final user = loaded.user;
     final profile = user.profile;
 
-    _nameCtrl.text = user.displayName ?? '';
+    // Use displayName, fallback to email prefix if empty
+    String displayName = user.displayName ?? '';
+    if (displayName.isEmpty && user.email.isNotEmpty) {
+      displayName = user.email.split('@').first;
+    }
+    _nameCtrl.text = displayName;
+
+    // Bio can be null, use empty string
     _bioCtrl.text = profile?.bio ?? '';
     _existingPhotoUrl = user.photoUrl;
 
@@ -97,20 +85,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _githubCtrl.text = links['github'] ?? '';
     _linkedinCtrl.text = links['linkedin'] ?? '';
 
+    // Handle missing or incomplete profile data gracefully
     if (profile != null) {
-      if (_faculties.contains(profile.faculty)) {
+      // Faculty
+      if (profile.faculty != null && profile.faculty!.isNotEmpty) {
         _faculty = profile.faculty!;
       }
-      if (profile.programName != null &&
-          _programmes.contains(profile.programName)) {
+      // Programme
+      if (profile.programName != null && profile.programName!.isNotEmpty) {
         _programme = profile.programName!;
       }
+      // Year of study
       if (profile.yearOfStudy != null) {
-        _year = profile.yearOfStudy!.clamp(1, 5);
+        _year = profile.yearOfStudy!;
       }
       _skills = List<String>.from(profile.skills);
       _visibility = profile.profileVisibility;
-    }
+        }
   }
 
   void _markDirty() => setState(() => _dirty = true);
@@ -118,47 +109,67 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   // ── Photo pick + crop ─────────────────────────────────────────────────────
 
   Future<void> _pickPhoto() async {
-    final choice = await showModalBottomSheet<ImageSource>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (_) => _PhotoSourceSheet(),
-    );
-    if (choice == null || !mounted) return;
+    debugPrint('📸 [EditProfile] Avatar tapped — opening photo picker');
+    try {
+      final choice = await showModalBottomSheet<ImageSource>(
+        context: context,
+        shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+        builder: (_) => _PhotoSourceSheet(),
+      );
+      if (choice == null || !mounted) {
+        debugPrint('📸 [EditProfile] Photo picker cancelled — no source chosen');
+        return;
+      }
+      debugPrint('📸 [EditProfile] Source chosen: $choice');
 
-    final picked = await _picker.pickImage(
-      source: choice,
-      imageQuality: 90,
-      maxWidth: 1024,
-    );
-    if (picked == null || !mounted) return;
+      final picked = await _picker.pickImage(
+        source: choice,
+        imageQuality: 90,
+        maxWidth: 1024,
+      );
+      if (picked == null || !mounted) {
+        debugPrint('📸 [EditProfile] No image picked from source');
+        return;
+      }
+      debugPrint('📸 [EditProfile] Image picked: ${picked.path}');
 
-    // Crop to 1:1 square — WhatsApp style
-    final cropped = await ImageCropper().cropImage(
-      sourcePath: picked.path,
-      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
-      uiSettings: [
-        AndroidUiSettings(
-          toolbarTitle: 'Crop Photo',
-          toolbarColor: AppColors.primary,
-          toolbarWidgetColor: Colors.white,
-          statusBarColor: AppColors.primary,
-          initAspectRatio: CropAspectRatioPreset.square,
-          lockAspectRatio: true,
-          hideBottomControls: false,
-        ),
-        IOSUiSettings(
-          title: 'Crop Photo',
-          aspectRatioLockEnabled: true,
-          resetAspectRatioEnabled: false,
-        ),
-      ],
-    );
-    if (cropped != null && mounted) {
-      setState(() {
-        _newPhoto = File(cropped.path);
-        _dirty = true;
-      });
+      // Crop to 1:1 square — WhatsApp style
+      final cropped = await ImageCropper().cropImage(
+        sourcePath: picked.path,
+        aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Crop Photo',
+            toolbarColor: AppColors.primary,
+            toolbarWidgetColor: Colors.white,
+            statusBarColor: AppColors.primary,
+            initAspectRatio: CropAspectRatioPreset.square,
+            lockAspectRatio: true,
+            hideBottomControls: false,
+          ),
+          IOSUiSettings(
+            title: 'Crop Photo',
+            aspectRatioLockEnabled: true,
+            resetAspectRatioEnabled: false,
+          ),
+        ],
+      );
+      if (cropped != null && mounted) {
+        debugPrint('📸 [EditProfile] Crop done → ${cropped.path}');
+        setState(() {
+          _newPhoto = File(cropped.path);
+          _dirty = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error picking/cropping photo: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Failed to select photo. Please try again.')),
+        );
+      }
     }
   }
 
@@ -196,12 +207,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     // Navigate back on success; on error the cubit emits ProfileError
     final newState = cubit.state;
     if (newState is ProfileLoaded) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile saved!')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Profile saved!')));
       context.pop();
     } else if (newState is ProfileError) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(newState.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(newState.message)));
     }
   }
 
@@ -241,52 +252,144 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               child: Column(
                 children: [
                   // ── Avatar ──────────────────────────────────────────────
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 28),
                   Center(
-                    child: GestureDetector(
-                      onTap: _pickPhoto,
-                      child: Stack(
-                        children: [
-                          // Photo circle
-                          CircleAvatar(
-                            radius: 56,
-                            backgroundColor: AppColors.primaryTint10,
-                            backgroundImage: _newPhoto != null
-                                ? FileImage(_newPhoto!) as ImageProvider
-                                : (_existingPhotoUrl != null
-                                    ? CachedNetworkImageProvider(_existingPhotoUrl!)
-                                    : null),
-                            child: (_newPhoto == null && _existingPhotoUrl == null)
-                                ? const Icon(Icons.person_rounded,
-                                    size: 56, color: AppColors.primary)
-                                : null,
-                          ),
-                          // Camera badge
-                          Positioned(
-                            bottom: 2, right: 2,
-                            child: Container(
-                              width: 34, height: 34,
-                              decoration: BoxDecoration(
-                                color: AppColors.primary,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 2),
-                              ),
-                              child: const Icon(Icons.camera_alt_rounded,
-                                  size: 16, color: Colors.white),
+                    child: Column(
+                      children: [
+                        Semantics(
+                          label: 'Change profile photo',
+                          button: true,
+                          child: AnimatedScale(
+                            scale: _avatarPressed ? 1.08 : 1.0,
+                            duration: const Duration(milliseconds: 150),
+                            curve: Curves.easeOut,
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              alignment: Alignment.bottomRight,
+                              children: [
+                                // The whole circle is one Material button with ripple
+                                Material(
+                                  shape: const CircleBorder(),
+                                  clipBehavior: Clip.antiAlias,
+                                  color: Colors.transparent,
+                                  child: Ink(
+                                    width: 112,
+                                    height: 112,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: AppColors.primary,
+                                        width: 2,
+                                      ),
+                                      image: _newPhoto != null
+                                          ? DecorationImage(
+                                              image: FileImage(_newPhoto!),
+                                              fit: BoxFit.cover,
+                                            )
+                                          : _existingPhotoUrl != null
+                                              ? DecorationImage(
+                                                  image: CachedNetworkImageProvider(
+                                                      _existingPhotoUrl!),
+                                                  fit: BoxFit.cover,
+                                                )
+                                              : null,
+                                      color: AppColors.primaryTint10,
+                                    ),
+                                    child: InkWell(
+                                      onTap: _pickPhoto,
+                                      onTapDown: (_) =>
+                                          setState(() => _avatarPressed = true),
+                                      onTapUp: (_) =>
+                                          setState(() => _avatarPressed = false),
+                                      onTapCancel: () =>
+                                          setState(() => _avatarPressed = false),
+                                      splashColor:
+                                          AppColors.primary.withValues(alpha: 0.25),
+                                      highlightColor:
+                                          AppColors.primary.withValues(alpha: 0.1),
+                                      child: Stack(
+                                        fit: StackFit.expand,
+                                        children: [
+                                          // Placeholder icon when no photo
+                                          if (_newPhoto == null &&
+                                              _existingPhotoUrl == null)
+                                            const Icon(Icons.person_rounded,
+                                                size: 52,
+                                                color: AppColors.primary),
+                                          // Always-visible bottom edit strip
+                                          Positioned(
+                                            left: 0,
+                                            right: 0,
+                                            bottom: 0,
+                                            child: Container(
+                                              height: 36,
+                                              decoration: BoxDecoration(
+                                                gradient: LinearGradient(
+                                                  begin: Alignment.topCenter,
+                                                  end: Alignment.bottomCenter,
+                                                  colors: [
+                                                    Colors.transparent,
+                                                    Colors.black.withValues(alpha: 0.62),
+                                                  ],
+                                                ),
+                                              ),
+                                              alignment: Alignment.center,
+                                              child: const Text(
+                                                'EDIT',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w800,
+                                                  letterSpacing: 1.2,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                // Edit pencil badge — bottom-right
+                                Positioned(
+                                  bottom: 2,
+                                  right: 2,
+                                  child: IgnorePointer(
+                                    child: Container(
+                                      width: 30,
+                                      height: 30,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                            color: Colors.white, width: 2),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withValues(alpha: 0.18),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(Icons.edit_rounded,
+                                          size: 14, color: Colors.white),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: TextButton(
-                      onPressed: _pickPhoto,
-                      child: Text('Change Photo',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 13, color: AppColors.primary,
-                          fontWeight: FontWeight.w600)),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Tap photo to change',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            color: AppColors.textSecondaryLight,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
 
@@ -301,7 +404,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           label: 'Display Name',
                           controller: _nameCtrl,
                           validator: (v) => v == null || v.trim().isEmpty
-                              ? 'Name is required.' : null,
+                              ? 'Name is required.'
+                              : null,
                         ),
                         const SizedBox(height: AppDimensions.spacingMd),
                         StTextField(
@@ -320,42 +424,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Column(
                       children: [
-                        StDropdown<String>(
+                        StTextField(
                           label: 'Faculty',
-                          value: _faculty,
-                          items: _faculties.map((f) => DropdownMenuItem(
-                            value: f,
-                            child: Text(f, overflow: TextOverflow.ellipsis),
-                          )).toList(),
-                          onChanged: (v) => setState(() {
-                            _faculty = v ?? _faculty;
-                            _dirty = true;
-                          }),
+                          initialValue: _faculty,
+                          enabled: false,
+                          helperText: 'University information cannot be changed.',
                         ),
                         const SizedBox(height: AppDimensions.spacingMd),
-                        StDropdown<String>(
+                        StTextField(
                           label: 'Programme',
-                          value: _programme,
-                          items: _programmes.map((p) => DropdownMenuItem(
-                            value: p,
-                            child: Text(p, overflow: TextOverflow.ellipsis),
-                          )).toList(),
-                          onChanged: (v) => setState(() {
-                            _programme = v ?? _programme;
-                            _dirty = true;
-                          }),
+                          initialValue: _programme,
+                          enabled: false,
                         ),
                         const SizedBox(height: AppDimensions.spacingMd),
-                        StDropdown<int>(
+                        StTextField(
                           label: 'Year of Study',
-                          value: _year,
-                          items: List.generate(5, (i) => i + 1).map((y) =>
-                            DropdownMenuItem(
-                              value: y, child: Text('Year $y'))).toList(),
-                          onChanged: (v) => setState(() {
-                            _year = v ?? _year;
-                            _dirty = true;
-                          }),
+                          initialValue: 'Year $_year',
+                          enabled: false,
                         ),
                       ],
                     ),
@@ -369,7 +454,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       label: '',
                       initialSkills: _skills,
                       onChanged: (s) => setState(() {
-                        _skills = s; _dirty = true;
+                        _skills = s;
+                        _dirty = true;
                       }),
                     ),
                   ),
@@ -405,27 +491,36 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     child: Column(
                       children: [
                         _VisibilityOption(
-                          icon: Icons.public_rounded, label: 'Public',
+                          icon: Icons.public_rounded,
+                          label: 'Public',
                           desc: 'Anyone can view your profile',
-                          value: 'public', groupValue: _visibility,
+                          value: 'public',
+                          groupValue: _visibility,
                           onChanged: (v) => setState(() {
-                            _visibility = v!; _dirty = true;
+                            _visibility = v!;
+                            _dirty = true;
                           }),
                         ),
                         _VisibilityOption(
-                          icon: Icons.group_rounded, label: 'Followers Only',
+                          icon: Icons.group_rounded,
+                          label: 'Followers Only',
                           desc: 'Only your followers can view',
-                          value: 'followers', groupValue: _visibility,
+                          value: 'followers',
+                          groupValue: _visibility,
                           onChanged: (v) => setState(() {
-                            _visibility = v!; _dirty = true;
+                            _visibility = v!;
+                            _dirty = true;
                           }),
                         ),
                         _VisibilityOption(
-                          icon: Icons.lock_outline_rounded, label: 'Private',
+                          icon: Icons.lock_outline_rounded,
+                          label: 'Private',
                           desc: 'Only you can view',
-                          value: 'private', groupValue: _visibility,
+                          value: 'private',
+                          groupValue: _visibility,
                           onChanged: (v) => setState(() {
-                            _visibility = v!; _dirty = true;
+                            _visibility = v!;
+                            _dirty = true;
                           }),
                         ),
                       ],
@@ -438,15 +533,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           bottomNavigationBar: Container(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
             decoration: BoxDecoration(
-              color: Theme.of(context).scaffoldBackgroundColor,
-              border: const Border(top: BorderSide(color: AppColors.borderLight))),
+                color: Theme.of(context).scaffoldBackgroundColor,
+                border: const Border(
+                    top: BorderSide(color: AppColors.borderLight))),
             child: SafeArea(
               top: false,
               child: StButton(
                 label: 'Save Changes',
                 isLoading: _saving || state is ProfileUpdating,
                 onPressed: (_dirty && !_saving && state is! ProfileUpdating)
-                    ? _save : null,
+                    ? _save
+                    : null,
               ),
             ),
           ),
@@ -463,11 +560,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         content: const Text('Your unsaved changes will be lost.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Keep Editing')),
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Keep Editing')),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Discard')),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Discard')),
         ],
       ),
     );
@@ -483,15 +580,17 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
-    child: Align(
-      alignment: Alignment.centerLeft,
-      child: Text(title.toUpperCase(),
-        style: GoogleFonts.plusJakartaSans(
-          fontSize: 11, fontWeight: FontWeight.w700,
-          color: AppColors.textSecondaryLight, letterSpacing: 0.1)),
-    ),
-  );
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(title.toUpperCase(),
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textSecondaryLight,
+                  letterSpacing: 0.1)),
+        ),
+      );
 }
 
 class _VisibilityOption extends StatelessWidget {
@@ -503,8 +602,12 @@ class _VisibilityOption extends StatelessWidget {
   final ValueChanged<String?> onChanged;
 
   const _VisibilityOption({
-    required this.icon, required this.label, required this.desc,
-    required this.value, required this.groupValue, required this.onChanged,
+    required this.icon,
+    required this.label,
+    required this.desc,
+    required this.value,
+    required this.groupValue,
+    required this.onChanged,
   });
 
   @override
@@ -516,24 +619,27 @@ class _VisibilityOption extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
-          border: Border.all(
-            color: active ? AppColors.primary : AppColors.borderLight,
-            width: active ? 1.5 : 0.8)),
+            color: Theme.of(context).cardColor,
+            borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
+            border: Border.all(
+                color: active ? AppColors.primary : AppColors.borderLight,
+                width: active ? 1.5 : 0.8)),
         child: Row(
           children: [
             Icon(icon,
-              color: active ? AppColors.primary : AppColors.textSecondaryLight),
+                color:
+                    active ? AppColors.primary : AppColors.textSecondaryLight),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: GoogleFonts.plusJakartaSans(
-                    fontSize: 14, fontWeight: FontWeight.w600)),
-                  Text(desc, style: GoogleFonts.plusJakartaSans(
-                    fontSize: 11, color: AppColors.textSecondaryLight)),
+                  Text(label,
+                      style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14, fontWeight: FontWeight.w600)),
+                  Text(desc,
+                      style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11, color: AppColors.textSecondaryLight)),
                 ],
               ),
             ),
@@ -560,11 +666,12 @@ class _PhotoSourceSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 40, height: 4,
+              width: 40,
+              height: 4,
               margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2)),
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2)),
             ),
             ListTile(
               leading: const Icon(Icons.camera_alt_rounded,
@@ -584,4 +691,3 @@ class _PhotoSourceSheet extends StatelessWidget {
     );
   }
 }
-

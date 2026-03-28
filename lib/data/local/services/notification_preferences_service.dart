@@ -87,6 +87,8 @@ class NotificationPreferencesService {
   static const _quietStartKey = 'notif.quiet_start_hour';
   static const _quietEndKey = 'notif.quiet_end_hour';
   static const _categoryPrefix = 'notif.category.';
+  static const _deliveredIdsKey = 'notif.delivered_ids';
+  static const _maxDeliveredIds = 500;
 
   NotificationPreferences load() {
     final defaults = NotificationPreferences.defaults();
@@ -135,6 +137,28 @@ class NotificationPreferencesService {
       return false;
     }
     return true;
+  }
+
+  bool wasNotificationDelivered(String notificationId) {
+    final delivered = _prefs.getStringList(_deliveredIdsKey) ?? const <String>[];
+    return delivered.contains(notificationId);
+  }
+
+  Future<void> markNotificationDelivered(String notificationId) async {
+    final delivered = List<String>.from(
+      _prefs.getStringList(_deliveredIdsKey) ?? const <String>[],
+    );
+
+    if (delivered.contains(notificationId)) {
+      return;
+    }
+
+    delivered.add(notificationId);
+    if (delivered.length > _maxDeliveredIds) {
+      delivered.removeRange(0, delivered.length - _maxDeliveredIds);
+    }
+
+    await _prefs.setStringList(_deliveredIdsKey, delivered);
   }
 
   String formatHour(int hour) {

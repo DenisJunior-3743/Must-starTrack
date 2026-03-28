@@ -29,7 +29,7 @@ abstract final class RouteNames {
   static const String postDetail         = '/project/:postId';
   static const String myProfile          = '/profile/me';
   static const String profile            = '/profile/:userId';
-  static const String editProfile        = '/profile/edit';
+  static const String editProfile        = '/profile/me/edit';
   static const String chat               = '/chat/:threadId';
   static const String chatDetail         = '/chat/:threadId';
   static const String createPost         = '/create-post';

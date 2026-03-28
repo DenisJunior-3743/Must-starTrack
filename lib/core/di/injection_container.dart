@@ -214,6 +214,7 @@ class InjectionContainer {
         authRepository: sl<AuthRepository>(),
         guards: sl<RouteGuards>(),
         fcmService: sl<FcmService>(),
+        syncService: sl<SyncService>(),
       ),
     );
 
@@ -228,6 +229,7 @@ class InjectionContainer {
         syncQueue: sl<SyncQueueDao>(),
         syncService: sl<SyncService>(),
         currentUserId: sl<AuthCubit>().currentUser?.id,
+        authCubit: sl<AuthCubit>(),
       ),
     );
 
