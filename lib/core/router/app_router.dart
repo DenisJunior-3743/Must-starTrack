@@ -367,15 +367,12 @@ class AppRouter {
             child: const ProfileScreen(),
           ),
         ),
+        // Legacy alias kept for backward compatibility with older links.
+        // Must be declared before /profile/:userId to avoid being treated
+        // as a user id of "edit".
         GoRoute(
-          path: Routes.profile,
-          builder: (_, state) {
-            final userId = state.pathParameters['userId'] ?? '';
-            return BlocProvider(
-              create: (_) => sl<ProfileCubit>()..loadProfile(userId),
-              child: ProfileScreen(userId: userId),
-            );
-          },
+          path: '/profile/edit',
+          redirect: (_, __) => Routes.editProfile,
         ),
         GoRoute(
           path: Routes.editProfile,
@@ -383,6 +380,24 @@ class AppRouter {
             create: (_) => sl<ProfileCubit>()..loadProfile(null),
             child: const EditProfileScreen(),
           ),
+        ),
+        GoRoute(
+          path: Routes.profile,
+          redirect: (_, state) {
+            final userId = state.pathParameters['userId'] ?? '';
+            final currentUserId = sl<AuthCubit>().currentUser?.id;
+            if (currentUserId != null && userId == currentUserId) {
+              return Routes.myProfile;
+            }
+            return null;
+          },
+          builder: (_, state) {
+            final userId = state.pathParameters['userId'] ?? '';
+            return BlocProvider(
+              create: (_) => sl<ProfileCubit>()..loadProfile(userId),
+              child: ProfileScreen(userId: userId),
+            );
+          },
         ),
 
         // ── Chat ───────────────────────────────────────────────────────────

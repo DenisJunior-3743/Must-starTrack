@@ -83,6 +83,7 @@ class SyncService {
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   bool _isSyncing = false;
   bool _isHydrating = false;
+  Future<void>? _hydrationFuture;
 
   SyncService({
     required SyncQueueDao queueDao,
@@ -109,11 +110,9 @@ class SyncService {
   /// Call once in InjectionContainer.init() or on app foreground.
   void startListening() {
     _connectivitySub?.cancel();
+    unawaited(_runInitialOnlineSync());
     _connectivitySub = _connectivity.onConnectivityChanged.listen((results) {
-      final isOnline = results.any((r) =>
-          r == ConnectivityResult.wifi ||
-          r == ConnectivityResult.mobile ||
-          r == ConnectivityResult.ethernet);
+      final isOnline = _isOnline(results);
 
       if (isOnline) {
         unawaited(processPendingSync());
@@ -122,13 +121,37 @@ class SyncService {
     });
   }
 
+  bool _isOnline(List<ConnectivityResult> results) {
+    return results.any((r) =>
+        r == ConnectivityResult.wifi ||
+        r == ConnectivityResult.mobile ||
+        r == ConnectivityResult.ethernet);
+  }
+
+  Future<void> _runInitialOnlineSync() async {
+    try {
+      final results = await _connectivity.checkConnectivity();
+      if (!_isOnline(results)) {
+        return;
+      }
+
+      await processPendingSync();
+      await syncRemoteToLocal();
+    } catch (error) {
+      debugPrint(
+          '[SyncService] Initial connectivity sync probe failed: $error');
+    }
+  }
+
   void stopListening() => _connectivitySub?.cancel();
 
   // ── Process sync queue ────────────────────────────────────────────────────
 
   /// Main sync loop — drains ready jobs from the queue.
   Future<SyncResult> processPendingSync() async {
-    if (_isSyncing) return const SyncResult(processed: 0, failed: 0, remaining: 0);
+    if (_isSyncing) {
+      return const SyncResult(processed: 0, failed: 0, remaining: 0);
+    }
 
     final authUser = FirebaseAuth.instance.currentUser;
     if (authUser == null) {
@@ -145,11 +168,13 @@ class SyncService {
       try {
         await authUser.getIdToken(true);
       } catch (error) {
-        debugPrint('[SyncService] Unable to refresh auth token before sync: $error');
+        debugPrint(
+            '[SyncService] Unable to refresh auth token before sync: $error');
       }
 
       final jobs = await _queueDao.getReadyJobs(limit: 50);
-      debugPrint('[SyncService] Starting sync loop with ${jobs.length} ready job(s).');
+      debugPrint(
+          '[SyncService] Starting sync loop with ${jobs.length} ready job(s).');
 
       for (final job in jobs) {
         debugPrint(
@@ -159,55 +184,116 @@ class SyncService {
         final success = await _processJob(job);
         if (success) {
           await _queueDao.deleteJob(job.id);
-          debugPrint('[SyncService] Job id=${job.id} entity=${job.entityType} completed and removed from queue.');
+          debugPrint(
+              '[SyncService] Job id=${job.id} entity=${job.entityType} completed and removed from queue.');
           processed++;
         } else {
           await _queueDao.incrementAttempt(job.id);
-          debugPrint('[SyncService] Job id=${job.id} entity=${job.entityType} failed and will retry.');
+          debugPrint(
+              '[SyncService] Job id=${job.id} entity=${job.entityType} failed and will retry.');
           failed++;
         }
       }
 
       final remaining = await _queueDao.getPendingCount();
-      return SyncResult(processed: processed, failed: failed, remaining: remaining);
+      return SyncResult(
+          processed: processed, failed: failed, remaining: remaining);
     } finally {
       _isSyncing = false;
     }
   }
 
   /// Pull a recent set of remote posts and authors into SQLite when online.
-  Future<void> syncRemoteToLocal({int postLimit = 50}) async {
+  /// Pull a recent set of remote posts and authors into SQLite when online.
+  ///
+  /// If a hydration is already in progress the caller joins it (awaits the
+  /// same Future) rather than returning early with stale data. This prevents
+  /// the race where [loadFeed] queries SQLite before the ongoing sync has
+  /// finished inserting posts.
+  Future<void> syncRemoteToLocal({int postLimit = 50}) {
     if (_isHydrating) {
-      debugPrint('[SyncService] Skipping remote hydration because a previous syncRemoteToLocal is still running.');
-      return;
+      debugPrint(
+          '[SyncService] syncRemoteToLocal already running — joining existing hydration');
+      return _hydrationFuture ?? Future<void>.value();
     }
-
     _isHydrating = true;
+    _hydrationFuture = _runHydration(postLimit: postLimit);
+    return _hydrationFuture!;
+  }
+
+  Future<void> _runHydration({int postLimit = 50}) async {
     final syncedPostIds = <String>[];
     try {
       await _runHydrationStep('posts', () async {
+        debugPrint(
+            '[SyncService] posts hydration starting, postLimit=$postLimit');
+
         final posts = await _firestore.getRecentPosts(limit: postLimit);
+
+        debugPrint(
+            '[SyncService] posts hydration fetched ${posts.length} posts');
+
         syncedPostIds
           ..clear()
           ..addAll(posts.map((post) => post.id));
-        if (posts.isNotEmpty) {
-          final authorIds = posts.map((post) => post.authorId).toSet();
-          final users = await _firestore.getUsersByIds(authorIds);
-          for (final user in users) {
-            await _userDao.insertUser(user);
-          }
 
-          for (final post in posts) {
-            await _postDao.insertPost(post);
+        if (posts.isEmpty) {
+          debugPrint('[SyncService] posts hydration returned zero posts');
+          return;
+        }
+
+        final authorIds = posts.map((post) => post.authorId).toSet();
+        debugPrint(
+            '[SyncService] posts hydration unique authorIds=${authorIds.length}');
+
+        final users = await _firestore.getUsersByIds(authorIds);
+        debugPrint(
+            '[SyncService] posts hydration fetched ${users.length} author docs');
+
+        for (final user in users) {
+          try {
+            await _userDao.insertUser(user);
+            debugPrint('[SyncService] inserted user=${user.id}');
+          } catch (error, stackTrace) {
+            debugPrint(
+                '[SyncService] failed inserting user=${user.id}: $error');
+            debugPrint('$stackTrace');
           }
         }
+
+        for (final post in posts) {
+          try {
+            await _postDao.insertPost(post);
+            debugPrint(
+              '[SyncService] inserted post=${post.id} author=${post.authorId} '
+              'type=${post.type} mediaCount=${post.mediaUrls.length}',
+            );
+          } catch (error, stackTrace) {
+            debugPrint(
+              '[SyncService] failed inserting post=${post.id} author=${post.authorId}: $error',
+            );
+            debugPrint('$stackTrace');
+          }
+        }
+
+        final db = await DatabaseHelper.instance.database;
+        await db.rawQuery('PRAGMA wal_checkpoint(PASSIVE)');
+        final rows = await db.rawQuery('SELECT COUNT(*) AS cnt FROM posts');
+        debugPrint(
+            '[SyncService] local posts count after hydration=${rows.first['cnt']}');
+
+        final verifyQuery =
+            await db.rawQuery('SELECT id, type FROM posts LIMIT 3');
+        debugPrint('[SyncService] verify posts in DB: $verifyQuery');
       });
 
       final currentUid = FirebaseAuth.instance.currentUser?.uid;
       if (currentUid != null) {
-        await _runHydrationStep('messages', () => _syncRemoteMessages(currentUid));
+        await _runHydrationStep(
+            'messages', () => _syncRemoteMessages(currentUid));
         await _runHydrationStep('notifications', () async {
-          debugPrint('[SyncService] Pulling remote notifications for user=$currentUid');
+          debugPrint(
+              '[SyncService] Pulling remote notifications for user=$currentUid');
           final notifSnap = await FirebaseFirestore.instance
               .collection('notifications')
               .where('user_id', isEqualTo: currentUid)
@@ -217,6 +303,7 @@ class SyncService {
 
           final db = await DatabaseHelper.instance.database;
           for (final doc in notifSnap.docs) {
+            final notificationId = doc.id;
             final d = doc.data();
             final ts = d['created_at'];
             final createdAtMs = ts is Timestamp
@@ -226,22 +313,27 @@ class SyncService {
               'notifications',
               columns: ['id', 'is_read', 'extra_json'],
               where: 'id = ?',
-              whereArgs: [doc.id],
+              whereArgs: [notificationId],
               limit: 1,
             );
-            final localRead = existing.isNotEmpty && (existing.first['is_read'] as int? ?? 0) == 1;
+            final alreadyDelivered =
+                _preferences.wasNotificationDelivered(notificationId);
+            final localRead = existing.isNotEmpty &&
+                (existing.first['is_read'] as int? ?? 0) == 1;
             final remoteRead = d['is_read'] as bool? ?? false;
             final effectiveIsRead = localRead || remoteRead;
-            final localExtraJson = existing.isNotEmpty ? existing.first['extra_json'] as String? : null;
+            final localExtraJson = existing.isNotEmpty
+                ? existing.first['extra_json'] as String?
+                : null;
             final remoteExtra = d['extra'];
-            final remoteExtraJson = d['extra_json'] as String?
-                ?? (remoteExtra is Map<String, dynamic>
+            final remoteExtraJson = d['extra_json'] as String? ??
+                (remoteExtra is Map<String, dynamic>
                     ? jsonEncode(remoteExtra)
                     : remoteExtra is Map
                         ? jsonEncode(Map<String, dynamic>.from(remoteExtra))
                         : null);
             final row = <String, Object?>{
-              'id': doc.id,
+              'id': notificationId,
               'user_id': d['user_id'] as String? ?? currentUid,
               'type': d['type'] as String? ?? 'system',
               'sender_id': d['sender_id'] as String?,
@@ -254,9 +346,13 @@ class SyncService {
               'is_read': effectiveIsRead ? 1 : 0,
               'extra_json': localExtraJson ?? remoteExtraJson,
             };
-            await db.insert('notifications', row, conflictAlgorithm: ConflictAlgorithm.replace);
-            if (existing.isEmpty && !notifSnap.metadata.isFromCache && !effectiveIsRead) {
-              await _showLocalAlertForNotification(row);
+            await db.insert('notifications', row,
+                conflictAlgorithm: ConflictAlgorithm.replace);
+            if (!alreadyDelivered && !notifSnap.metadata.isFromCache) {
+              if (!effectiveIsRead) {
+                await _showLocalAlertForNotification(row);
+              }
+              await _preferences.markNotificationDelivered(notificationId);
             }
           }
 
@@ -266,15 +362,26 @@ class SyncService {
           );
         });
 
-        await _runHydrationStep('follows', () => _syncRemoteFollows(currentUid));
-        await _runHydrationStep('likes', () => _syncRemoteLikes(currentUid, candidatePostIds: syncedPostIds));
-        await _runHydrationStep('dislikes', () => _syncRemoteDislikes(currentUid, candidatePostIds: syncedPostIds));
-        await _runHydrationStep('post_views', () => _syncRemotePostViews(currentUid));
-        await _runHydrationStep('collab_requests', () => _syncRemoteCollabRequests(currentUid));
-        await _runHydrationStep('post_joins', () => _syncRemoteOpportunityJoins(currentUid));
+        await _runHydrationStep(
+            'follows', () => _syncRemoteFollows(currentUid));
+        await _runHydrationStep(
+            'likes',
+            () =>
+                _syncRemoteLikes(currentUid, candidatePostIds: syncedPostIds));
+        await _runHydrationStep(
+            'dislikes',
+            () => _syncRemoteDislikes(currentUid,
+                candidatePostIds: syncedPostIds));
+        await _runHydrationStep(
+            'post_views', () => _syncRemotePostViews(currentUid));
+        await _runHydrationStep(
+            'collab_requests', () => _syncRemoteCollabRequests(currentUid));
+        await _runHydrationStep(
+            'post_joins', () => _syncRemoteOpportunityJoins(currentUid));
       }
     } finally {
       _isHydrating = false;
+      _hydrationFuture = null;
     }
   }
 
@@ -288,16 +395,19 @@ class SyncService {
         userId: userId,
       );
     } catch (error) {
-      debugPrint('[SyncService] markConversationReadRemote failed for conversation=$conversationId user=$userId: $error');
+      debugPrint(
+          '[SyncService] markConversationReadRemote failed for conversation=$conversationId user=$userId: $error');
     }
   }
 
-  Future<void> _runHydrationStep(String label, Future<void> Function() action) async {
+  Future<void> _runHydrationStep(
+      String label, Future<void> Function() action) async {
     try {
       await action();
     } catch (error, stackTrace) {
       debugPrint('[SyncService] $label remote-to-local sync failed: $error');
-      debugPrint('[SyncService] $label remote-to-local stacktrace: $stackTrace');
+      debugPrint(
+          '[SyncService] $label remote-to-local stacktrace: $stackTrace');
     }
   }
 
@@ -338,7 +448,8 @@ class SyncService {
       }
     } catch (e, st) {
       // Log and return false to trigger backoff
-      debugPrint('[SyncService] ❌ Job id=${job.id} type=${job.entityType} failed: $e\n$st');
+      debugPrint(
+          '[SyncService] ❌ Job id=${job.id} type=${job.entityType} failed: $e\n$st');
       return false;
     }
   }
@@ -359,7 +470,10 @@ class SyncService {
         await FirebaseFirestore.instance
             .collection('users')
             .doc(job.entityId)
-            .update({'is_deleted': true, 'deleted_at': FieldValue.serverTimestamp()});
+            .update({
+          'is_deleted': true,
+          'deleted_at': FieldValue.serverTimestamp()
+        });
         return true;
       default:
         return true;
@@ -423,7 +537,8 @@ class SyncService {
   }
 
   Future<bool> _syncMessage(SyncJob job) async {
-    debugPrint('[SyncMessage] Processing job id=${job.id} operation=${job.operation} entityId=${job.entityId}');
+    debugPrint(
+        '[SyncMessage] Processing job id=${job.id} operation=${job.operation} entityId=${job.entityId}');
 
     if (job.operation == 'delete') {
       await FirebaseFirestore.instance
@@ -431,7 +546,9 @@ class SyncService {
           .where('id', isEqualTo: job.entityId)
           .get()
           .then((snap) {
-        for (final doc in snap.docs) { doc.reference.delete(); }
+        for (final doc in snap.docs) {
+          doc.reference.delete();
+        }
       });
       return true;
     }
@@ -439,11 +556,13 @@ class SyncService {
     // Create — build MessageModel from payload JSON
     final payload = job.payloadJson;
     if (payload.isEmpty) {
-      debugPrint('[SyncMessage] ⚠️ Empty payload for job id=${job.id} — skipping');
+      debugPrint(
+          '[SyncMessage] ⚠️ Empty payload for job id=${job.id} — skipping');
       return true;
     }
 
-    debugPrint('[SyncMessage] Payload: conversationId=${payload['conversation_id']} '
+    debugPrint(
+        '[SyncMessage] Payload: conversationId=${payload['conversation_id']} '
         'senderId=${payload['sender_id']} content="${payload['content']}"');
 
     final msg = MessageModel(
@@ -452,14 +571,15 @@ class SyncService {
       senderId: payload['sender_id'] as String,
       content: payload['content'] as String,
       messageType: payload['message_type'] as String? ?? 'text',
-      createdAt: DateTime.tryParse(
-              payload['created_at'] as String? ?? '') ??
+      createdAt: DateTime.tryParse(payload['created_at'] as String? ?? '') ??
           DateTime.now(),
     );
 
-    debugPrint('[SyncMessage] Writing to Firestore conversations/${msg.conversationId}/messages/${msg.id}');
+    debugPrint(
+        '[SyncMessage] Writing to Firestore conversations/${msg.conversationId}/messages/${msg.id}');
     await _firestore.sendMessage(msg);
-    debugPrint('[SyncMessage] ✅ Message ${msg.id} written to Firestore successfully');
+    debugPrint(
+        '[SyncMessage] ✅ Message ${msg.id} written to Firestore successfully');
     return true;
   }
 
@@ -471,7 +591,8 @@ class SyncService {
     final followingId = payload['following_id'] as String?;
 
     if (followerId == null || followingId == null) {
-      debugPrint('[SyncFollow] Skipping malformed job id=${job.id} payload=$payload');
+      debugPrint(
+          '[SyncFollow] Skipping malformed job id=${job.id} payload=$payload');
       return true;
     }
 
@@ -480,16 +601,15 @@ class SyncService {
     // doesn't block the queue or generate misleading PERMISSION_DENIED logs.
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
     if (currentUid != followerId) {
-      debugPrint(
-          '[SyncService] ⚠️ Skipping follow job ${job.id}: '
+      debugPrint('[SyncService] ⚠️ Skipping follow job ${job.id}: '
           'follower=$followerId but current uid=$currentUid — removing from queue.');
       return true; // drop the job; it can never succeed for this session
     }
 
     if (job.operation == 'create') {
-      debugPrint('[SyncFollow] Writing follow follower=$followerId followee=$followingId');
-      await _firestore.follow(
-          followerId: followerId, followingId: followingId);
+      debugPrint(
+          '[SyncFollow] Writing follow follower=$followerId followee=$followingId');
+      await _firestore.follow(followerId: followerId, followingId: followingId);
       final followerName = payload['follower_name'] as String? ?? 'Someone';
       if (followingId != followerId) {
         await _bestEffortUserNotification(
@@ -504,7 +624,8 @@ class SyncService {
         );
       }
     } else if (job.operation == 'delete') {
-      debugPrint('[SyncFollow] Removing follow follower=$followerId followee=$followingId');
+      debugPrint(
+          '[SyncFollow] Removing follow follower=$followerId followee=$followingId');
       await _firestore.unfollow(
           followerId: followerId, followingId: followingId);
     }
@@ -515,7 +636,8 @@ class SyncService {
 
   Future<bool> _syncNotification(SyncJob job) async {
     final payload = job.payloadJson;
-    final notificationId = payload['notification_id'] as String? ?? job.entityId;
+    final notificationId =
+        payload['notification_id'] as String? ?? job.entityId;
     if (notificationId.isEmpty) {
       return true;
     }
@@ -532,7 +654,8 @@ class SyncService {
         try {
           updates['extra'] = jsonDecode(raw) as Map<String, dynamic>;
         } catch (_) {
-          debugPrint('[SyncNotification] Unable to decode extra_json for notification=$notificationId raw=$raw');
+          debugPrint(
+              '[SyncNotification] Unable to decode extra_json for notification=$notificationId raw=$raw');
         }
       }
     }
@@ -540,7 +663,8 @@ class SyncService {
       return true;
     }
 
-    debugPrint('[SyncNotification] Updating notification=$notificationId keys=${updates.keys.toList()}');
+    debugPrint(
+        '[SyncNotification] Updating notification=$notificationId keys=${updates.keys.toList()}');
 
     await FirebaseFirestore.instance
         .collection('notifications')
@@ -558,7 +682,8 @@ class SyncService {
     final isLiking = payload['is_liking'] as bool? ?? true;
 
     if (userId == null || postId == null) {
-      debugPrint('[SyncLike] Skipping malformed job id=${job.id} payload=$payload');
+      debugPrint(
+          '[SyncLike] Skipping malformed job id=${job.id} payload=$payload');
       return true;
     }
 
@@ -571,7 +696,8 @@ class SyncService {
       return true;
     }
 
-    debugPrint('[SyncLike] Writing remote like post=$postId user=$userId isLiking=$isLiking');
+    debugPrint(
+        '[SyncLike] Writing remote like post=$postId user=$userId isLiking=$isLiking');
     await _firestore.toggleLike(
       postId: postId,
       userId: userId,
@@ -603,7 +729,8 @@ class SyncService {
     final isDisliking = payload['is_disliking'] as bool? ?? true;
 
     if (userId == null || postId == null) {
-      debugPrint('[SyncDislike] Skipping malformed job id=${job.id} payload=$payload');
+      debugPrint(
+          '[SyncDislike] Skipping malformed job id=${job.id} payload=$payload');
       return true;
     }
 
@@ -668,7 +795,10 @@ class SyncService {
       jobId: job.id,
     );
 
-    await FirebaseFirestore.instance.collection('comments').doc(job.entityId).set({
+    await FirebaseFirestore.instance
+        .collection('comments')
+        .doc(job.entityId)
+        .set({
       'id': job.entityId,
       'post_id': postId,
       'author_id': authorId,
@@ -704,7 +834,8 @@ class SyncService {
     final postId = payload['post_id'] as String?;
 
     if (viewerId == null || postId == null) {
-      debugPrint('[SyncView] Skipping malformed view job id=${job.id} payload=$payload');
+      debugPrint(
+          '[SyncView] Skipping malformed view job id=${job.id} payload=$payload');
       return true;
     }
 
@@ -717,8 +848,10 @@ class SyncService {
       return true;
     }
 
-    final docRef = FirebaseFirestore.instance.collection('post_views').doc(job.entityId);
-    final existing = await docRef.get(const GetOptions(source: Source.serverAndCache));
+    final docRef =
+        FirebaseFirestore.instance.collection('post_views').doc(job.entityId);
+    final existing =
+        await docRef.get(const GetOptions(source: Source.serverAndCache));
     await docRef.set({
       'id': job.entityId,
       'viewer_id': viewerId,
@@ -758,7 +891,8 @@ class SyncService {
     final postId = payload['post_id'] as String?;
 
     if (userId == null || postId == null) {
-      debugPrint('[SyncJoin] Skipping malformed job id=${job.id} payload=$payload');
+      debugPrint(
+          '[SyncJoin] Skipping malformed job id=${job.id} payload=$payload');
       return true;
     }
 
@@ -771,7 +905,8 @@ class SyncService {
       return true;
     }
 
-    final docRef = FirebaseFirestore.instance.collection('post_joins').doc(job.entityId);
+    final docRef =
+        FirebaseFirestore.instance.collection('post_joins').doc(job.entityId);
 
     if (job.operation == 'delete') {
       await docRef.delete();
@@ -796,8 +931,12 @@ class SyncService {
     final postId = payload['post_id'] as String?;
     final reason = payload['reason'] as String?;
 
-    if (reporterId == null || postId == null || reason == null || reason.trim().isEmpty) {
-      debugPrint('[SyncModeration] Skipping malformed job id=${job.id} payload=$payload');
+    if (reporterId == null ||
+        postId == null ||
+        reason == null ||
+        reason.trim().isEmpty) {
+      debugPrint(
+          '[SyncModeration] Skipping malformed job id=${job.id} payload=$payload');
       return true;
     }
 
@@ -810,7 +949,10 @@ class SyncService {
       return true;
     }
 
-    await FirebaseFirestore.instance.collection('moderation_queue').doc(job.entityId).set({
+    await FirebaseFirestore.instance
+        .collection('moderation_queue')
+        .doc(job.entityId)
+        .set({
       'id': job.entityId,
       'post_id': postId,
       'reporter_id': reporterId,
@@ -827,14 +969,16 @@ class SyncService {
   // ── Collab request sync ──────────────────────────────────────────────────
 
   Future<bool> _syncCollabRequest(SyncJob job) async {
-    debugPrint('[SyncCollab] Processing job id=${job.id} entityId=${job.entityId} retryCount=${job.retryCount}');
+    debugPrint(
+        '[SyncCollab] Processing job id=${job.id} entityId=${job.entityId} retryCount=${job.retryCount}');
     final payload = job.payloadJson;
 
     if (job.operation == 'update') {
       final status = payload['status'] as String?;
       final responderId = payload['responder_id'] as String?;
       if (status == null || responderId == null) {
-        debugPrint('[SyncCollab] ⚠️ Malformed update payload for ${job.entityId}: $payload');
+        debugPrint(
+            '[SyncCollab] ⚠️ Malformed update payload for ${job.entityId}: $payload');
         return true;
       }
 
@@ -851,7 +995,8 @@ class SyncService {
         'updated_at': payload['updated_at'] ?? FieldValue.serverTimestamp(),
         'responded_at': payload['responded_at'] ?? FieldValue.serverTimestamp(),
       };
-      debugPrint('[SyncCollab] Updating Firestore collab_requests/${job.entityId} with status=$status');
+      debugPrint(
+          '[SyncCollab] Updating Firestore collab_requests/${job.entityId} with status=$status');
       await FirebaseFirestore.instance
           .collection('collab_requests')
           .doc(job.entityId)
@@ -859,13 +1004,14 @@ class SyncService {
       return true;
     }
 
-    final senderId   = payload['sender_id']   as String?;
+    final senderId = payload['sender_id'] as String?;
     final receiverId = payload['receiver_id'] as String?;
-    final postId     = payload['post_id']     as String?;
-    final message    = payload['message']     as String? ?? '';
-    final status     = payload['status']      as String? ?? 'pending';
+    final postId = payload['post_id'] as String?;
+    final message = payload['message'] as String? ?? '';
+    final status = payload['status'] as String? ?? 'pending';
 
-    debugPrint('[SyncCollab] Payload — sender=$senderId receiver=$receiverId postId=$postId status=$status');
+    debugPrint(
+        '[SyncCollab] Payload — sender=$senderId receiver=$receiverId postId=$postId status=$status');
 
     if (senderId == null || receiverId == null) {
       debugPrint('[SyncCollab] ⚠️ Missing sender or receiver — skipping job');
@@ -887,19 +1033,20 @@ class SyncService {
       'for sender=$senderId',
     );
 
-    debugPrint('[SyncCollab] Writing to Firestore collab_requests/${job.entityId}');
+    debugPrint(
+        '[SyncCollab] Writing to Firestore collab_requests/${job.entityId}');
     await FirebaseFirestore.instance
         .collection('collab_requests')
         .doc(job.entityId)
         .set({
-      'id':          job.entityId,
-      'sender_id':   senderId,
+      'id': job.entityId,
+      'sender_id': senderId,
       'receiver_id': receiverId,
-      'post_id':     postId,
-      'message':     message,
-      'status':      status,
-      'created_at':  FieldValue.serverTimestamp(),
-      'updated_at':  FieldValue.serverTimestamp(),
+      'post_id': postId,
+      'message': message,
+      'status': status,
+      'created_at': FieldValue.serverTimestamp(),
+      'updated_at': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
     debugPrint('[SyncCollab] ✅ Firestore write OK for ${job.entityId}');
 
@@ -914,8 +1061,8 @@ class SyncService {
 
     // Also write a notification document for the receiver so their device
     // picks it up on the next syncRemoteToLocal pull.
-    final senderName = payload['sender_name']  as String? ?? 'Someone';
-    final postTitle  = payload['post_title']   as String? ?? 'a project';
+    final senderName = payload['sender_name'] as String? ?? 'Someone';
+    final postTitle = payload['post_title'] as String? ?? 'a project';
     final notifId = 'collab_notif_${job.entityId}';
     await _bestEffortUserNotification(
       source: 'collaboration',
@@ -1010,14 +1157,17 @@ class SyncService {
           'id': doc.id,
           'follower_id': followerId,
           'followee_id': followingId,
-          'created_at': createdAt is Timestamp ? createdAt.toDate().toIso8601String() : DateTime.now().toIso8601String(),
+          'created_at': createdAt is Timestamp
+              ? createdAt.toDate().toIso8601String()
+              : DateTime.now().toIso8601String(),
           'sync_status': 1,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
       upserted++;
     }
-    debugPrint('[SyncService] Hydrated $upserted follow row(s) for user=$currentUid');
+    debugPrint(
+        '[SyncService] Hydrated $upserted follow row(s) for user=$currentUid');
   }
 
   Future<void> _syncRemoteMessages(String currentUid) async {
@@ -1170,7 +1320,8 @@ class SyncService {
       );
     }
 
-    debugPrint('[SyncService] Hydrated $upsertedConversations conversation(s) and $upsertedMessages message(s) for user=$currentUid');
+    debugPrint(
+        '[SyncService] Hydrated $upsertedConversations conversation(s) and $upsertedMessages message(s) for user=$currentUid');
   }
 
   Future<void> _syncRemoteLikes(
@@ -1195,7 +1346,8 @@ class SyncService {
         final remoteUser = await _firestore.getUser(userId);
         if (remoteUser != null) {
           await _userDao.insertUser(remoteUser);
-          debugPrint('[SyncService] Inserted missing local user dependency user=$userId for like hydration');
+          debugPrint(
+              '[SyncService] Inserted missing local user dependency user=$userId for like hydration');
         }
       }
       ensuredUserIds.add(userId);
@@ -1225,10 +1377,12 @@ class SyncService {
         return false;
       }
 
-      final post = PostModel.fromJson({'id': remotePost.id, ...remotePost.data()!});
+      final post =
+          PostModel.fromJson({'id': remotePost.id, ...remotePost.data()!});
       await ensureUserPresent(post.authorId);
       await _postDao.insertPost(post);
-      debugPrint('[SyncService] Inserted missing local post dependency post=$postId for like hydration');
+      debugPrint(
+          '[SyncService] Inserted missing local post dependency post=$postId for like hydration');
       return true;
     }
 
@@ -1242,7 +1396,9 @@ class SyncService {
         orderBy: 'created_at DESC',
         limit: 150,
       );
-      postIds.addAll(localRows.map((row) => row['id'] as String? ?? '').where((id) => id.isNotEmpty));
+      postIds.addAll(localRows
+          .map((row) => row['id'] as String? ?? '')
+          .where((id) => id.isNotEmpty));
     }
 
     var inserted = 0;
@@ -1260,7 +1416,8 @@ class SyncService {
         final postReady = await ensurePostPresent(postId);
         if (!postReady) {
           skippedMissingPosts++;
-          debugPrint('[SyncService] Skipping like hydration for post=$postId because the post is unavailable remotely.');
+          debugPrint(
+              '[SyncService] Skipping like hydration for post=$postId because the post is unavailable remotely.');
           continue;
         }
         final createdAt = likeDoc.data()?['created_at'];
@@ -1270,7 +1427,9 @@ class SyncService {
             'id': likeDoc.id,
             'post_id': postId,
             'user_id': currentUid,
-            'created_at': createdAt is Timestamp ? createdAt.millisecondsSinceEpoch : DateTime.now().millisecondsSinceEpoch,
+            'created_at': createdAt is Timestamp
+                ? createdAt.millisecondsSinceEpoch
+                : DateTime.now().millisecondsSinceEpoch,
             'sync_status': 1,
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
@@ -1316,7 +1475,8 @@ class SyncService {
         return false;
       }
 
-      final post = PostModel.fromJson({'id': remotePost.id, ...remotePost.data()!});
+      final post =
+          PostModel.fromJson({'id': remotePost.id, ...remotePost.data()!});
       final author = await _firestore.getUser(post.authorId);
       if (author != null) {
         await _userDao.insertUser(author);
@@ -1333,7 +1493,9 @@ class SyncService {
         orderBy: 'created_at DESC',
         limit: 150,
       );
-      postIds.addAll(localRows.map((row) => row['id'] as String? ?? '').where((id) => id.isNotEmpty));
+      postIds.addAll(localRows
+          .map((row) => row['id'] as String? ?? '')
+          .where((id) => id.isNotEmpty));
     }
 
     var inserted = 0;
@@ -1358,7 +1520,9 @@ class SyncService {
             'id': dislikeDoc.id,
             'post_id': postId,
             'user_id': currentUid,
-            'created_at': createdAt is Timestamp ? createdAt.millisecondsSinceEpoch : DateTime.now().millisecondsSinceEpoch,
+            'created_at': createdAt is Timestamp
+                ? createdAt.millisecondsSinceEpoch
+                : DateTime.now().millisecondsSinceEpoch,
             'sync_status': 1,
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
@@ -1396,7 +1560,8 @@ class SyncService {
       final existing = await db.query(
         DatabaseSchema.tableActivityLogs,
         columns: ['id'],
-        where: 'user_id = ? AND action = ? AND entity_type = ? AND entity_id = ?',
+        where:
+            'user_id = ? AND action = ? AND entity_type = ? AND entity_id = ?',
         whereArgs: [currentUid, 'view_post', DatabaseSchema.tablePosts, postId],
         limit: 1,
       );
@@ -1411,7 +1576,9 @@ class SyncService {
         'entity_type': DatabaseSchema.tablePosts,
         'entity_id': postId,
         'metadata': jsonEncode({'source': 'remote_post_view'}),
-        'created_at': createdAt is Timestamp ? createdAt.toDate().toIso8601String() : DateTime.now().toIso8601String(),
+        'created_at': createdAt is Timestamp
+            ? createdAt.toDate().toIso8601String()
+            : DateTime.now().toIso8601String(),
       });
       hydratedViewerLogs++;
     }
@@ -1511,16 +1678,23 @@ class SyncService {
           'post_id': data['post_id'] as String?,
           'message': data['message'] as String?,
           'status': data['status'] as String? ?? 'pending',
-          'responded_at': respondedAt is Timestamp ? respondedAt.toDate().toIso8601String() : respondedAt as String?,
-          'created_at': createdAt is Timestamp ? createdAt.toDate().toIso8601String() : DateTime.now().toIso8601String(),
-          'updated_at': updatedAt is Timestamp ? updatedAt.toDate().toIso8601String() : DateTime.now().toIso8601String(),
+          'responded_at': respondedAt is Timestamp
+              ? respondedAt.toDate().toIso8601String()
+              : respondedAt as String?,
+          'created_at': createdAt is Timestamp
+              ? createdAt.toDate().toIso8601String()
+              : DateTime.now().toIso8601String(),
+          'updated_at': updatedAt is Timestamp
+              ? updatedAt.toDate().toIso8601String()
+              : DateTime.now().toIso8601String(),
           'sync_status': 1,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
       upserted++;
     }
-    debugPrint('[SyncService] Hydrated $upserted collaboration request row(s) for user=$currentUid');
+    debugPrint(
+        '[SyncService] Hydrated $upserted collaboration request row(s) for user=$currentUid');
   }
 
   Future<void> _syncRemoteOpportunityJoins(String currentUid) async {
@@ -1530,7 +1704,8 @@ class SyncService {
         .where('user_id', isEqualTo: currentUid)
         .get(const GetOptions(source: Source.serverAndCache));
 
-    final remoteByPostId = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+    final remoteByPostId =
+        <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
     for (final doc in snapshot.docs) {
       final postId = doc.data()['post_id'] as String?;
       if (postId != null && postId.isNotEmpty) {
@@ -1558,7 +1733,8 @@ class SyncService {
         return;
       }
 
-      final post = PostModel.fromJson({'id': remotePost.id, ...remotePost.data()!});
+      final post =
+          PostModel.fromJson({'id': remotePost.id, ...remotePost.data()!});
       final resolvedAuthorId = authorId ?? post.authorId;
       final author = await _firestore.getUser(resolvedAuthorId);
       if (author != null) {
@@ -1590,7 +1766,9 @@ class SyncService {
           'id': entry.value.id,
           'post_id': entry.key,
           'user_id': currentUid,
-          'created_at': createdAt is Timestamp ? createdAt.toDate().toIso8601String() : DateTime.now().toIso8601String(),
+          'created_at': createdAt is Timestamp
+              ? createdAt.toDate().toIso8601String()
+              : DateTime.now().toIso8601String(),
           'sync_status': 1,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
@@ -1608,13 +1786,15 @@ class SyncService {
       );
     }
 
-    debugPrint('[SyncService] Hydrated $upserted post join row(s) for user=$currentUid and removed $removed stale row(s)');
+    debugPrint(
+        '[SyncService] Hydrated $upserted post join row(s) for user=$currentUid and removed $removed stale row(s)');
   }
 
   Future<void> syncCommentsForPost(String postId) async {
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
     if (currentUid == null || currentUid.isEmpty) {
-      debugPrint('[SyncService] Skipping comment sync: no active FirebaseAuth session');
+      debugPrint(
+          '[SyncService] Skipping comment sync: no active FirebaseAuth session');
       return;
     }
 
@@ -1637,8 +1817,7 @@ class SyncService {
           .limit(100)
           .get(const GetOptions(source: Source.serverAndCache));
 
-      final docs = [...snap.docs]
-        ..sort((a, b) {
+      final docs = [...snap.docs]..sort((a, b) {
           final aTs = a.data()['created_at'];
           final bTs = b.data()['created_at'];
           final aMs = aTs is Timestamp ? aTs.millisecondsSinceEpoch : 0;
@@ -1675,7 +1854,9 @@ class SyncService {
     String? entityId,
     String? senderName,
   }) async {
-    final docRef = FirebaseFirestore.instance.collection('notifications').doc(notificationId);
+    final docRef = FirebaseFirestore.instance
+        .collection('notifications')
+        .doc(notificationId);
     final updateData = <String, Object?>{
       'sender_name': senderName,
       'body': body,
@@ -1685,7 +1866,8 @@ class SyncService {
 
     try {
       await docRef.update(updateData);
-      debugPrint('[SyncNotification] Updated existing notification=$notificationId for receiver=$receiverId');
+      debugPrint(
+          '[SyncNotification] Updated existing notification=$notificationId for receiver=$receiverId');
       return;
     } on FirebaseException catch (error) {
       if (error.code != 'not-found') {
@@ -1707,7 +1889,8 @@ class SyncService {
     };
 
     await docRef.set(createData);
-    debugPrint('[SyncNotification] Created notification=$notificationId for receiver=$receiverId type=$type');
+    debugPrint(
+        '[SyncNotification] Created notification=$notificationId for receiver=$receiverId type=$type');
   }
 
   Future<void> _showLocalAlertForNotification(Map<String, Object?> row) async {
@@ -1726,7 +1909,8 @@ class SyncService {
         android: AndroidNotificationDetails(
           'must_startrack_events',
           'Activity Alerts',
-          channelDescription: 'Alerts for follows, comments, views, likes, and collaborations.',
+          channelDescription:
+              'Alerts for follows, comments, views, likes, and collaborations.',
           importance: Importance.max,
           priority: Priority.high,
         ),
@@ -1754,7 +1938,8 @@ class SyncService {
   Future<bool> _hasValidMustSession({required String context}) async {
     final authUser = FirebaseAuth.instance.currentUser;
     if (authUser == null) {
-      debugPrint('[SyncService] Skipping $context: no active FirebaseAuth session');
+      debugPrint(
+          '[SyncService] Skipping $context: no active FirebaseAuth session');
       return false;
     }
 
@@ -1782,7 +1967,8 @@ class SyncService {
       }
       return allowed;
     } catch (error) {
-      debugPrint('[SyncService] Unable to validate MUST session for $context: $error');
+      debugPrint(
+          '[SyncService] Unable to validate MUST session for $context: $error');
       return false;
     }
   }

@@ -55,10 +55,10 @@ class SettingsDrawer extends StatelessWidget {
                 const _SectionLabel('Account'),
                 _DrawerTile(
                   icon: Icons.person_outline_rounded,
-                  label: 'Edit Profile',
+                  label: 'My Profile',
                   onTap: () {
                     Navigator.of(context).pop();
-                    context.push(RouteNames.editProfile);
+                    context.push(RouteNames.myProfile);
                   },
                 ),
                 _DrawerTile(

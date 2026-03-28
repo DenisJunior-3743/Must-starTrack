@@ -157,8 +157,26 @@ class ProfileCubit extends Cubit<ProfileState> {
         _postDao.getPostsByAuthor(uid, pageSize: 30),
       ]);
 
-      final user = results[0] as UserModel?;
+      UserModel? user = results[0] as UserModel?;
       final posts = results[1] as List<PostModel>;
+
+      // Fallback 1: If own profile and missing locally, use auth cubit user
+      if (user == null && isOwn) {
+        user = _authCubit.currentUser;
+        if (user != null) {
+          await _userDao.insertUser(user);
+        }
+      }
+
+      // Fallback 2: Try fetching from Firestore
+      if (user == null) {
+        try {
+          user = await _firestore.getUser(uid);
+          if (user != null) {
+            await _userDao.insertUser(user);
+          }
+        } catch (_) {}
+      }
 
       if (user == null) {
         emit(const ProfileError('User not found. Check your connection.'));

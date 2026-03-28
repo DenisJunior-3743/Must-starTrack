@@ -31,17 +31,23 @@ import '../../../data/local/dao/user_dao.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/remote/recommender_service.dart';
 import '../../../data/remote/sync_service.dart';
+import '../../auth/bloc/auth_cubit.dart';
 
 // ── States ────────────────────────────────────────────────────────────────────
 
 abstract class FeedState extends Equatable {
   const FeedState();
-  @override List<Object?> get props => [];
+  @override
+  List<Object?> get props => [];
 }
 
-class FeedInitial extends FeedState { const FeedInitial(); }
+class FeedInitial extends FeedState {
+  const FeedInitial();
+}
 
-class FeedLoading extends FeedState { const FeedLoading(); }
+class FeedLoading extends FeedState {
+  const FeedLoading();
+}
 
 class FeedLoaded extends FeedState {
   final List<PostModel> posts;
@@ -61,12 +67,13 @@ class FeedLoaded extends FeedState {
     bool? hasMore,
     bool? isLoadingMore,
     FeedFilter? filter,
-  }) => FeedLoaded(
-    posts: posts ?? this.posts,
-    hasMore: hasMore ?? this.hasMore,
-    isLoadingMore: isLoadingMore ?? this.isLoadingMore,
-    filter: filter ?? this.filter,
-  );
+  }) =>
+      FeedLoaded(
+        posts: posts ?? this.posts,
+        hasMore: hasMore ?? this.hasMore,
+        isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+        filter: filter ?? this.filter,
+      );
 
   @override
   List<Object?> get props => [posts, hasMore, isLoadingMore, filter];
@@ -75,7 +82,8 @@ class FeedLoaded extends FeedState {
 class FeedError extends FeedState {
   final String message;
   const FeedError(this.message);
-  @override List<Object?> get props => [message];
+  @override
+  List<Object?> get props => [message];
 }
 
 class PublishPostResult extends Equatable {
@@ -107,7 +115,8 @@ class FeedFilter extends Equatable {
     this.recency,
   });
 
-  bool get isActive => faculty != null || category != null || type != null || recency != null;
+  bool get isActive =>
+      faculty != null || category != null || type != null || recency != null;
 
   FeedFilter copyWith({
     String? faculty,
@@ -118,12 +127,13 @@ class FeedFilter extends Equatable {
     bool clearCategory = false,
     bool clearType = false,
     bool clearRecency = false,
-  }) => FeedFilter(
-    faculty: clearFaculty ? null : faculty ?? this.faculty,
-    category: clearCategory ? null : category ?? this.category,
-    type: clearType ? null : type ?? this.type,
-    recency: clearRecency ? null : recency ?? this.recency,
-  );
+  }) =>
+      FeedFilter(
+        faculty: clearFaculty ? null : faculty ?? this.faculty,
+        category: clearCategory ? null : category ?? this.category,
+        type: clearType ? null : type ?? this.type,
+        recency: clearRecency ? null : recency ?? this.recency,
+      );
 
   @override
   List<Object?> get props => [faculty, category, type, recency];
@@ -139,6 +149,9 @@ class FeedCubit extends Cubit<FeedState> {
   final SyncQueueDao _syncQueue;
   final SyncService? _syncService;
   final String? _currentUserId;
+  final AuthCubit? _authCubit;
+  StreamSubscription<AuthState>? _authSub;
+  String? _lastObservedAuthUserId;
   static const _pageSize = 40;
   static const _targetAuthorGroups = 12;
   static const _maxPrefetchPages = 6;
@@ -151,6 +164,7 @@ class FeedCubit extends Cubit<FeedState> {
     SyncQueueDao? syncQueue,
     SyncService? syncService,
     String? currentUserId,
+    AuthCubit? authCubit,
   })  : _postDao = postDao ?? PostDao(),
         _userDao = userDao ?? UserDao(),
         _activityLogDao = activityLogDao ?? ActivityLogDao(),
@@ -158,7 +172,27 @@ class FeedCubit extends Cubit<FeedState> {
         _syncQueue = syncQueue ?? SyncQueueDao(),
         _syncService = syncService,
         _currentUserId = currentUserId,
+        _authCubit = authCubit,
         super(const FeedInitial());
+
+  void _ensureAuthListener() {
+    if (_authSub != null) {
+      return;
+    }
+
+    _lastObservedAuthUserId = _activeUserId;
+    _authSub = _authCubit?.stream.listen((_) {
+      final nextUserId = _activeUserId;
+      if (nextUserId == _lastObservedAuthUserId) {
+        return;
+      }
+
+      _lastObservedAuthUserId = nextUserId;
+      unawaited(refresh());
+    });
+  }
+
+  String? get _activeUserId => _authCubit?.currentUser?.id ?? _currentUserId;
 
   void _emitIfOpen(FeedState nextState) {
     if (!isClosed) {
@@ -169,14 +203,36 @@ class FeedCubit extends Cubit<FeedState> {
   // ── Load first page ────────────────────────────────────────────────────────
 
   Future<void> loadFeed({FeedFilter? filter}) async {
+    _ensureAuthListener();
     _emitIfOpen(const FeedLoading());
     try {
+      final requestedFilter = filter ?? const FeedFilter();
+      final startTime = DateTime.now();
+      debugPrint(
+        '[FeedCubit] loadFeed starting '
+        'filter=${requestedFilter.type ?? 'all'} '
+        'user=${_activeUserId ?? 'guest'} '
+        'at=${startTime.millisecondsSinceEpoch}',
+      );
       await _syncService?.syncRemoteToLocal(postLimit: _pageSize * 3);
       if (isClosed) return;
-      final f = filter ?? const FeedFilter();
+      final syncEndTime = DateTime.now();
+      debugPrint(
+        '[FeedCubit] loadFeed sync finished '
+        'filter=${requestedFilter.type ?? 'all'} '
+        'user=${_activeUserId ?? 'guest'} '
+        'syncDuration=${syncEndTime.difference(startTime).inMilliseconds}ms',
+      );
+      final f = requestedFilter;
       final batch = await _loadGroupedBatch(
         filter: f,
         existingAuthorIds: const <String>{},
+      );
+      final queryEndTime = DateTime.now();
+      debugPrint(
+        '[FeedCubit] loadFeed query finished '
+        'posts=${batch.posts.length} '
+        'totalDuration=${queryEndTime.difference(startTime).inMilliseconds}ms',
       );
       _emitIfOpen(FeedLoaded(
         posts: batch.posts,
@@ -238,7 +294,7 @@ class FeedCubit extends Cubit<FeedState> {
         filterFaculty: filter.faculty,
         filterCategory: filter.category,
         filterType: filter.type,
-        currentUserId: _currentUserId,
+        currentUserId: _activeUserId,
       );
 
       if (pagePosts.isEmpty) {
@@ -260,7 +316,8 @@ class FeedCubit extends Cubit<FeedState> {
 
       cursor = pagePosts.last.createdAt.millisecondsSinceEpoch;
 
-      if (seenAuthorIds.length >= existingAuthorIds.length + _targetAuthorGroups) {
+      if (seenAuthorIds.length >=
+          existingAuthorIds.length + _targetAuthorGroups) {
         break;
       }
     }
@@ -270,28 +327,96 @@ class FeedCubit extends Cubit<FeedState> {
       useHybrid: afterCursor == null,
     );
 
-    return _FeedBatchResult(posts: rankedPosts, hasMore: hasMore);
+    final finalPosts = rankedPosts.isEmpty && collectedPosts.isNotEmpty
+        ? collectedPosts
+        : rankedPosts;
+
+    debugPrint(
+      '[FeedCubit] ✅ batch ready — '
+      'raw=${collectedPosts.length} ranked=${rankedPosts.length} '
+      'serving=${finalPosts.length} '
+      'filter=${filter.type ?? 'all'} user=${_activeUserId ?? 'guest'}',
+    );
+
+    return _FeedBatchResult(posts: finalPosts, hasMore: hasMore);
   }
 
   Future<List<PostModel>> _rankPosts({
     required List<PostModel> posts,
     required bool useHybrid,
   }) async {
-    final currentUserId = _currentUserId;
-    if (currentUserId == null || currentUserId.isEmpty || posts.isEmpty) {
+    final log = StringBuffer();
+    log.writeln('');
+    log.writeln('══════════════════════════════════════════════════════');
+    log.writeln('  📊 RECOMMENDATION ENGINE');
+    log.writeln('══════════════════════════════════════════════════════');
+    log.writeln('  Candidates : ${posts.length}');
+
+    // ── Fallback helper ─────────────────────────────────────────────────────
+    List<PostModel> dateSorted() =>
+        ([...posts]..sort((a, b) => b.createdAt.compareTo(a.createdAt)));
+
+    if (posts.isEmpty) {
+      log.writeln('  ⚠  Nothing to rank — list is empty');
+      log.writeln('══════════════════════════════════════════════════════');
+      debugPrint(log.toString());
       return posts;
     }
+
+    // ── User context ─────────────────────────────────────────────────────────
+    final currentUserId = _activeUserId;
+    if (currentUserId == null || currentUserId.isEmpty) {
+      log.writeln('  User       : guest (unauthenticated)');
+      log.writeln('  Strategy   : date-descending (no profile available)');
+      final sorted = dateSorted();
+      log.writeln('  ✓ Serving  : ${sorted.length} posts (newest → oldest)');
+      log.writeln('══════════════════════════════════════════════════════');
+      debugPrint(log.toString());
+      return sorted;
+    }
+
+    final uidTail = currentUserId.length > 8
+        ? '…${currentUserId.substring(currentUserId.length - 8)}'
+        : currentUserId;
+    log.writeln('  User       : $uidTail');
 
     final user = await _userDao.getUserById(currentUserId);
     if (user == null || user.profile == null) {
-      return posts;
+      log.writeln(
+          '  Profile    : ⚠  not found in local DB (sync may still be running)');
+      log.writeln('  Strategy   : date-descending fallback');
+      final sorted = dateSorted();
+      log.writeln('  ✓ Serving  : ${sorted.length} posts (newest → oldest)');
+      log.writeln('══════════════════════════════════════════════════════');
+      debugPrint(log.toString());
+      return sorted;
     }
 
+    // ── Profile summary ───────────────────────────────────────────────────────
+    final profile = user.profile!;
+    final skills = profile.skills;
+    final skillPreview = skills.isEmpty
+        ? 'none'
+        : '${skills.take(3).join(', ')}${skills.length > 3 ? ' (+${skills.length - 3} more)' : ''}';
+    log.writeln('  Role       : ${user.role.name}');
+    log.writeln('  Faculty    : ${profile.faculty ?? 'unknown'}');
+    log.writeln('  Program    : ${profile.programName ?? 'unknown'}');
+    log.writeln('  Skills     : $skillPreview');
+
+    // ── Activity signals ──────────────────────────────────────────────────────
     final recentlyViewedCategories =
         await _activityLogDao.getRecentCategorySignals(currentUserId);
     final recentSearchTerms =
         await _activityLogDao.getRecentSearchTerms(currentUserId);
+    log.writeln(
+        '  Viewed cats: ${recentlyViewedCategories.isEmpty ? 'none yet' : recentlyViewedCategories.take(4).join(', ')}');
+    log.writeln(
+        '  Searches   : ${recentSearchTerms.isEmpty ? 'none yet' : recentSearchTerms.take(4).join(', ')}');
+    log.writeln(
+        '  Mode       : ${useHybrid ? 'hybrid (local + Gemini rerank)' : 'local scoring only'}');
+    log.writeln('──────────────────────────────────────────────────────');
 
+    // ── Run ranker ────────────────────────────────────────────────────────────
     final ranked = useHybrid
         ? await _recommenderService.rankHybrid(
             user: user,
@@ -306,6 +431,44 @@ class FeedCubit extends Cubit<FeedState> {
             recentSearchTerms: recentSearchTerms,
           );
 
+    // ── Log ranked results ────────────────────────────────────────────────────
+    const maxLogRows = 5;
+    if (ranked.isNotEmpty) {
+      final logCount = ranked.length.clamp(0, maxLogRows);
+      log.writeln('  Ranked ${ranked.length} post(s) — top $logCount shown:');
+      for (var i = 0; i < logCount; i++) {
+        final r = ranked[i];
+        final scoreStr = r.score.toStringAsFixed(3);
+        final title = r.post.title.length > 32
+            ? '${r.post.title.substring(0, 29)}…'
+            : r.post.title;
+        final reasons = r.reasons.isEmpty ? 'baseline' : r.reasons.join(', ');
+        log.writeln('    #${i + 1}  [$scoreStr]  "$title"');
+        log.writeln('           signals: $reasons');
+      }
+      if (ranked.length > maxLogRows) {
+        log.writeln(
+            '    … ${ranked.length - maxLogRows} more post(s) below threshold');
+      }
+    } else {
+      log.writeln(
+          '  ⚠  Ranker returned 0 results (unexpected) — applying date fallback');
+    }
+
+    log.writeln('──────────────────────────────────────────────────────');
+
+    // ── Guarantee non-empty result ────────────────────────────────────────────
+    if (ranked.isEmpty) {
+      final sorted = dateSorted();
+      log.writeln('  FALLBACK   : date-descending (${sorted.length} posts)');
+      log.writeln('══════════════════════════════════════════════════════');
+      debugPrint(log.toString());
+      return sorted;
+    }
+
+    log.writeln('  ✓ Serving  : ${ranked.length} posts (ranked order)');
+    log.writeln('══════════════════════════════════════════════════════');
+    debugPrint(log.toString());
     return ranked.map((entry) => entry.post).toList();
   }
 
@@ -324,9 +487,10 @@ class FeedCubit extends Cubit<FeedState> {
   Future<void> likePost(String postId) async {
     final current = state;
     if (current is! FeedLoaded) return;
-    final currentUserId = _currentUserId;
+    final currentUserId = _activeUserId;
     if (currentUserId == null || currentUserId.isEmpty) {
-      debugPrint('[FeedCubit] Ignoring like for post=$postId because no authenticated user is available.');
+      debugPrint(
+          '[FeedCubit] Ignoring like for post=$postId because no authenticated user is available.');
       return;
     }
 
@@ -351,7 +515,7 @@ class FeedCubit extends Cubit<FeedState> {
 
     try {
       debugPrint(
-        '[FeedCubit] Toggling like locally for post=$postId user=$_currentUserId wasLiked=$wasLiked',
+        '[FeedCubit] Toggling like locally for post=$postId user=$currentUserId wasLiked=$wasLiked',
       );
       // 3. Persist locally
       final newCount = await _postDao.toggleLike(
@@ -384,7 +548,7 @@ class FeedCubit extends Cubit<FeedState> {
         },
       );
       debugPrint(
-        '[FeedCubit] Like queued for post=$postId user=$_currentUserId isLiking=${!wasLiked} localCount=$newCount',
+        '[FeedCubit] Like queued for post=$postId user=$currentUserId isLiking=${!wasLiked} localCount=$newCount',
       );
       unawaited(_syncService?.processPendingSync());
 
@@ -395,11 +559,11 @@ class FeedCubit extends Cubit<FeedState> {
         _emitIfOpen((state as FeedLoaded).copyWith(posts: confirmed));
       }
     } catch (_) {
-      debugPrint('[FeedCubit] Like toggle failed for post=$postId user=$_currentUserId. Rolling back optimistic UI.');
+      debugPrint(
+          '[FeedCubit] Like toggle failed for post=$postId user=$_currentUserId. Rolling back optimistic UI.');
       // 6. Rollback on failure
       if (state is FeedLoaded) {
-        final rolled = (state as FeedLoaded).posts.toList()
-          ..[index] = original;
+        final rolled = (state as FeedLoaded).posts.toList()..[index] = original;
         _emitIfOpen((state as FeedLoaded).copyWith(posts: rolled));
       }
     }
@@ -429,7 +593,9 @@ class FeedCubit extends Cubit<FeedState> {
       }
 
       final syncResult = await _syncService?.processPendingSync();
-      if (syncResult != null && syncResult.failed == 0 && syncResult.remaining == 0) {
+      if (syncResult != null &&
+          syncResult.failed == 0 &&
+          syncResult.remaining == 0) {
         return const PublishPostResult(
           savedLocally: true,
           syncedRemotely: true,
@@ -470,10 +636,17 @@ class FeedCubit extends Cubit<FeedState> {
   // ── Refresh ────────────────────────────────────────────────────────────────
 
   Future<void> refresh() async {
-    final currentFilter = state is FeedLoaded
-        ? (state as FeedLoaded).filter
-        : const FeedFilter();
+    _ensureAuthListener();
+    final currentFilter =
+        state is FeedLoaded ? (state as FeedLoaded).filter : const FeedFilter();
     await loadFeed(filter: currentFilter);
+  }
+
+  @override
+  Future<void> close() async {
+    await _authSub?.cancel();
+    _authSub = null;
+    return super.close();
   }
 }
 

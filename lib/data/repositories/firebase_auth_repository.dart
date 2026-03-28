@@ -105,7 +105,10 @@ class FirebaseAuthRepository implements AuthRepository {
       // Fallback: fetch from Firestore
       final doc =
           await _firestore.collection('users').doc(fbUser.uid).get();
-      if (!doc.exists) return const Left(UserNotFoundFailure());
+      if (!doc.exists || doc.data() == null) {
+        final bootstrapped = await _bootstrapMissingUserFromAuth(fbUser);
+        return Right(bootstrapped);
+      }
 
       final user = UserModel.fromJson({'id': doc.id, ...doc.data()!});
       final reconciled = await _reconcileUserRole(user, fbUser.email);
@@ -256,24 +259,11 @@ class FirebaseAuthRepository implements AuthRepository {
         ),
       );
 
-      // Persist locally (offline-first)
-      await _userDao.insertUser(user);
-
-      // Try immediate Firestore write so the record appears instantly.
-      // If it fails (offline/transient), queue for background sync.
       try {
-        await _firestore
-            .collection('users')
-            .doc(user.id)
-            .set(user.toJson(), SetOptions(merge: true));
+        await _persistUserRecordDurably(user, operation: 'create');
       } catch (e) {
-        debugPrint('⚠️ Firestore users write failed (will sync later): $e');
-        await _syncDao.enqueue(
-          entity: 'users',
-          entityId: user.id,
-          operation: 'create',
-          payload: user.toJson(),
-        );
+        await _rollbackProvisionedUser(fbUser: fbUser, user: user);
+        return Left(UnexpectedFailure(e.toString()));
       }
 
       // Email verification is intentionally skipped — SMTP not configured yet.
@@ -312,22 +302,10 @@ class FirebaseAuthRepository implements AuthRepository {
       (user) async {
         // Update role in SQLite
         final updated = user.copyWith(role: UserRole.lecturer);
-        await _userDao.updateUser(updated);
-
-        // Persist role update to Firestore immediately; queue on failure.
         try {
-          await _firestore
-              .collection('users')
-              .doc(updated.id)
-              .set(updated.toJson(), SetOptions(merge: true));
+          await _persistUserRecordDurably(updated, operation: 'update');
         } catch (e) {
-          debugPrint('⚠️ Firestore lecturer role write failed (will sync later): $e');
-          await _syncDao.enqueue(
-            entity: 'users',
-            entityId: updated.id,
-            operation: 'update',
-            payload: updated.toJson(),
-          );
+          return Left(UnexpectedFailure(e.toString()));
         }
 
         return Right(updated);
@@ -399,15 +377,111 @@ class FirebaseAuthRepository implements AuthRepository {
           .get();
 
       if (!doc.exists || doc.data() == null) {
-        return const Left(UserNotFoundFailure());
+        final bootstrapped = await _bootstrapMissingUserFromAuth(fbUser);
+        return Right(bootstrapped);
       }
 
-        final user =
+      final user =
           UserModel.fromJson({'id': doc.id, ...doc.data()!});
-        final reconciled = await _reconcileUserRole(user, fbUser.email);
-        return Right(reconciled);
+      final reconciled = await _reconcileUserRole(user, fbUser.email);
+      return Right(reconciled);
     } catch (e) {
       return Left(UnexpectedFailure(e.toString()));
+    }
+  }
+
+  Future<UserModel> _bootstrapMissingUserFromAuth(
+    fb.User fbUser, {
+    UserRole? preferredRole,
+  }) async {
+    final email = (fbUser.email ?? '').trim();
+    if (email.isEmpty) {
+      throw const UnexpectedFailure(
+        'Authenticated account is missing an email address.',
+      );
+    }
+
+    final now = DateTime.now();
+    final inferredRole = _inferRoleFromEmail(email);
+    final resolvedRole = inferredRole == UserRole.guest
+        ? (preferredRole ?? UserRole.student)
+        : inferredRole;
+
+    final user = UserModel(
+      id: fbUser.uid,
+      firebaseUid: fbUser.uid,
+      email: email,
+      displayName: fbUser.displayName ?? '',
+      role: resolvedRole,
+      photoUrl: fbUser.photoURL,
+      isEmailVerified: fbUser.emailVerified,
+      createdAt: now,
+      updatedAt: now,
+      profile: ProfileModel(
+        id: fbUser.uid,
+        userId: fbUser.uid,
+        skills: const [],
+        profileVisibility: 'public',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+
+    await _persistUserRecordDurably(user, operation: 'create');
+
+    return user;
+  }
+
+  Future<void> _persistUserRecordDurably(
+    UserModel user, {
+    required String operation,
+  }) async {
+    await _userDao.insertUser(user);
+
+    try {
+      await _firestore
+          .collection('users')
+          .doc(user.id)
+          .set(user.toJson(), SetOptions(merge: true));
+      return;
+    } catch (firestoreError) {
+      debugPrint('⚠️ Firestore users write failed, queuing sync: $firestoreError');
+    }
+
+    try {
+      await _syncDao.enqueue(
+        entity: 'users',
+        entityId: user.id,
+        operation: operation,
+        payload: user.toJson(),
+      );
+    } catch (queueError) {
+      throw UnexpectedFailure(
+        'User record could not be durably persisted: $queueError',
+      );
+    }
+  }
+
+  Future<void> _rollbackProvisionedUser({
+    required fb.User fbUser,
+    required UserModel user,
+  }) async {
+    try {
+      await _userDao.deleteUser(user.id);
+    } catch (error) {
+      debugPrint('⚠️ Failed to rollback local user ${user.id}: $error');
+    }
+
+    try {
+      await fbUser.delete();
+    } catch (error) {
+      debugPrint('⚠️ Failed to delete partially provisioned auth user ${user.id}: $error');
+      try {
+        await _firebaseAuth.signOut();
+      } catch (_) {}
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {}
     }
   }
 
@@ -437,19 +511,11 @@ class FirebaseAuthRepository implements AuthRepository {
         ),
       );
 
-      await _userDao.insertUser(user);
       try {
-        await _firestore
-            .collection('users')
-            .doc(user.id)
-            .set(user.toJson(), SetOptions(merge: true));
-      } catch (_) {
-        await _syncDao.enqueue(
-          entity: 'users',
-          entityId: user.id,
-          operation: 'create',
-          payload: user.toJson(),
-        );
+        await _persistUserRecordDurably(user, operation: 'create');
+      } catch (e) {
+        await _rollbackProvisionedUser(fbUser: fbUser, user: user);
+        return Left(UnexpectedFailure(e.toString()));
       }
 
       return Right(user);
@@ -517,20 +583,7 @@ class FirebaseAuthRepository implements AuthRepository {
         ),
       );
 
-      await _userDao.insertUser(user);
-      try {
-        await _firestore
-            .collection('users')
-            .doc(user.id)
-            .set(user.toJson(), SetOptions(merge: true));
-      } catch (_) {
-        await _syncDao.enqueue(
-          entity: 'users',
-          entityId: user.id,
-          operation: 'create',
-          payload: user.toJson(),
-        );
-      }
+      await _persistUserRecordDurably(user, operation: 'create');
 
       // Email verification skipped — SMTP not configured yet.
       // if (!fbUser.emailVerified) await fbUser.sendEmailVerification();

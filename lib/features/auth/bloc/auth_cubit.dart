@@ -42,6 +42,7 @@ import 'package:equatable/equatable.dart';
 
 import '../../../data/models/user_model.dart';
 import '../../../data/remote/fcm_service.dart';
+import '../../../data/remote/sync_service.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../core/router/route_guards.dart';
 
@@ -120,14 +121,17 @@ class AuthCubit extends Cubit<AuthState> {
   final AuthRepository _repo;
   final RouteGuards _guards;
   final FcmService? _fcmService;
+  final SyncService? _syncService;
 
   AuthCubit({
     required AuthRepository authRepository,
     required RouteGuards guards,
     FcmService? fcmService,
+    SyncService? syncService,
   })  : _repo = authRepository,
         _guards = guards,
         _fcmService = fcmService,
+        _syncService = syncService,
         super(const AuthInitial());
 
   // ── Check persisted session on app launch ─────────────────────────────────
@@ -290,6 +294,8 @@ class AuthCubit extends Cubit<AuthState> {
       userId: user.id,
     );
     unawaited(_fcmService?.saveTokenForUser(user.id));
+    unawaited(_syncService?.processPendingSync());
+    unawaited(_syncService?.syncRemoteToLocal());
     emit(AuthAuthenticated(user));
   }
 

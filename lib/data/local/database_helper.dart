@@ -84,45 +84,161 @@ class DatabaseHelper {
       // Notifications table was redesigned: drop old schema and recreate
       // with the columns the DAO actually uses (sender_id, sender_name,
       // sender_photo_url, detail, entity_id, extra_json).
-      await db.execute('DROP TABLE IF EXISTS ${DatabaseSchema.tableNotifications}');
+      await db
+          .execute('DROP TABLE IF EXISTS ${DatabaseSchema.tableNotifications}');
       await db.execute(DatabaseSchema.createNotifications);
       await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_notif_user ON ${DatabaseSchema.tableNotifications}(user_id)');
+          'CREATE INDEX IF NOT EXISTS idx_notif_user ON ${DatabaseSchema.tableNotifications}(user_id)');
       await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_notif_read ON ${DatabaseSchema.tableNotifications}(is_read)');
+          'CREATE INDEX IF NOT EXISTS idx_notif_read ON ${DatabaseSchema.tableNotifications}(is_read)');
     }
     if (oldVersion < 3) {
       await db.execute(DatabaseSchema.createConversations);
       await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_conversations_user ON ${DatabaseSchema.tableConversations}(user_id)');
+          'CREATE INDEX IF NOT EXISTS idx_conversations_user ON ${DatabaseSchema.tableConversations}(user_id)');
       await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_conversations_time ON ${DatabaseSchema.tableConversations}(last_message_at DESC)');
+          'CREATE INDEX IF NOT EXISTS idx_conversations_time ON ${DatabaseSchema.tableConversations}(last_message_at DESC)');
 
-      await _ensureColumn(db, DatabaseSchema.tableMessages, 'conversation_id', 'TEXT');
-      await _ensureColumn(db, DatabaseSchema.tableMessages, 'message_type', "TEXT NOT NULL DEFAULT 'text'");
+      await _ensureColumn(
+          db, DatabaseSchema.tableMessages, 'conversation_id', 'TEXT');
+      await _ensureColumn(db, DatabaseSchema.tableMessages, 'message_type',
+          "TEXT NOT NULL DEFAULT 'text'");
       await _ensureColumn(db, DatabaseSchema.tableMessages, 'file_url', 'TEXT');
-      await _ensureColumn(db, DatabaseSchema.tableMessages, 'file_name', 'TEXT');
-      await _ensureColumn(db, DatabaseSchema.tableMessages, 'file_size', 'TEXT');
-      await _ensureColumn(db, DatabaseSchema.tableMessages, 'created_at', 'INTEGER');
-      await _ensureColumn(db, DatabaseSchema.tableMessages, 'is_read', 'INTEGER NOT NULL DEFAULT 0');
-      await _ensureColumn(db, DatabaseSchema.tableMessages, 'is_deleted', 'INTEGER NOT NULL DEFAULT 0');
+      await _ensureColumn(
+          db, DatabaseSchema.tableMessages, 'file_name', 'TEXT');
+      await _ensureColumn(
+          db, DatabaseSchema.tableMessages, 'file_size', 'TEXT');
+      await _ensureColumn(
+          db, DatabaseSchema.tableMessages, 'created_at', 'INTEGER');
+      await _ensureColumn(db, DatabaseSchema.tableMessages, 'is_read',
+          'INTEGER NOT NULL DEFAULT 0');
+      await _ensureColumn(db, DatabaseSchema.tableMessages, 'is_deleted',
+          'INTEGER NOT NULL DEFAULT 0');
     }
     if (oldVersion < 4) {
       // Opportunity-specific columns on posts
-      await _ensureColumn(db, DatabaseSchema.tablePosts, 'area_of_expertise', 'TEXT');
-      await _ensureColumn(db, DatabaseSchema.tablePosts, 'max_participants', 'INTEGER DEFAULT 0');
-      await _ensureColumn(db, DatabaseSchema.tablePosts, 'join_count', 'INTEGER NOT NULL DEFAULT 0');
-      await _ensureColumn(db, DatabaseSchema.tablePosts, 'opportunity_deadline', 'TEXT');
+      await _ensureColumn(
+          db, DatabaseSchema.tablePosts, 'area_of_expertise', 'TEXT');
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'max_participants',
+          'INTEGER DEFAULT 0');
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'join_count',
+          'INTEGER NOT NULL DEFAULT 0');
+      await _ensureColumn(
+          db, DatabaseSchema.tablePosts, 'opportunity_deadline', 'TEXT');
       // Post joins table for tracking opportunity participation
       await db.execute(DatabaseSchema.createPostJoins);
       await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_post_joins_user ON ${DatabaseSchema.tablePostJoins}(user_id)');
+          'CREATE INDEX IF NOT EXISTS idx_post_joins_user ON ${DatabaseSchema.tablePostJoins}(user_id)');
       await db.execute(
-        'CREATE INDEX IF NOT EXISTS idx_post_joins_post ON ${DatabaseSchema.tablePostJoins}(post_id)');
+          'CREATE INDEX IF NOT EXISTS idx_post_joins_post ON ${DatabaseSchema.tablePostJoins}(post_id)');
     }
     if (oldVersion < 5) {
       // External links support - multiple links with descriptions
-      await _ensureColumn(db, DatabaseSchema.tablePosts, 'external_links', "TEXT DEFAULT '[]'");
+      await _ensureColumn(
+          db, DatabaseSchema.tablePosts, 'external_links', "TEXT DEFAULT '[]'");
+    }
+    if (oldVersion < 6) {
+      // Bring legacy posts tables in sync with the current feed/sync model.
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'author_name', 'TEXT');
+      await _ensureColumn(
+          db, DatabaseSchema.tablePosts, 'author_photo_url', 'TEXT');
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'author_role', 'TEXT');
+      await _ensureColumn(
+          db, DatabaseSchema.tablePosts, 'media_urls', "TEXT DEFAULT '[]'");
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'youtube_url', 'TEXT');
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'moderation_status',
+          "TEXT DEFAULT 'approved'");
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'trust_score',
+          'INTEGER NOT NULL DEFAULT 100');
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'is_archived',
+          'INTEGER NOT NULL DEFAULT 0');
+
+      await db.execute('''
+        UPDATE ${DatabaseSchema.tablePosts}
+        SET moderation_status = COALESCE(moderation_status,
+          CASE WHEN status = 'rejected' THEN 'rejected' ELSE 'approved' END)
+      ''');
+      await db.execute('''
+        UPDATE ${DatabaseSchema.tablePosts}
+        SET trust_score = COALESCE(trust_score, suspicion_score, 100)
+      ''');
+      await db.execute('''
+        UPDATE ${DatabaseSchema.tablePosts}
+        SET is_archived = CASE WHEN COALESCE(status, 'published') = 'archived' THEN 1 ELSE COALESCE(is_archived, 0) END
+      ''');
+    }
+    if (oldVersion < 7) {
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'type',
+          "TEXT NOT NULL DEFAULT 'project'");
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'is_archived',
+          'INTEGER NOT NULL DEFAULT 0');
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'moderation_status',
+          "TEXT DEFAULT 'approved'");
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'author_name', 'TEXT');
+      await _ensureColumn(
+          db, DatabaseSchema.tablePosts, 'author_photo_url', 'TEXT');
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'author_role', 'TEXT');
+      await _ensureColumn(
+          db, DatabaseSchema.tablePosts, 'media_urls', "TEXT DEFAULT '[]'");
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'youtube_url', 'TEXT');
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'trust_score',
+          'INTEGER NOT NULL DEFAULT 100');
+      await db.execute('''
+        UPDATE ${DatabaseSchema.tablePosts}
+        SET type = COALESCE(type, 'project')
+        WHERE type IS NULL OR type = ''
+      ''');
+    }
+    if (oldVersion < 8) {
+      // Ensure all critical columns exist on posts table.
+      // These were added to createPosts but existing v7 databases may not have them.
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'is_archived',
+          'INTEGER NOT NULL DEFAULT 0');
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'moderation_status',
+          "TEXT DEFAULT 'approved'");
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'trust_score',
+          'INTEGER NOT NULL DEFAULT 100');
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'type',
+          "TEXT NOT NULL DEFAULT 'project'");
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'author_name', 'TEXT');
+      await _ensureColumn(
+          db, DatabaseSchema.tablePosts, 'author_photo_url', 'TEXT');
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'author_role', 'TEXT');
+      await _ensureColumn(
+          db, DatabaseSchema.tablePosts, 'media_urls', "TEXT DEFAULT '[]'");
+      await _ensureColumn(db, DatabaseSchema.tablePosts, 'youtube_url', 'TEXT');
+
+      // Update any posts that have status='archived' to set is_archived=1
+      await db.execute('''
+        UPDATE ${DatabaseSchema.tablePosts}
+        SET is_archived = 1
+        WHERE COALESCE(status, '') = 'archived' AND COALESCE(is_archived, 0) = 0
+      ''');
+
+      final schemaCheck =
+          await db.rawQuery('PRAGMA table_info(${DatabaseSchema.tablePosts})');
+      final schemaColumns = <String>{
+        for (final col in schemaCheck) col['name'] as String? ?? '',
+      };
+      debugPrint(
+          '[DatabaseHelper] Posts table PRAGMA check: columns=${schemaColumns.toList()}');
+
+      final requiredCols = [
+        'id',
+        'is_archived',
+        'moderation_status',
+        'trust_score',
+        'created_at',
+        'updated_at',
+      ];
+      final missing =
+          requiredCols.where((col) => !schemaColumns.contains(col)).toList();
+      if (missing.isNotEmpty) {
+        debugPrint(
+            '[DatabaseHelper] Posts table missing columns after v8 migration: $missing');
+      }
+
+      debugPrint('✅ Database v8 migration complete: posts table columns verified');
     }
   }
 

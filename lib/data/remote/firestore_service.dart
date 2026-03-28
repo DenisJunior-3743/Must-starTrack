@@ -131,7 +131,7 @@ class FirestoreService {
   }) async {
     Query<Map<String, dynamic>> query = _posts
         .where('is_archived', isEqualTo: false)
-        .where('moderation_status', whereIn: [null, 'approved']) // Only show approved or unmoderated posts
+        .where('moderation_status', isEqualTo: 'approved')
         .orderBy('created_at', descending: true)
         .limit(pageSize);
 
@@ -154,24 +154,73 @@ class FirestoreService {
 
   /// Pull a recent batch of posts from Firestore for local cache hydration.
   Future<List<PostModel>> getRecentPosts({int limit = 50}) async {
-    final snapshot = await _posts
+    debugPrint('[FirestoreService] getRecentPosts(limit=$limit) starting');
+
+    // Firestore whereIn cannot include null. Query approved and unmoderated
+    // separately, then merge so hydration still includes both visibility states.
+    final approvedQuery = _posts
         .where('is_archived', isEqualTo: false)
+        .where('moderation_status', isEqualTo: 'approved')
+        .orderBy('created_at', descending: true)
         .limit(limit)
-        .get();
+        .get(const GetOptions(source: Source.serverAndCache));
+
+    final unmoderatedQuery = _posts
+        .where('is_archived', isEqualTo: false)
+        .where('moderation_status', isNull: true)
+        .orderBy('created_at', descending: true)
+        .limit(limit)
+        .get(const GetOptions(source: Source.serverAndCache));
+
+    final snapshots = await Future.wait([approvedQuery, unmoderatedQuery]);
+    final snapshotDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[
+      ...snapshots[0].docs,
+      ...snapshots[1].docs,
+    ];
+
+    final fromCache = snapshots.every((s) => s.metadata.isFromCache);
+
+    debugPrint(
+      '[FirestoreService] getRecentPosts fetched ${snapshotDocs.length} raw docs '
+      'fromCache=$fromCache',
+    );
 
     final posts = <PostModel>[];
-    for (final doc in snapshot.docs) {
+    final seenIds = <String>{};
+    for (final doc in snapshotDocs) {
+      if (!seenIds.add(doc.id)) {
+        continue;
+      }
+
       try {
-        final post = PostModel.fromJson({'id': doc.id, ...doc.data()});
+        final data = doc.data();
+        debugPrint(
+          '[FirestoreService] reading post=${doc.id} '
+          'keys=${data.keys.toList()} '
+          'is_archived=${data['is_archived']} '
+          'isArchived=${data['isArchived']} '
+          'moderation_status=${data['moderation_status']} '
+          'moderationStatus=${data['moderationStatus']}',
+        );
+
+        final post = PostModel.fromJson({'id': doc.id, ...data});
         if (post.isArchived) {
+          debugPrint('[FirestoreService] skipping archived post=${doc.id}');
           continue;
         }
+
         posts.add(post);
-      } catch (error) {
-        debugPrint('[FirestoreService] Skipping unreadable post ${doc.id}: $error');
+      } catch (error, stackTrace) {
+        debugPrint('[FirestoreService] unreadable post ${doc.id}: $error');
+        debugPrint('$stackTrace');
       }
     }
+
     posts.sort((left, right) => right.createdAt.compareTo(left.createdAt));
+    if (posts.length > limit) {
+      posts.removeRange(limit, posts.length);
+    }
+    debugPrint('[FirestoreService] returning ${posts.length} hydrated posts after merge');
     return posts;
   }
 
@@ -369,16 +418,38 @@ class FirestoreService {
   /// Full-text search via Firestore array-contains (skills field).
   /// For production, replace with Algolia or Firebase Extensions Search.
   Future<List<PostModel>> searchPostsBySkill(String skill) async {
-    final snapshot = await _posts
+    final approvedQuery = _posts
         .where('skills', arrayContains: skill)
         .where('is_archived', isEqualTo: false)
+        .where('moderation_status', isEqualTo: 'approved')
         .orderBy('created_at', descending: true)
         .limit(30)
         .get();
 
-    return snapshot.docs
-        .map((d) => PostModel.fromJson({'id': d.id, ...d.data()}))
-        .toList();
+    final unmoderatedQuery = _posts
+        .where('skills', arrayContains: skill)
+        .where('is_archived', isEqualTo: false)
+        .where('moderation_status', isNull: true)
+        .orderBy('created_at', descending: true)
+        .limit(30)
+        .get();
+
+    final snapshots = await Future.wait([approvedQuery, unmoderatedQuery]);
+    final mergedById = <String, Map<String, dynamic>>{};
+
+    for (final doc in snapshots[0].docs) {
+      mergedById[doc.id] = {'id': doc.id, ...doc.data()};
+    }
+    for (final doc in snapshots[1].docs) {
+      mergedById[doc.id] = {'id': doc.id, ...doc.data()};
+    }
+
+    final merged = mergedById.values
+        .map(PostModel.fromJson)
+        .toList()
+      ..sort((left, right) => right.createdAt.compareTo(left.createdAt));
+
+    return merged.take(30).toList();
   }
 
   // ── Admin operations ──────────────────────────────────────────────────────

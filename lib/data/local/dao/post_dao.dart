@@ -17,6 +17,7 @@
 //    updates their profile.
 
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
@@ -35,16 +36,28 @@ class PostDao {
 
   Future<void> insertPost(PostModel post) async {
     final db = await _db.database;
+    debugPrint('[PostDao] insertPost using database path: ${db.path}');
+    final rawMap = _toDbMap(post);
     final map = await _filterToExistingColumns(
       db,
       DatabaseSchema.tablePosts,
-      _toDbMap(post),
+      rawMap,
     );
-    await db.insert(
+    debugPrint(
+        '[PostDao] insertPost id=${post.id} type=${post.type} rawKeys=${rawMap.keys.toList()} filteredKeys=${map.keys.toList()}');
+    final updated = await db.update(
       DatabaseSchema.tablePosts,
       map,
-      conflictAlgorithm: ConflictAlgorithm.replace,
+      where: 'id = ?',
+      whereArgs: [post.id],
     );
+    if (updated == 0) {
+      await db.insert(
+        DatabaseSchema.tablePosts,
+        map,
+        conflictAlgorithm: ConflictAlgorithm.abort,
+      );
+    }
   }
 
   Future<void> updatePost(PostModel post) async {
@@ -119,6 +132,9 @@ class PostDao {
     String? currentUserId,
   }) async {
     final db = await _db.database;
+    debugPrint('[PostDao] getFeedPage using database');
+    final dbPath = db.path;
+    debugPrint('[PostDao] database path: $dbPath');
     final postColumns = await _tableColumns(db, DatabaseSchema.tablePosts);
     final userColumns = await _tableColumns(db, DatabaseSchema.tableUsers);
 
@@ -126,16 +142,17 @@ class PostDao {
     final args = <dynamic>[];
 
     if (postColumns.contains('is_archived')) {
-      conditions.add('p.is_archived = 0');
+      conditions.add('COALESCE(p.is_archived, 0) = 0');
     } else if (postColumns.contains('status')) {
-      conditions.add("p.status != 'archived'");
+      conditions.add("COALESCE(p.status, 'published') != 'archived'");
     }
 
     // Show all non-archived posts regardless of moderation status so the
     // local cache reflects what the user has access to see.
     // Explicitly hide only rejected content.
     if (postColumns.contains('moderation_status')) {
-      conditions.add("(p.moderation_status IS NULL OR p.moderation_status != 'rejected')");
+      conditions.add(
+          "(p.moderation_status IS NULL OR p.moderation_status != 'rejected')");
     }
 
     if (afterCursor != null) {
@@ -165,25 +182,25 @@ class PostDao {
         : '';
 
     final userNameColumn = userColumns.contains('display_name')
-      ? 'display_name'
-      : userColumns.contains('name')
-        ? 'name'
-        : null;
+        ? 'display_name'
+        : userColumns.contains('name')
+            ? 'name'
+            : null;
     final userPhotoColumn = userColumns.contains('photo_url')
-      ? 'photo_url'
-      : userColumns.contains('avatar_url')
-        ? 'avatar_url'
-        : null;
+        ? 'photo_url'
+        : userColumns.contains('avatar_url')
+            ? 'avatar_url'
+            : null;
 
     final selectAuthorName = userNameColumn != null
-      ? 'u.$userNameColumn AS author_name'
-      : "'' AS author_name";
+        ? 'u.$userNameColumn AS author_name'
+        : "'' AS author_name";
     final selectAuthorPhoto = userPhotoColumn != null
-      ? 'u.$userPhotoColumn AS author_photo_url'
-      : 'NULL AS author_photo_url';
+        ? 'u.$userPhotoColumn AS author_photo_url'
+        : 'NULL AS author_photo_url';
     final selectAuthorRole = userColumns.contains('role')
-      ? 'u.role AS author_role'
-      : "'student' AS author_role";
+        ? 'u.role AS author_role'
+        : "'student' AS author_role";
 
     if (conditions.isEmpty) {
       conditions.add('1 = 1');
@@ -203,7 +220,158 @@ class PostDao {
       LIMIT  ?
     ''';
 
+    debugPrint('[PostDao] SQL: $sql');
+    debugPrint('[PostDao] ARGS: $args');
+
+    final allCols =
+        await db.rawQuery('PRAGMA table_info(${DatabaseSchema.tablePosts})');
+    debugPrint(
+        '[PostDao] TABLE COLUMNS: ${allCols.map((r) => r['name']).toList()}');
+
+    final debugCount = await db
+        .rawQuery('SELECT COUNT(*) as cnt FROM ${DatabaseSchema.tablePosts}');
+    debugPrint('[PostDao] DEBUG COUNT before query: $debugCount');
+
+    // Build conditional debug query only selecting columns that exist
+    final sampleCols = ['id', 'created_at', 'status', 'type'];
+    if (postColumns.contains('is_archived')) {
+      sampleCols.add('is_archived');
+    }
+    final rawPosts = await db.rawQuery(
+        'SELECT ${sampleCols.join(', ')} FROM ${DatabaseSchema.tablePosts} LIMIT 5');
+    debugPrint('[PostDao] RAW POSTS: $rawPosts');
+
     final rows = await db.rawQuery(sql, args);
+    debugPrint('[PostDao] ROWS RETURNED: ${rows.length}');
+
+    if (rows.isEmpty) {
+      final debugCountAfter = await db
+          .rawQuery('SELECT COUNT(*) as cnt FROM ${DatabaseSchema.tablePosts}');
+      debugPrint('[PostDao] DEBUG COUNT after empty query: $debugCountAfter');
+
+      final simpleQuery = await db
+          .rawQuery('SELECT id FROM ${DatabaseSchema.tablePosts} LIMIT 5');
+      debugPrint('[PostDao] Simple query result: $simpleQuery');
+
+      final withStatus = await db.rawQuery(
+          "SELECT COUNT(*) as cnt, status FROM ${DatabaseSchema.tablePosts} GROUP BY status");
+      debugPrint('[PostDao] Posts by status: $withStatus');
+    }
+    if (rows.isEmpty) {
+      final statsSql = StringBuffer()
+        ..writeln('SELECT')
+        ..writeln('  COUNT(*) AS total,')
+        ..writeln(
+            "  SUM(CASE WHEN type = 'project' THEN 1 ELSE 0 END) AS exact_projects,")
+        ..writeln(
+            "  SUM(CASE WHEN type = 'opportunity' THEN 1 ELSE 0 END) AS exact_opportunities,")
+        ..writeln(
+            "  SUM(CASE WHEN LOWER(TRIM(COALESCE(type, ''))) = 'project' THEN 1 ELSE 0 END) AS normalized_projects,")
+        ..writeln(
+            "  SUM(CASE WHEN LOWER(TRIM(COALESCE(type, ''))) = 'opportunity' THEN 1 ELSE 0 END) AS normalized_opportunities,")
+        ..write(
+          postColumns.contains('status')
+              ? "  SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END) AS archived_by_status,\n"
+              : '  0 AS archived_by_status,\n',
+        )
+        ..write(
+          postColumns.contains('is_archived')
+              ? '  SUM(CASE WHEN COALESCE(is_archived, 0) = 1 THEN 1 ELSE 0 END) AS archived_by_flag\n'
+              : '  0 AS archived_by_flag\n',
+        )
+        ..write('FROM ${DatabaseSchema.tablePosts}');
+
+      final stats = await db.rawQuery(statsSql.toString());
+      final statRow =
+          stats.isNotEmpty ? stats.first : const <String, Object?>{};
+
+      final rawCount = await db.rawQuery(
+          'SELECT COUNT(*) as cnt, MIN(created_at) as min_created, MAX(created_at) as max_created FROM ${DatabaseSchema.tablePosts}');
+      debugPrint('[PostDao] RAW POSTS: $rawCount');
+
+      final sampleColumns = <String>[
+        'id',
+        if (postColumns.contains('type')) 'type',
+        if (postColumns.contains('status')) 'status',
+        if (postColumns.contains('moderation_status')) 'moderation_status',
+        if (postColumns.contains('is_archived')) 'is_archived',
+        if (postColumns.contains('created_at')) 'created_at',
+      ];
+      final sampleRows = sampleColumns.isEmpty
+          ? const <Map<String, Object?>>[]
+          : await db.query(
+              DatabaseSchema.tablePosts,
+              columns: sampleColumns,
+              orderBy:
+                  postColumns.contains('created_at') ? 'created_at DESC' : null,
+              limit: 5,
+            );
+      debugPrint(
+        '[PostDao] getFeedPage returned 0 rows '
+        'filterType=${filterType ?? 'all'} '
+        'filterCategory=${filterCategory ?? 'all'} '
+        'filterFaculty=${filterFaculty ?? 'all'} '
+        'afterCursor=${afterCursor ?? 'none'} '
+        'columns=${postColumns.toList()..sort()} '
+        'stats=$statRow '
+        'samples=$sampleRows',
+      );
+
+      if (filterType != null && postColumns.contains('type')) {
+        final fallbackArgs = <dynamic>[];
+        final fallbackConditions = <String>[];
+
+        if (postColumns.contains('is_archived')) {
+          fallbackConditions.add('COALESCE(p.is_archived, 0) = 0');
+        } else if (postColumns.contains('status')) {
+          fallbackConditions
+              .add("COALESCE(p.status, 'published') != 'archived'");
+        }
+
+        if (postColumns.contains('moderation_status')) {
+          fallbackConditions.add(
+              "(p.moderation_status IS NULL OR p.moderation_status != 'rejected')");
+        }
+        if (afterCursor != null) {
+          fallbackConditions.add('p.created_at < ?');
+          fallbackArgs.add(afterCursor);
+        }
+        if (filterFaculty != null) {
+          fallbackConditions.add('INSTR(COALESCE(p.faculty, \'\'), ?) > 0');
+          fallbackArgs.add(filterFaculty);
+        }
+        if (filterCategory != null) {
+          fallbackConditions.add('p.category = ?');
+          fallbackArgs.add(filterCategory);
+        }
+
+        fallbackConditions.add("LOWER(TRIM(COALESCE(p.type, ''))) = ?");
+        fallbackArgs.add(filterType.trim().toLowerCase());
+        fallbackArgs.add(pageSize);
+
+        final fallbackSql = '''
+          SELECT p.*,
+             $selectAuthorName,
+             $selectAuthorPhoto,
+             $selectAuthorRole
+                 ${currentUserId != null ? ', CASE WHEN lk.id IS NOT NULL THEN 1 ELSE 0 END AS is_liked_by_me' : ''}
+          FROM   ${DatabaseSchema.tablePosts} p
+          LEFT JOIN ${DatabaseSchema.tableUsers} u ON u.id = p.author_id
+          $likeJoin
+          WHERE  ${fallbackConditions.join(' AND ')}
+          ORDER  BY p.created_at DESC
+          LIMIT  ?
+        ''';
+
+        final fallbackRows = await db.rawQuery(fallbackSql, fallbackArgs);
+        if (fallbackRows.isNotEmpty) {
+          debugPrint(
+            '[PostDao] normalized type fallback recovered ${fallbackRows.length} row(s) for filterType=$filterType',
+          );
+          return fallbackRows.map(_fromDbRow).toList();
+        }
+      }
+    }
     return rows.map(_fromDbRow).toList();
   }
 
@@ -219,8 +387,8 @@ class PostDao {
     final rows = await db.rawQuery('''
       SELECT * FROM ${DatabaseSchema.tablePosts}
       WHERE  author_id = ?
-        ${!includeArchived && postColumns.contains('is_archived') ? 'AND is_archived = 0' : ''}
-        ${!includeArchived && !postColumns.contains('is_archived') && postColumns.contains('status') ? "AND status != 'archived'" : ''}
+        ${!includeArchived && postColumns.contains('is_archived') ? 'AND COALESCE(is_archived, 0) = 0' : ''}
+        ${!includeArchived && !postColumns.contains('is_archived') && postColumns.contains('status') ? "AND COALESCE(status, 'published') != 'archived'" : ''}
         ${afterCursor != null ? 'AND created_at < $afterCursor' : ''}
       ORDER  BY created_at DESC
       LIMIT  ?
@@ -261,19 +429,32 @@ class PostDao {
     final args = <dynamic>[pattern, pattern, pattern];
 
     if (postColumns.contains('is_archived')) {
-      conditions.add('p.is_archived = 0');
+      conditions.add('COALESCE(p.is_archived, 0) = 0');
     } else if (postColumns.contains('status')) {
-      conditions.add("p.status != 'archived'");
+      conditions.add("COALESCE(p.status, 'published') != 'archived'");
     }
 
     if (postColumns.contains('moderation_status')) {
-      conditions.add("(p.moderation_status IS NULL OR p.moderation_status != 'rejected')");
+      conditions.add(
+          "(p.moderation_status IS NULL OR p.moderation_status != 'rejected')");
     }
 
-    if (faculty != null) { conditions.add('INSTR(p.faculty, ?) > 0'); args.add(faculty); }
-    if (category != null) { conditions.add('p.category = ?'); args.add(category); }
-    if (type != null) { conditions.add('p.type = ?'); args.add(type); }
-    if (afterMs != null) { conditions.add('p.created_at >= ?'); args.add(afterMs); }
+    if (faculty != null) {
+      conditions.add('INSTR(p.faculty, ?) > 0');
+      args.add(faculty);
+    }
+    if (category != null) {
+      conditions.add('p.category = ?');
+      args.add(category);
+    }
+    if (type != null) {
+      conditions.add('p.type = ?');
+      args.add(type);
+    }
+    if (afterMs != null) {
+      conditions.add('p.created_at >= ?');
+      args.add(afterMs);
+    }
     if (skills != null && skills.isNotEmpty) {
       for (final s in skills) {
         conditions.add('p.skills_used LIKE ?');
@@ -284,22 +465,22 @@ class PostDao {
     args.addAll([pageSize, page * pageSize]);
 
     final userNameColumn = userColumns.contains('display_name')
-      ? 'display_name'
-      : userColumns.contains('name')
-        ? 'name'
-        : null;
+        ? 'display_name'
+        : userColumns.contains('name')
+            ? 'name'
+            : null;
     final userPhotoColumn = userColumns.contains('photo_url')
-      ? 'photo_url'
-      : userColumns.contains('avatar_url')
-        ? 'avatar_url'
-        : null;
+        ? 'photo_url'
+        : userColumns.contains('avatar_url')
+            ? 'avatar_url'
+            : null;
 
     final selectAuthorName = userNameColumn != null
-      ? 'u.$userNameColumn AS author_name'
-      : "'' AS author_name";
+        ? 'u.$userNameColumn AS author_name'
+        : "'' AS author_name";
     final selectAuthorPhoto = userPhotoColumn != null
-      ? 'u.$userPhotoColumn AS author_photo_url'
-      : 'NULL AS author_photo_url';
+        ? 'u.$userPhotoColumn AS author_photo_url'
+        : 'NULL AS author_photo_url';
 
     final rows = await db.rawQuery('''
       SELECT p.*, $selectAuthorName, $selectAuthorPhoto
@@ -555,46 +736,48 @@ class PostDao {
   }
 
   Map<String, dynamic> _toDbMap(PostModel p) => {
-    'id': p.id,
-    'author_id': p.authorId,
-    'author_name': p.authorName,
-    'author_photo_url': p.authorPhotoUrl,
-    'type': p.type,
-    'title': p.title,
-    'description': p.description,
-    'category': p.category,
-    'tags': jsonEncode(p.tags),
-    'faculty': p.faculty,
-    'program': p.program,
-    'skills_used': jsonEncode(p.skillsUsed),
-    'images': jsonEncode(_imageMediaUrls(p)),
-    'videos': jsonEncode(_videoMediaUrls(p)),
-    'media_urls': jsonEncode(p.mediaUrls),
-    'youtube_url': p.youtubeUrl,
-    'youtube_link': p.youtubeUrl,
-    'external_links': jsonEncode(p.externalLinks),
-    'external_link': p.externalLinks.isNotEmpty
-      ? p.externalLinks.first.values.firstOrNull
-      : null,
-    'visibility': p.visibility.name,
-    'moderation_status': p.moderationStatus.name,
-    'status': p.moderationStatus == ModerationStatus.approved ? 'published' : p.moderationStatus.name,
-    'trust_score': p.trustScore,
-    'suspicion_score': p.trustScore,
-    'like_count': p.likeCount,
-    'dislike_count': p.dislikeCount,
-    'comment_count': p.commentCount,
-    'share_count': p.shareCount,
-    'view_count': p.viewCount,
-    'is_archived': p.isArchived ? 1 : 0,
-    'area_of_expertise': p.areaOfExpertise,
-    'max_participants': p.maxParticipants ?? 0,
-    'join_count': p.joinCount,
-    'opportunity_deadline': p.opportunityDeadline?.toIso8601String(),
-    'created_at': p.createdAt.millisecondsSinceEpoch,
-    'updated_at': p.updatedAt.millisecondsSinceEpoch,
-    'sync_status': 0,
-  };
+        'id': p.id,
+        'author_id': p.authorId,
+        'author_name': p.authorName,
+        'author_photo_url': p.authorPhotoUrl,
+        'type': p.type,
+        'title': p.title,
+        'description': p.description,
+        'category': p.category,
+        'tags': jsonEncode(p.tags),
+        'faculty': p.faculty,
+        'program': p.program,
+        'skills_used': jsonEncode(p.skillsUsed),
+        'images': jsonEncode(_imageMediaUrls(p)),
+        'videos': jsonEncode(_videoMediaUrls(p)),
+        'media_urls': jsonEncode(p.mediaUrls),
+        'youtube_url': p.youtubeUrl,
+        'youtube_link': p.youtubeUrl,
+        'external_links': jsonEncode(p.externalLinks),
+        'external_link': p.externalLinks.isNotEmpty
+            ? p.externalLinks.first.values.firstOrNull
+            : null,
+        'visibility': p.visibility.name,
+        'moderation_status': p.moderationStatus.name,
+        'status': p.moderationStatus == ModerationStatus.approved
+            ? 'published'
+            : p.moderationStatus.name,
+        'trust_score': p.trustScore,
+        'suspicion_score': p.trustScore,
+        'like_count': p.likeCount,
+        'dislike_count': p.dislikeCount,
+        'comment_count': p.commentCount,
+        'share_count': p.shareCount,
+        'view_count': p.viewCount,
+        'is_archived': p.isArchived ? 1 : 0,
+        'area_of_expertise': p.areaOfExpertise,
+        'max_participants': p.maxParticipants ?? 0,
+        'join_count': p.joinCount,
+        'opportunity_deadline': p.opportunityDeadline?.toIso8601String(),
+        'created_at': p.createdAt.toIso8601String(),
+        'updated_at': p.updatedAt.toIso8601String(),
+        'sync_status': 0,
+      };
 
   PostModel _fromDbRow(Map<String, dynamic> row) {
     String? parseNullableString(dynamic value) {
@@ -612,8 +795,11 @@ class PostDao {
 
     List<String> parseList(dynamic v) {
       if (v == null) return [];
-      try { return List<String>.from(jsonDecode(v as String) as List); }
-      catch (_) { return []; }
+      try {
+        return List<String>.from(jsonDecode(v as String) as List);
+      } catch (_) {
+        return [];
+      }
     }
 
     List<Map<String, String>> parseLinks(dynamic v) {
@@ -622,7 +808,9 @@ class PostDao {
         return (jsonDecode(v as String) as List)
             .map((e) => Map<String, String>.from(e as Map))
             .toList();
-      } catch (_) { return []; }
+      } catch (_) {
+        return [];
+      }
     }
 
     int parseInt(dynamic v, {int fallback = 0}) {
@@ -676,7 +864,8 @@ class PostDao {
       id: parseRequiredString(row['id']),
       authorId: parseRequiredString(row['author_id']),
       authorName: pickString(['author_name', 'display_name', 'name']),
-      authorPhotoUrl: pickString(['author_photo_url', 'photo_url', 'avatar_url']),
+      authorPhotoUrl:
+          pickString(['author_photo_url', 'photo_url', 'avatar_url']),
       authorRole: parseNullableString(row['author_role']),
       type: parseRequiredString(row['type'], fallback: 'project'),
       title: parseRequiredString(row['title']),
@@ -686,7 +875,8 @@ class PostDao {
       faculty: parseNullableString(row['faculty']),
       program: parseNullableString(row['program']),
       skillsUsed: parseList(row['skills_used']),
-      mediaUrls: parsedMediaUrls.isNotEmpty ? parsedMediaUrls : combinedLegacyMedia,
+      mediaUrls:
+          parsedMediaUrls.isNotEmpty ? parsedMediaUrls : combinedLegacyMedia,
       youtubeUrl: pickString(['youtube_url', 'youtube_link']),
       externalLinks: parsedExternalLinks.isNotEmpty
           ? parsedExternalLinks
@@ -703,20 +893,22 @@ class PostDao {
         (v) => v.name == (row['moderation_status'] ?? row['status']),
         orElse: () => ModerationStatus.approved,
       ),
-      trustScore: parseInt(row['trust_score'] ?? row['suspicion_score'], fallback: 100),
+      trustScore:
+          parseInt(row['trust_score'] ?? row['suspicion_score'], fallback: 100),
       likeCount: parseInt(row['like_count']),
       dislikeCount: parseInt(row['dislike_count']),
       commentCount: parseInt(row['comment_count']),
       shareCount: parseInt(row['share_count']),
       viewCount: parseInt(row['view_count']),
-        isArchived: parseBool(row['is_archived']) || (row['status'] == 'archived'),
-        isLikedByMe: parseBool(row['is_liked_by_me']),
-        areaOfExpertise: parseNullableString(row['area_of_expertise']),
-        maxParticipants: row['max_participants'] != null
+      isArchived:
+          parseBool(row['is_archived']) || (row['status'] == 'archived'),
+      isLikedByMe: parseBool(row['is_liked_by_me']),
+      areaOfExpertise: parseNullableString(row['area_of_expertise']),
+      maxParticipants: row['max_participants'] != null
           ? parseInt(row['max_participants'])
           : null,
       joinCount: parseInt(row['join_count']),
-        isJoinedByMe: parseBool(row['is_joined_by_me']),
+      isJoinedByMe: parseBool(row['is_joined_by_me']),
       opportunityDeadline: row['opportunity_deadline'] != null
           ? DateTime.tryParse(row['opportunity_deadline'].toString())
           : null,
@@ -737,7 +929,8 @@ class PostDao {
     final hasJoinTable = (await db.rawQuery(
       "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
       [DatabaseSchema.tablePostJoins],
-    )).isNotEmpty;
+    ))
+        .isNotEmpty;
 
     return db.transaction((txn) async {
       List<Map<String, Object?>> existing = const [];
@@ -799,7 +992,8 @@ class PostDao {
     final hasJoinTable = (await db.rawQuery(
       "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
       [DatabaseSchema.tablePostJoins],
-    )).isNotEmpty;
+    ))
+        .isNotEmpty;
     if (!hasJoinTable) return false;
     final rows = await db.query(
       DatabaseSchema.tablePostJoins,
@@ -813,10 +1007,7 @@ class PostDao {
 
   Future<Set<String>> _tableColumns(Database db, String table) async {
     final rows = await db.rawQuery('PRAGMA table_info($table)');
-    return rows
-        .map((row) => row['name'])
-        .whereType<String>()
-        .toSet();
+    return rows.map((row) => row['name']).whereType<String>().toSet();
   }
 
   Future<Map<String, dynamic>> _filterToExistingColumns(
