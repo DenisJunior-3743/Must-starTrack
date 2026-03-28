@@ -359,7 +359,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         builder: (ctx, setSheetState) => Padding(
           padding: EdgeInsets.only(
             left: 20, right: 20, top: 24,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom +
+                MediaQuery.of(ctx).padding.bottom + 24,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -462,7 +463,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       builder: (ctx) => SingleChildScrollView(
         padding: EdgeInsets.only(
           left: 20, right: 20, top: 24,
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom +
+              MediaQuery.of(ctx).padding.bottom +
+              24,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1392,11 +1395,12 @@ class _StatsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final memberCount = post.joinCount;
     final stats = [
       ('Views', '${post.viewCount}', Icons.visibility_outlined),
       ('Likes', '${post.likeCount}', Icons.favorite_border_rounded),
       ('Comments', '${post.commentCount}', Icons.chat_bubble_outline_rounded),
-      ('Members', '4', Icons.group_outlined),
+      ('Members', '$memberCount', Icons.group_outlined),
     ];
 
     return Padding(
@@ -1530,7 +1534,10 @@ class _CollabSection extends StatelessWidget {
               color: AppColors.textSecondaryLight, height: 1.5),
           ),
           const SizedBox(height: 12),
-          const CollaboratorBubbles(photoUrls: [null, null], totalCount: 4),
+          CollaboratorBubbles(
+            photoUrls: const [null, null],
+            totalCount: post.joinCount,
+          ),
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
