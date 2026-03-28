@@ -642,6 +642,34 @@ class SyncService {
       return true;
     }
 
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUid == null || currentUid.isEmpty) {
+      debugPrint(
+        '[SyncNotification] Skipping notification=$notificationId: no active auth user.',
+      );
+      return true;
+    }
+
+    // Guard against stale queue items from another account. These can never
+    // satisfy the notification update rule and should not keep retrying.
+    final db = await DatabaseHelper.instance.database;
+    final localNotification = await db.query(
+      'notifications',
+      columns: ['user_id'],
+      where: 'id = ?',
+      whereArgs: [notificationId],
+      limit: 1,
+    );
+    if (localNotification.isNotEmpty) {
+      final ownerId = localNotification.first['user_id'] as String?;
+      if (ownerId != null && ownerId.isNotEmpty && ownerId != currentUid) {
+        debugPrint(
+          '[SyncNotification] Skipping notification=$notificationId: owner=$ownerId currentUid=$currentUid.',
+        );
+        return true;
+      }
+    }
+
     final updates = <String, Object?>{};
     if (payload.containsKey('is_read')) {
       updates['is_read'] = payload['is_read'] == true;
@@ -666,10 +694,27 @@ class SyncService {
     debugPrint(
         '[SyncNotification] Updating notification=$notificationId keys=${updates.keys.toList()}');
 
-    await FirebaseFirestore.instance
-        .collection('notifications')
-        .doc(notificationId)
-        .set(updates, SetOptions(merge: true));
+    final docRef =
+        FirebaseFirestore.instance.collection('notifications').doc(notificationId);
+    try {
+      // Use update() to match security rules that only allow owner updates on
+      // existing notification docs (is_read/extra), not create semantics.
+      await docRef.update(updates);
+    } on FirebaseException catch (error) {
+      if (error.code == 'not-found') {
+        debugPrint(
+          '[SyncNotification] Dropping notification sync for missing remote doc id=$notificationId.',
+        );
+        return true;
+      }
+      if (error.code == 'permission-denied') {
+        debugPrint(
+          '[SyncNotification] Dropping unsyncable notification job id=${job.id} notification=$notificationId due to permission-denied.',
+        );
+        return true;
+      }
+      rethrow;
+    }
     return true;
   }
 
@@ -850,21 +895,35 @@ class SyncService {
 
     final docRef =
         FirebaseFirestore.instance.collection('post_views').doc(job.entityId);
-    final existing =
-        await docRef.get(const GetOptions(source: Source.serverAndCache));
-    await docRef.set({
-      'id': job.entityId,
-      'viewer_id': viewerId,
-      'viewer_name': payload['viewer_name'] as String?,
-      'author_id': payload['author_id'] as String?,
-      'post_id': postId,
-      'post_title': payload['post_title'] as String?,
-      'updated_at': FieldValue.serverTimestamp(),
-      if (!existing.exists) 'created_at': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-    debugPrint(
-      '[SyncView] Remote view upserted viewId=${job.entityId} post=$postId viewer=$viewerId existing=${existing.exists}',
-    );
+    try {
+      await docRef.update({
+        'viewer_name': payload['viewer_name'] as String?,
+        'author_id': payload['author_id'] as String?,
+        'post_title': payload['post_title'] as String?,
+        'updated_at': FieldValue.serverTimestamp(),
+      });
+      debugPrint(
+        '[SyncView] Remote view updated viewId=${job.entityId} post=$postId viewer=$viewerId',
+      );
+    } on FirebaseException catch (error) {
+      if (error.code != 'not-found') {
+        rethrow;
+      }
+
+      await docRef.set({
+        'id': job.entityId,
+        'viewer_id': viewerId,
+        'viewer_name': payload['viewer_name'] as String?,
+        'author_id': payload['author_id'] as String?,
+        'post_id': postId,
+        'post_title': payload['post_title'] as String?,
+        'created_at': FieldValue.serverTimestamp(),
+        'updated_at': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      debugPrint(
+        '[SyncView] Remote view created viewId=${job.entityId} post=$postId viewer=$viewerId',
+      );
+    }
 
     final authorId = payload['author_id'] as String?;
     if (authorId != null && authorId != viewerId) {

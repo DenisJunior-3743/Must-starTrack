@@ -516,6 +516,41 @@ class _MediaShelfTile extends StatelessWidget {
     final width = mode == _MediaStripMode.posts ? 220.0 : 180.0;
     final previewUrl = _previewUrl();
 
+    // For horizontal strips (photos/videos) the tile must NOT use Expanded —
+    // the parent ListView has unbounded height driven by the Posts-tab height,
+    // which causes Expanded to stretch the image absurdly.  Fix: fixed image
+    // height for strip modes; Expanded only for the Posts grid (mainAxisExtent
+    // already pins each tile to 178 px there).
+    final isStrip = mode != _MediaStripMode.posts;
+    const stripImageHeight = 120.0;
+
+    final imageChild = ClipRRect(
+      borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+      child: Container(
+        color: AppColors.primaryTint10,
+        child: previewUrl != null && mode != _MediaStripMode.videos
+            ? isLocalMediaPath(previewUrl)
+                ? Image.file(
+                    File(previewUrl),
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    errorBuilder: (_, __, ___) => _MediaFallback(mode: mode),
+                  )
+                : CachedNetworkImage(
+                    imageUrl: previewUrl,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    errorWidget: (_, __, ___) => _MediaFallback(mode: mode),
+                    placeholder: (_, __) => Container(
+                      color: AppColors.primaryTint10,
+                    ),
+                  )
+            : mode == _MediaStripMode.videos && _videoUrl() != null
+                ? _VideoThumbTile(url: _videoUrl()!)
+                : _MediaFallback(mode: mode),
+      ),
+    );
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
@@ -523,35 +558,12 @@ class _MediaShelfTile extends StatelessWidget {
         width: width,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: isStrip ? MainAxisSize.min : MainAxisSize.max,
           children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-                child: Container(
-                  color: AppColors.primaryTint10,
-                  child: previewUrl != null && mode != _MediaStripMode.videos
-                      ? isLocalMediaPath(previewUrl)
-                          ? Image.file(
-                              File(previewUrl),
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                              errorBuilder: (_, __, ___) => _MediaFallback(mode: mode),
-                            )
-                          : CachedNetworkImage(
-                              imageUrl: previewUrl,
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                              errorWidget: (_, __, ___) => _MediaFallback(mode: mode),
-                              placeholder: (_, __) => Container(
-                                color: AppColors.primaryTint10,
-                              ),
-                            )
-                      : mode == _MediaStripMode.videos && _videoUrl() != null
-                          ? _VideoThumbTile(url: _videoUrl()!)
-                          : _MediaFallback(mode: mode),
-                ),
-              ),
-            ),
+            if (isStrip)
+              SizedBox(height: stripImageHeight, child: imageChild)
+            else
+              Expanded(child: imageChild),
             const SizedBox(height: 8),
             Text(
               post.title,
@@ -719,172 +731,8 @@ class _FeedAppBar extends StatelessWidget {
     return displayName.split(' ').first;
   }
 
-  void _handleLoginTap(BuildContext context) {
-    final guards = sl<RouteGuards>();
-    if (!guards.isAuthenticated) {
-      context.push(RouteNames.login);
-      return;
-    }
 
-    final role = guards.currentRole;
-    if (role == UserRole.superAdmin) {
-      context.go(RouteNames.superAdminDashboard);
-    } else if (role == UserRole.admin) {
-      context.go(RouteNames.adminDashboard);
-    } else {
-      context.go(RouteNames.home);
-    }
-  }
 
-  void _handleRegisterTap(BuildContext context) {
-    final guards = sl<RouteGuards>();
-    if (!guards.isAuthenticated) {
-      context.push(RouteNames.registerStep1);
-      return;
-    }
-
-    final role = guards.currentRole;
-    if (role == UserRole.superAdmin) {
-      context.go(RouteNames.superAdminDashboard);
-    } else if (role == UserRole.admin) {
-      context.go(RouteNames.adminDashboard);
-    } else {
-      context.go(RouteNames.home);
-    }
-  }
-
-  Future<void> _showAuthEntryModal(BuildContext context) async {
-    final guards = sl<RouteGuards>();
-
-    await showModalBottomSheet<void>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (modalContext) {
-        return SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.border(modalContext),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    const Icon(Icons.account_circle_outlined, color: AppColors.primary),
-                    const SizedBox(width: 8),
-                    Text(
-                      guards.isAuthenticated ? 'Session Active' : 'Welcome',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  guards.isAuthenticated
-                      ? 'You already have an active session. Continue to your main screen.'
-                      : 'Sign in if you already have an account, or register to get started.',
-                  style: GoogleFonts.plusJakartaSans(height: 1.35),
-                ),
-                const SizedBox(height: 16),
-                if (!guards.isAuthenticated) ...[
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton(
-                      onPressed: () {
-                        Navigator.of(modalContext).pop();
-                        _handleLoginTap(context);
-                      },
-                      child: const Text('Login'),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: () {
-                        Navigator.of(modalContext).pop();
-                        _handleRegisterTap(context);
-                      },
-                      child: const Text('Register'),
-                    ),
-                  ),
-                ] else ...[
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: () {
-                        Navigator.of(modalContext).pop();
-                        _handleLoginTap(context);
-                      },
-                      child: const Text('Continue'),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        Navigator.of(modalContext).pop();
-                        final confirmed = await showDialog<bool>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: const Text('Log out?'),
-                            content: const Text(
-                                'You will be returned to the login screen.'),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(ctx, false),
-                                child: const Text('Cancel'),
-                              ),
-                              FilledButton(
-                                onPressed: () => Navigator.pop(ctx, true),
-                                style: FilledButton.styleFrom(
-                                    backgroundColor: AppColors.danger),
-                                child: const Text('Log out'),
-                              ),
-                            ],
-                          ),
-                        );
-                        if (confirmed == true) {
-                          await sl<AuthCubit>().logout();
-                          if (context.mounted) context.go(RouteNames.login);
-                        }
-                      },
-                      icon: const Icon(Icons.logout_rounded, size: 18,
-                          color: AppColors.danger),
-                      label: Text('Log out',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.danger)),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: AppColors.danger),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -892,6 +740,8 @@ class _FeedAppBar extends StatelessWidget {
     return SliverAppBar(
       floating: true,
       snap: true,
+      automaticallyImplyLeading: false,
+      actions: const [SizedBox.shrink()],
       backgroundColor: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.92),
       elevation: 0,
       titleSpacing: 0,
@@ -976,17 +826,6 @@ class _FeedAppBar extends StatelessWidget {
                       ),
                       onPressed: () => context.push(RouteNames.notifications),
                       tooltip: 'Notifications',
-                    ),
-                    IconButton(
-                      constraints: const BoxConstraints.tightFor(
-                        width: 34,
-                        height: 34,
-                      ),
-                      padding: EdgeInsets.zero,
-                      iconSize: 19,
-                      icon: const Icon(Icons.account_circle_outlined),
-                      onPressed: () => _showAuthEntryModal(context),
-                      tooltip: 'Account',
                     ),
                     // Hamburger — opens the settings end-drawer
                     IconButton(
