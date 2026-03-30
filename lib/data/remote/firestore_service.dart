@@ -30,6 +30,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 import '../models/post_model.dart';
+import '../models/faculty_model.dart';
+import '../models/course_model.dart';
 import '../local/dao/message_dao.dart';
 import '../local/dao/notification_dao.dart';
 
@@ -51,6 +53,58 @@ class FirestoreService {
       _db.collection('notifications');
   CollectionReference<Map<String, dynamic>> get _follows =>
       _db.collection('follows');
+  CollectionReference<Map<String, dynamic>> get _faculties =>
+      _db.collection('faculties');
+  CollectionReference<Map<String, dynamic>> get _courses =>
+      _db.collection('courses');
+  CollectionReference<Map<String, dynamic>> get _recommendationLogs =>
+      _db.collection('recommendation_logs');
+    CollectionReference<Map<String, dynamic>> get _postRatings =>
+      _db.collection('post_ratings');
+
+  // ── Recommendation log operations ─────────────────────────────────────────
+
+  /// Pushes a batch of recommendation log rows to Firestore.
+  /// Splits into chunks of 400 to stay under the 500-write Firestore limit.
+  /// Fire-and-forget from the DAO layer — failures are acceptable.
+  Future<void> pushRecommendationLogs(List<Map<String, dynamic>> rows) async {
+    if (rows.isEmpty) return;
+    const chunkSize = 400;
+    for (var i = 0; i < rows.length; i += chunkSize) {
+      final chunk = rows.sublist(i, (i + chunkSize).clamp(0, rows.length));
+      final batch = _db.batch();
+      for (final row in chunk) {
+        final docId = row['id'] as String?;
+        if (docId == null || docId.isEmpty) continue;
+        batch.set(
+          _recommendationLogs.doc(docId),
+          {
+            ...row,
+            'server_ts': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+      }
+      await batch.commit();
+    }
+  }
+
+  Future<void> setPostRating({
+    required String ratingId,
+    required Map<String, dynamic> payload,
+  }) async {
+    await _postRatings.doc(ratingId).set(
+      {
+        ...payload,
+        'server_ts': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+  }
+
+  Future<void> deletePostRating(String ratingId) async {
+    await _postRatings.doc(ratingId).delete();
+  }
 
   // ── User operations ───────────────────────────────────────────────────────
 
@@ -131,7 +185,7 @@ class FirestoreService {
   }) async {
     Query<Map<String, dynamic>> query = _posts
         .where('is_archived', isEqualTo: false)
-        .where('moderation_status', isEqualTo: 'approved')
+        .where('moderation_status', whereIn: [null, 'approved']) // Only show approved or unmoderated posts
         .orderBy('created_at', descending: true)
         .limit(pageSize);
 
@@ -156,42 +210,21 @@ class FirestoreService {
   Future<List<PostModel>> getRecentPosts({int limit = 50}) async {
     debugPrint('[FirestoreService] getRecentPosts(limit=$limit) starting');
 
-    // Firestore whereIn cannot include null. Query approved and unmoderated
-    // separately, then merge so hydration still includes both visibility states.
-    final approvedQuery = _posts
+    // The security rules require is_archived == false.
+    // If we don't include this filter, the entire query is rejected.
+    final snapshot = await _posts
         .where('is_archived', isEqualTo: false)
-        .where('moderation_status', isEqualTo: 'approved')
         .orderBy('created_at', descending: true)
         .limit(limit)
         .get(const GetOptions(source: Source.serverAndCache));
-
-    final unmoderatedQuery = _posts
-        .where('is_archived', isEqualTo: false)
-        .where('moderation_status', isNull: true)
-        .orderBy('created_at', descending: true)
-        .limit(limit)
-        .get(const GetOptions(source: Source.serverAndCache));
-
-    final snapshots = await Future.wait([approvedQuery, unmoderatedQuery]);
-    final snapshotDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[
-      ...snapshots[0].docs,
-      ...snapshots[1].docs,
-    ];
-
-    final fromCache = snapshots.every((s) => s.metadata.isFromCache);
 
     debugPrint(
-      '[FirestoreService] getRecentPosts fetched ${snapshotDocs.length} raw docs '
-      'fromCache=$fromCache',
+      '[FirestoreService] getRecentPosts fetched ${snapshot.docs.length} raw docs '
+      'fromCache=${snapshot.metadata.isFromCache}',
     );
 
     final posts = <PostModel>[];
-    final seenIds = <String>{};
-    for (final doc in snapshotDocs) {
-      if (!seenIds.add(doc.id)) {
-        continue;
-      }
-
+    for (final doc in snapshot.docs) {
       try {
         final data = doc.data();
         debugPrint(
@@ -204,6 +237,7 @@ class FirestoreService {
         );
 
         final post = PostModel.fromJson({'id': doc.id, ...data});
+        // This second check is redundant if the query filter works, but safe.
         if (post.isArchived) {
           debugPrint('[FirestoreService] skipping archived post=${doc.id}');
           continue;
@@ -217,10 +251,7 @@ class FirestoreService {
     }
 
     posts.sort((left, right) => right.createdAt.compareTo(left.createdAt));
-    if (posts.length > limit) {
-      posts.removeRange(limit, posts.length);
-    }
-    debugPrint('[FirestoreService] returning ${posts.length} hydrated posts after merge');
+    debugPrint('[FirestoreService] returning ${posts.length} hydrated posts');
     return posts;
   }
 
@@ -418,38 +449,16 @@ class FirestoreService {
   /// Full-text search via Firestore array-contains (skills field).
   /// For production, replace with Algolia or Firebase Extensions Search.
   Future<List<PostModel>> searchPostsBySkill(String skill) async {
-    final approvedQuery = _posts
+    final snapshot = await _posts
         .where('skills', arrayContains: skill)
         .where('is_archived', isEqualTo: false)
-        .where('moderation_status', isEqualTo: 'approved')
         .orderBy('created_at', descending: true)
         .limit(30)
         .get();
 
-    final unmoderatedQuery = _posts
-        .where('skills', arrayContains: skill)
-        .where('is_archived', isEqualTo: false)
-        .where('moderation_status', isNull: true)
-        .orderBy('created_at', descending: true)
-        .limit(30)
-        .get();
-
-    final snapshots = await Future.wait([approvedQuery, unmoderatedQuery]);
-    final mergedById = <String, Map<String, dynamic>>{};
-
-    for (final doc in snapshots[0].docs) {
-      mergedById[doc.id] = {'id': doc.id, ...doc.data()};
-    }
-    for (final doc in snapshots[1].docs) {
-      mergedById[doc.id] = {'id': doc.id, ...doc.data()};
-    }
-
-    final merged = mergedById.values
-        .map(PostModel.fromJson)
-        .toList()
-      ..sort((left, right) => right.createdAt.compareTo(left.createdAt));
-
-    return merged.take(30).toList();
+    return snapshot.docs
+        .map((d) => PostModel.fromJson({'id': d.id, ...d.data()}))
+        .toList();
   }
 
   // ── Admin operations ──────────────────────────────────────────────────────
@@ -485,5 +494,29 @@ class FirestoreService {
       'total_posts': results[1].count ?? 0,
       'total_follows': results[2].count ?? 0,
     };
+  }
+
+  // ── Faculty operations ────────────────────────────────────────────────────
+
+  Future<void> setFaculty(FacultyModel faculty) async {
+    await _faculties
+        .doc(faculty.id)
+        .set(faculty.toFirestore(), SetOptions(merge: true));
+  }
+
+  Future<void> deleteFaculty(String facultyId) async {
+    await _faculties.doc(facultyId).update({'isActive': false});
+  }
+
+  // ── Course operations ─────────────────────────────────────────────────────
+
+  Future<void> setCourse(CourseModel course) async {
+    await _courses
+        .doc(course.id)
+        .set(course.toFirestore(), SetOptions(merge: true));
+  }
+
+  Future<void> deleteCourse(String courseId) async {
+    await _courses.doc(courseId).update({'isActive': false});
   }
 }

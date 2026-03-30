@@ -128,9 +128,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     _faculty = post.faculty;
     _type = post.type;
     _visibility = post.visibility;
-    _tags = List<String>.from(post.tags);
+    _tags = _normalizeSkillTokens(post.tags);
     _linkItems = post.externalLinks.map((m) => _LinkItem(url: m['url'] ?? '', description: m['description'] ?? '')).toList();
-    _qualifications = post.areaOfExpertise ?? '';
+    _qualifications = post.areaOfExpertise ??
+      (post.skillsUsed.isNotEmpty ? post.skillsUsed.join(', ') : '');
     _qualificationsCtrl.text = _qualifications;
     _deadline = post.opportunityDeadline;
     // Seed multi-faculty selection for opportunities.
@@ -140,6 +141,42 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     _deadlineCtrl.text = _deadline != null ? '${_deadline!.year}-${_deadline!.month.toString().padLeft(2,'0')}-${_deadline!.day.toString().padLeft(2,'0')}' : '';
     _youtubeCtrl.text = post.youtubeUrl ?? '';
     _uploads.addAll(post.mediaUrls.map(_uploadItemFromSource));
+  }
+
+  List<String> _normalizeSkillTokens(Iterable<String> input) {
+    final normalized = <String>[];
+    final seen = <String>{};
+
+    for (final raw in input) {
+      final fragments = raw.split(RegExp(r'[,;|\n\r]+'));
+      for (final fragment in fragments) {
+        final token = fragment.trim().replaceAll(RegExp(r'\s+'), ' ');
+        if (token.isEmpty) {
+          continue;
+        }
+        final key = token.toLowerCase();
+        if (seen.add(key)) {
+          normalized.add(token);
+        }
+      }
+    }
+
+    return normalized;
+  }
+
+  List<String> _normalizeSkillTokensFromText(String input) {
+    if (input.trim().isEmpty) {
+      return const [];
+    }
+    return _normalizeSkillTokens([input]);
+  }
+
+  String? _normalizeExpertiseText(String input) {
+    final tokens = _normalizeSkillTokensFromText(input);
+    if (tokens.isEmpty) {
+      return null;
+    }
+    return tokens.join(', ');
   }
 
   Future<void> _pickMedia() async {
@@ -376,6 +413,16 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     final wasOffline = await _isOffline();
     final mediaUrls = _uploads.map((upload) => upload.source).toList();
     final now = DateTime.now();
+    final normalizedTags = _normalizeSkillTokens(_tags);
+    final normalizedOpportunitySkills =
+      _normalizeSkillTokensFromText(_qualificationsCtrl.text);
+    final normalizedSkillsUsed =
+      _type == 'project' ? normalizedTags : normalizedOpportunitySkills;
+    final normalizedAreaOfExpertise =
+      _type == 'opportunity' ? _normalizeExpertiseText(_qualificationsCtrl.text) : null;
+    final moderationStatus = publishingUser.role == UserRole.student
+      ? ModerationStatus.pending
+      : ModerationStatus.approved;
 
     final post = widget.existingPost?.copyWith(
           authorId: publishingUser.id,
@@ -389,13 +436,14 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           faculty: _type == 'opportunity'
               ? (_selectedFaculties.isEmpty ? null : _selectedFaculties.join(', '))
               : _faculty,
-          tags: _type == 'project' ? _tags : [],
-          skillsUsed: _tags,
+          tags: _type == 'project' ? normalizedTags : [],
+          skillsUsed: normalizedSkillsUsed,
           youtubeUrl: _youtubeCtrl.text.trim().isNotEmpty ? _youtubeCtrl.text.trim() : null,
           visibility: _visibility,
+          moderationStatus: moderationStatus,
           mediaUrls: _type == 'project' ? mediaUrls : [],
           externalLinks: _linkItems.map((l) => {'url': l.url, 'description': l.description}).toList(),
-          areaOfExpertise: _type == 'opportunity' ? _qualifications : null,
+          areaOfExpertise: normalizedAreaOfExpertise,
           opportunityDeadline: _type == 'opportunity' ? _deadline : null,
           updatedAt: now,
         ) ??
@@ -412,13 +460,14 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           faculty: _type == 'opportunity'
               ? (_selectedFaculties.isEmpty ? null : _selectedFaculties.join(', '))
               : _faculty,
-          tags: _type == 'project' ? _tags : [],
-          skillsUsed: _tags,
+          tags: _type == 'project' ? normalizedTags : [],
+          skillsUsed: normalizedSkillsUsed,
           youtubeUrl: _youtubeCtrl.text.trim().isNotEmpty ? _youtubeCtrl.text.trim() : null,
           visibility: _visibility,
+          moderationStatus: moderationStatus,
           mediaUrls: _type == 'project' ? mediaUrls : [],
           externalLinks: _linkItems.map((l) => {'url': l.url, 'description': l.description}).toList(),
-          areaOfExpertise: _type == 'opportunity' ? _qualifications : null,
+          areaOfExpertise: normalizedAreaOfExpertise,
           opportunityDeadline: _type == 'opportunity' ? _deadline : null,
           createdAt: now,
           updatedAt: now,

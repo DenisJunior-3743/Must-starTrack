@@ -1,15 +1,13 @@
 ﻿import 'dart:async';
 import 'dart:io';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/media_path_utils.dart';
+import '../../../core/utils/video_cache_utils.dart';
 
 class OfflineVideoPlayerScreen extends StatefulWidget {
   final String source;
@@ -49,7 +47,7 @@ class _OfflineVideoPlayerScreenState extends State<OfflineVideoPlayerScreen> {
   }
 
   Future<void> _prepareVideo({bool forceRefresh = false}) async {
-    final playbackSource = _getPreferredPlaybackSource(widget.source);
+    final playbackSource = getPreferredPlaybackSource(widget.source);
     debugPrint(
       '[OfflineVideo] prepare start: source=${widget.source} '
       'playbackSource=$playbackSource '
@@ -67,7 +65,7 @@ class _OfflineVideoPlayerScreenState extends State<OfflineVideoPlayerScreen> {
     try {
       await _controller?.dispose();
 
-      final cachedFile = await _getCachedVideoFile(playbackSource);
+      final cachedFile = await getCachedVideoFile(playbackSource);
       if (cachedFile != null) {
         final exists = await cachedFile.exists();
         final length = exists ? await cachedFile.length() : 0;
@@ -152,8 +150,8 @@ class _OfflineVideoPlayerScreenState extends State<OfflineVideoPlayerScreen> {
     }
 
     try {
-      final playbackSource = _getPreferredPlaybackSource(widget.source);
-      final file = await _resolveVideoFile(
+      final playbackSource = getPreferredPlaybackSource(widget.source);
+      final file = await resolveVideoFile(
         playbackSource,
         forceRefresh: forceRefresh,
         onProgress: (received, total) {
@@ -321,38 +319,6 @@ class _OfflineVideoPlayerScreenState extends State<OfflineVideoPlayerScreen> {
   }
 }
 
-String _getPreferredPlaybackSource(String source) {
-  if (isLocalMediaPath(source)) {
-    return source;
-  }
-
-  final uri = Uri.tryParse(source);
-  if (uri == null || !uri.host.contains('res.cloudinary.com')) {
-    return source;
-  }
-
-  const marker = '/video/upload/';
-  final url = uri.toString();
-  if (!url.contains(marker)) {
-    return source;
-  }
-
-  final afterUpload = url.substring(url.indexOf(marker) + marker.length);
-  if (!afterUpload.startsWith('v')) {
-    return source;
-  }
-
-  final transformed = url.replaceFirst(
-    marker,
-    '/video/upload/f_mp4,vc_h264,ac_aac,w_720,c_limit,q_auto/',
-  );
-
-  if (transformed != source) {
-    debugPrint('[OfflineVideo] using Cloudinary playback transform: $transformed');
-  }
-  return transformed;
-}
-
 String _buildFriendlyVideoError(Object error) {
   final message = error.toString();
   if (_isCodecCapabilityError(message)) {
@@ -459,97 +425,4 @@ class _VideoErrorView extends StatelessWidget {
   }
 }
 
-Future<File> _resolveVideoFile(
-  String source, {
-  bool forceRefresh = false,
-  ProgressCallback? onProgress,
-}) async {
-  if (isLocalMediaPath(source)) {
-    final localPath = source.startsWith('file://')
-        ? Uri.parse(source).toFilePath()
-        : source;
-    return File(localPath);
-  }
 
-  final cacheFile = await _getCachedVideoFile(source);
-  if (cacheFile == null) {
-    throw Exception('Could not prepare local video cache.');
-  }
-
-  debugPrint(
-    '[OfflineVideo] resolve file: source=$source cachePath=${cacheFile.path} '
-    'forceRefresh=$forceRefresh',
-  );
-
-  if (!forceRefresh && await cacheFile.exists() && await cacheFile.length() > 1024) {
-    debugPrint('[OfflineVideo] using existing cache without redownload');
-    return cacheFile;
-  }
-
-  final tempFile = File('${cacheFile.path}.part');
-  if (await tempFile.exists()) {
-    await tempFile.delete();
-  }
-
-  final dio = Dio();
-  final response = await dio.download(
-    source,
-    tempFile.path,
-    onReceiveProgress: onProgress,
-    options: Options(
-      followRedirects: true,
-      validateStatus: (status) => status != null && status >= 200 && status < 400,
-      responseType: ResponseType.bytes,
-    ),
-  );
-
-  final contentType = response.headers.value(Headers.contentTypeHeader);
-  final contentLength = response.headers.value(Headers.contentLengthHeader);
-  debugPrint(
-    '[OfflineVideo] download response: status=${response.statusCode} '
-    'contentType=$contentType contentLength=$contentLength',
-  );
-
-  final tempLength = await tempFile.length();
-  debugPrint('[OfflineVideo] temp file size after download: $tempLength');
-  if (tempLength <= 1024) {
-    throw Exception(
-      'Downloaded file is too small to be a valid video. '
-      'contentType=$contentType size=$tempLength',
-    );
-  }
-
-  if (await cacheFile.exists()) {
-    await cacheFile.delete();
-  }
-  final finalFile = await tempFile.rename(cacheFile.path);
-  debugPrint('[OfflineVideo] cache committed: ${finalFile.path}');
-  return finalFile;
-}
-
-Future<File?> _getCachedVideoFile(String source) async {
-  if (isLocalMediaPath(source)) {
-    final localPath = source.startsWith('file://')
-        ? Uri.parse(source).toFilePath()
-        : source;
-    return File(localPath);
-  }
-
-  final directory = await getApplicationDocumentsDirectory();
-  final cacheDir = Directory(p.join(directory.path, 'video_cache'));
-  if (!await cacheDir.exists()) {
-    await cacheDir.create(recursive: true);
-  }
-
-  final uri = Uri.parse(source);
-  final ext = p.extension(uri.path).isNotEmpty ? p.extension(uri.path) : '.mp4';
-  return File(p.join(cacheDir.path, '${_stableHash(source)}$ext'));
-}
-
-String _stableHash(String input) {
-  var hash = 0;
-  for (final codeUnit in input.codeUnits) {
-    hash = ((hash * 31) + codeUnit) & 0x7fffffff;
-  }
-  return hash.toRadixString(16);
-}

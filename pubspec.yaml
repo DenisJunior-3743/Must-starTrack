@@ -88,6 +88,10 @@ dependencies:
   youtube_player_flutter: ^9.0.4
   # photo_view: pinch-to-zoom project images
   photo_view: ^0.15.0
+  # record: capture voice notes for chat
+  record: ^5.2.0
+  # just_audio: play voice notes from local path or URL
+  just_audio: ^0.9.44
 
   # ── Feed & Lists ───────────────────────────────────────────
   # infinite_scroll_pagination: paginated lazy-loading feeds
@@ -134,6 +138,11 @@ dependencies:
   # ── Permissions ────────────────────────────────────────────
   # permission_handler: camera, storage, notification permissions
   permission_handler: ^11.3.1
+
+dependency_overrides:
+  # record_linux 0.7.2 doesn't implement startStream/hasPermission(request:)
+  # added in record_platform_interface 1.5.0; force the compatible version.
+  record_linux: ^1.3.0
 
 dev_dependencies:
   flutter_test:

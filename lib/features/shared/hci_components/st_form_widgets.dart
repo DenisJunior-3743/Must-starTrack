@@ -569,15 +569,33 @@ class _SkillChipInputState extends State<SkillChipInput> {
   }
 
   void _addSkill(String value) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty) return;
-    if (_skills.contains(trimmed)) {
-      _controller.clear();
+    final existingLower = _skills.map((s) => s.toLowerCase()).toSet();
+    final incoming = value
+        .split(RegExp(r'[,;|\n\r]+'))
+        .map((part) => part.trim().replaceAll(RegExp(r'\s+'), ' '))
+        .where((part) => part.isNotEmpty)
+        .toList();
+
+    if (incoming.isEmpty) {
       return;
     }
-    if (_skills.length >= widget.maxSkills) return;
-    setState(() => _skills.add(trimmed));
-    widget.onChanged(_skills);
+
+    var added = false;
+    for (final skill in incoming) {
+      if (_skills.length >= widget.maxSkills) {
+        break;
+      }
+      if (!existingLower.add(skill.toLowerCase())) {
+        continue;
+      }
+      _skills.add(skill);
+      added = true;
+    }
+
+    if (added) {
+      setState(() {});
+      widget.onChanged(_skills);
+    }
     _controller.clear();
   }
 
@@ -648,7 +666,7 @@ class _SkillChipInputState extends State<SkillChipInput> {
                     onSubmitted: _addSkill,
                     onChanged: (v) {
                       if (v.endsWith(',') || v.endsWith(' ')) {
-                        _addSkill(v.replaceAll(',', '').trim());
+                        _addSkill(v.trim());
                       }
                     },
                   ),

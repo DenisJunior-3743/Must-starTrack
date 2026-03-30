@@ -357,6 +357,30 @@ CREATE TABLE post_joins (
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
     );
+CREATE TABLE faculties (
+      id                  TEXT PRIMARY KEY,
+      name                TEXT NOT NULL UNIQUE,
+      code                TEXT NOT NULL UNIQUE,
+      description         TEXT,
+      contact_email       TEXT,
+      head_of_faculty     TEXT,
+      is_active           INTEGER NOT NULL DEFAULT 1,
+      created_at          TEXT NOT NULL,
+      updated_at          TEXT NOT NULL,
+      sync_status         INTEGER NOT NULL DEFAULT 0
+    );
+CREATE TABLE courses (
+      id                  TEXT PRIMARY KEY,
+      faculty_id          TEXT NOT NULL,
+      name                TEXT NOT NULL,
+      code                TEXT NOT NULL UNIQUE,
+      description         TEXT,
+      is_active           INTEGER NOT NULL DEFAULT 1,
+      created_at          TEXT NOT NULL,
+      updated_at          TEXT NOT NULL,
+      sync_status         INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (faculty_id) REFERENCES faculties(id) ON DELETE CASCADE
+    );
 CREATE INDEX idx_posts_author  ON posts(author_id);
 CREATE INDEX idx_posts_faculty ON posts(faculty);
 CREATE INDEX idx_posts_status  ON posts(status);
@@ -375,4 +399,7 @@ CREATE INDEX idx_follows_followee ON follows(followee_id);
 CREATE INDEX idx_activity_user ON activity_logs(user_id);
 CREATE INDEX idx_post_joins_user ON post_joins(user_id);
 CREATE INDEX idx_post_joins_post ON post_joins(post_id);
+CREATE INDEX idx_courses_faculty ON courses(faculty_id);
+CREATE INDEX idx_courses_is_active ON courses(is_active);
+CREATE INDEX idx_faculties_is_active ON faculties(is_active);
 COMMIT;

@@ -262,30 +262,46 @@ class UserDao {
   Future<List<UserModel>> searchUsers({
     required String query,
     String? faculty,
+    String? course,
     String? skill,
     int page = 0,
     int pageSize = 20,
   }) async {
     final db = await _db.database;
 
-    // Join users + profiles for a single query
+    final where = <String>[
+      '(u.display_name LIKE ? OR p.skills LIKE ?)',
+      'u.is_banned = 0',
+      "u.role = 'student'",
+    ];
+    final args = <Object?>['%$query%', '%$query%'];
+
+    if (faculty != null && faculty.trim().isNotEmpty) {
+      where.add('p.faculty = ?');
+      args.add(faculty.trim());
+    }
+    if (course != null && course.trim().isNotEmpty) {
+      where.add('p.program_name = ?');
+      args.add(course.trim());
+    }
+    if (skill != null && skill.trim().isNotEmpty) {
+      where.add('p.skills LIKE ?');
+      args.add('%${skill.trim()}%');
+    }
+
     final sql = '''
       SELECT u.*, p.skills, p.faculty, p.program_name, p.bio
       FROM ${DatabaseSchema.tableUsers} u
       LEFT JOIN ${DatabaseSchema.tableProfiles} p ON p.user_id = u.id
-      WHERE (u.display_name LIKE ? OR p.skills LIKE ?)
-      ${faculty != null ? "AND p.faculty = '$faculty'" : ""}
-      ${skill != null ? "AND p.skills LIKE '%$skill%'" : ""}
-      AND u.is_banned = 0
-      AND u.role = 'student'
+      WHERE ${where.join(' AND ')}
       ORDER BY p.activity_streak DESC
       LIMIT ? OFFSET ?
     ''';
 
-    final pattern = '%$query%';
-    final rows = await db.rawQuery(sql, [
-      pattern, pattern, pageSize, page * pageSize,
-    ]);
+    args.add(pageSize);
+    args.add(page * pageSize);
+
+    final rows = await db.rawQuery(sql, args);
 
     return Future.wait(rows.map((row) async {
       final profile = await getProfileByUserId(row['id'] as String);

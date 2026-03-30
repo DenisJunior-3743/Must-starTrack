@@ -31,6 +31,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'app/app.dart';
 import 'core/di/injection_container.dart';
+import 'core/services/session_timeout_service.dart';
 import 'features/auth/bloc/auth_cubit.dart';
 
 Future<void> _ensureFirebaseInitialized() async {
@@ -86,6 +87,15 @@ Future<void> main() async {
   // Resolves immediately from SQLite if a session is cached.
   // SplashScreen listens for the result and navigates accordingly.
   await sl<AuthCubit>().checkAuthStatus();
+
+  // ── Step 6b: Expire stale sessions before first frame ─────────────────────
+  // If the app was restarted and the last recorded activity is older than
+  // the background timeout threshold, sign out before rendering anything.
+  // This prevents ghost sessions from surviving device restarts.
+  if (sl<AuthCubit>().state is AuthAuthenticated &&
+      sl<SessionTimeoutService>().isStale()) {
+    await sl<AuthCubit>().logout();
+  }
 
   // ── Step 7: Launch app ────────────────────────────────────────────────────
   runApp(const StarTrackApp());

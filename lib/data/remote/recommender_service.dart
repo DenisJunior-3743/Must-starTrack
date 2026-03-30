@@ -39,6 +39,8 @@ class RecommenderService {
     required List<PostModel> candidates,
     Set<String> recentlyViewedCategories = const {},
     Set<String> recentSearchTerms = const {},
+    Map<String, double> lecturerRatingsByPost = const {},
+    Map<String, double> studentRatingsByPost = const {},
   }) {
     final userSkills =
         user.profile?.skills.map((e) => e.toLowerCase()).toSet() ??
@@ -99,6 +101,18 @@ class RecommenderService {
         reasons.add('opportunity_fit');
       }
 
+      final lecturerRating = lecturerRatingsByPost[post.id];
+      final studentRating = studentRatingsByPost[post.id];
+      final ratingBlend = _blendRoleRatings(
+        lecturerRating: lecturerRating,
+        studentRating: studentRating,
+      );
+      if (ratingBlend != null) {
+        score += 0.12 * ratingBlend;
+        if (lecturerRating != null) reasons.add('lecturer_rating_signal');
+        if (studentRating != null) reasons.add('student_rating_signal');
+      }
+
       return RecommendedPost(
         post: post,
         score: score.clamp(0.0, 1.0),
@@ -119,12 +133,16 @@ class RecommenderService {
     required List<PostModel> candidates,
     Set<String> recentlyViewedCategories = const {},
     Set<String> recentSearchTerms = const {},
+    Map<String, double> lecturerRatingsByPost = const {},
+    Map<String, double> studentRatingsByPost = const {},
   }) async {
     final localRanked = rankLocally(
       user: user,
       candidates: candidates,
       recentlyViewedCategories: recentlyViewedCategories,
       recentSearchTerms: recentSearchTerms,
+      lecturerRatingsByPost: lecturerRatingsByPost,
+      studentRatingsByPost: studentRatingsByPost,
     );
 
     final gemini = _geminiService;
@@ -375,5 +393,28 @@ class RecommenderService {
     ].where((value) => value).length;
 
     return completedFields / 4.0;
+  }
+
+  double? _blendRoleRatings({
+    required double? lecturerRating,
+    required double? studentRating,
+  }) {
+    const lecturerWeight = 0.70;
+    const studentWeight = 0.30;
+
+    var totalWeight = 0.0;
+    var weightedScore = 0.0;
+
+    if (lecturerRating != null) {
+      weightedScore += lecturerRating.clamp(0.0, 1.0) * lecturerWeight;
+      totalWeight += lecturerWeight;
+    }
+    if (studentRating != null) {
+      weightedScore += studentRating.clamp(0.0, 1.0) * studentWeight;
+      totalWeight += studentWeight;
+    }
+
+    if (totalWeight <= 0) return null;
+    return (weightedScore / totalWeight).clamp(0.0, 1.0);
   }
 }

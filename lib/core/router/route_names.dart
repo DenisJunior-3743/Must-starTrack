@@ -39,6 +39,7 @@ abstract final class RouteNames {
   static const String adminUsers         = '/admin/users';
   static const String adminAnalytics     = '/admin/analytics';
   static const String adminReports       = '/admin/reports';
+  static const String adminSync          = '/admin/sync';
   static const String activityLogs       = '/admin/activity-logs';
   static const String superAdminDashboard = '/super-admin';
   static const String superAdminSettings = '/super-admin/settings';
@@ -112,6 +113,7 @@ abstract final class Routes {
   static const String adminUsers = RouteNames.adminUsers;
   static const String adminAnalytics = RouteNames.adminAnalytics;
   static const String adminReports = RouteNames.adminReports;
+  static const String adminSync = RouteNames.adminSync;
   static const String activityLogs = RouteNames.activityLogs;
   static const String superAdminDashboard = RouteNames.superAdminDashboard;
   static const String superAdminSettings = RouteNames.superAdminSettings;

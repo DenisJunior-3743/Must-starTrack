@@ -21,6 +21,8 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/must_validators.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_names.dart';
+import '../../../data/local/dao/faculty_dao.dart';
+import '../../../data/local/dao/course_dao.dart';
 import '../../shared/hci_components/st_form_widgets.dart';
 import '../bloc/auth_cubit.dart';
 
@@ -47,24 +49,62 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
   int? _yearOfStudy;
   String? _crossValidationError;
 
-  static const Map<String, List<_ProgramOption>> _facultyPrograms = {
-    'Computing and Informatics': [
+  // DB-backed faculty/program data
+  bool _loadingFaculties = true;
+  Map<String, List<_ProgramOption>> _facultyPrograms = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFacultyData();
+  }
+
+  Future<void> _loadFacultyData() async {
+    try {
+      final faculties = await sl<FacultyDao>().getAllFaculties();
+      final courseDao = sl<CourseDao>();
+      final map = <String, List<_ProgramOption>>{};
+
+      for (final faculty in faculties) {
+        final courses = await courseDao.getCoursesByFaculty(faculty.id);
+        map[faculty.name] = courses
+            .map((c) => _ProgramOption(code: c.code, name: '${c.name} (${c.code})'))
+            .toList();
+      }
+
+      if (mounted) {
+        setState(() {
+          _facultyPrograms = map;
+          _loadingFaculties = false;
+        });
+      }
+    } catch (_) {
+      // Fallback to hardcoded data if DB is empty / unavailable
+      if (mounted) {
+        setState(() {
+          _facultyPrograms = _fallbackFacultyPrograms;
+          _loadingFaculties = false;
+        });
+      }
+    }
+  }
+
+  /// Fallback used only when the DB has no seeded faculties yet.
+  static const Map<String, List<_ProgramOption>> _fallbackFacultyPrograms = {
+    'Faculty of Computing and Informatics': [
       _ProgramOption(code: 'BSE', name: 'Bachelor of Software Engineering (BSE)'),
       _ProgramOption(code: 'BCS', name: 'Bachelor of Computer Science (BCS)'),
       _ProgramOption(code: 'BIT', name: 'Bachelor of Information Technology (BIT)'),
     ],
-    'Applied Sciences and Technology': [
+    'Faculty of Applied Sciences and Technology': [
       _ProgramOption(code: 'CVE', name: 'Civil Engineering (CVE)'),
-      _ProgramOption(
-          code: 'EEE', name: 'Electrical and Electronics Engineering (EEE)'),
+      _ProgramOption(code: 'EEE', name: 'Electrical and Electronics Engineering (EEE)'),
       _ProgramOption(code: 'BME', name: 'Biomedical Engineering (BME)'),
     ],
-    'Business and Management Sciences': [
+    'Faculty of Business and Management Sciences': [
       _ProgramOption(code: 'ECO', name: 'Bachelor of Science in Economics (ECO)'),
-      _ProgramOption(
-          code: 'BAE', name: 'Bachelor of Arts in Economics (BAE)'),
-      _ProgramOption(
-          code: 'BAF', name: 'Bachelor of Accounting and Finance (BAF)'),
+      _ProgramOption(code: 'BAE', name: 'Bachelor of Arts in Economics (BAE)'),
+      _ProgramOption(code: 'BAF', name: 'Bachelor of Accounting and Finance (BAF)'),
     ],
   };
 
@@ -214,7 +254,9 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
             title: const Text(AppStrings.step2Title),
             leading: BackButton(onPressed: () => ctx.pop()),
           ),
-          body: Form(
+          body: _loadingFaculties
+              ? const Center(child: CircularProgressIndicator())
+              : Form(
             key: _formKey,
             child: Column(
               children: [

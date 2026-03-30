@@ -70,11 +70,14 @@ class _LoginScreenState extends State<LoginScreen> {
       child: BlocConsumer<AuthCubit, AuthState>(
         listener: (ctx, state) {
           if (state is AuthAuthenticated) {
-            // Lecturers land on their dashboard; everyone else on the feed.
+            // Role-aware landing keeps privileged users in their dedicated consoles.
             final role = sl<RouteGuards>().currentRole;
-            final dest = role == UserRole.lecturer
-                ? RouteNames.lecturerDashboard
-                : (requestedFrom ?? RouteNames.home);
+            final dest = switch (role) {
+              UserRole.lecturer => RouteNames.lecturerDashboard,
+              UserRole.admin => RouteNames.adminDashboard,
+              UserRole.superAdmin => RouteNames.superAdminDashboard,
+              _ => requestedFrom ?? RouteNames.home,
+            };
             ctx.go(dest);
           } else if (state is AuthError) {
             ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(

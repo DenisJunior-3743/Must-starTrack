@@ -76,6 +76,12 @@ import '../../features/shared/screens/screen_hub_screen.dart';
 
 // ── Admin screens ─────────────────────────────────────────────────────────────
 import '../../features/admin/screens/admin_dashboard_screen.dart';
+import '../../features/admin/screens/activity_logs_screen.dart';
+import '../../features/admin/screens/sync_settings_screen.dart';
+import '../../features/admin/screens/system_reports_screen.dart';
+import '../../features/admin/screens/suspicion_score_screen.dart';
+import '../../features/admin/screens/user_activity_analytics_screen.dart';
+import '../../features/admin/screens/user_management_screen.dart';
 import '../../features/super_admin/screens/super_admin_dashboard_screen.dart';
 // ── Lecturer screens ──────────────────────────────────────────────────────
 import '../../features/lecturer/screens/lecturer_dashboard_screen.dart';
@@ -152,6 +158,7 @@ class AppRouter {
           Routes.adminUsers,
           Routes.adminAnalytics,
           Routes.adminReports,
+          Routes.adminSync,
           Routes.activityLogs,
         ];
         final isAdminRoute = adminOnly.any(
@@ -442,6 +449,32 @@ class AppRouter {
             create: (_) => sl<AdminCubit>()..loadDashboard(),
             child: const AdminDashboardScreen(),
           ),
+        ),
+        GoRoute(
+          path: Routes.adminModeration,
+          builder: (_, state) => SuspicionScoreScreen(
+            postId: state.uri.queryParameters['postId'],
+          ),
+        ),
+        GoRoute(
+          path: Routes.adminUsers,
+          builder: (_, __) => const UserManagementScreen(),
+        ),
+        GoRoute(
+          path: Routes.adminAnalytics,
+          builder: (_, __) => const UserActivityAnalyticsScreen(),
+        ),
+        GoRoute(
+          path: Routes.adminReports,
+          builder: (_, __) => const SystemReportsScreen(),
+        ),
+        GoRoute(
+          path: Routes.adminSync,
+          builder: (_, __) => const SyncSettingsScreen(),
+        ),
+        GoRoute(
+          path: Routes.activityLogs,
+          builder: (_, __) => const ActivityLogsScreen(),
         ),
 
         // ── Super Admin ────────────────────────────────────────────────────
