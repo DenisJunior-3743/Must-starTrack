@@ -11,6 +11,7 @@
 //      error banner if inconsistency detected.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -41,6 +42,7 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
   final _formKey = GlobalKey<FormState>();
   final _regNumCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
+  final _regNumberFormatter = const _RegNumberFormatter();
   String? _lastAutoEmail;
 
   String? _admissionYear;
@@ -144,8 +146,11 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
     super.dispose();
   }
 
+  String get _normalizedRegNumber =>
+      _RegNumberFormatter.extractValue(_regNumCtrl.text);
+
   void _validateCrossFields() {
-    final regNumber = _regNumCtrl.text.trim();
+    final regNumber = _normalizedRegNumber;
     final email = _emailCtrl.text.trim();
     final admissionYear = _admissionYear;
     final faculty = _faculty;
@@ -193,7 +198,7 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
   }
 
   void _autoFillFromRegNumber() {
-    final parsed = MustValidators.parseRegNumber(_regNumCtrl.text.trim());
+    final parsed = MustValidators.parseRegNumber(_normalizedRegNumber);
     parsed.fold(
       (_) {},
       (reg) {
@@ -230,7 +235,7 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
 
     final data = {
       ...widget.step1Data,
-      'regNumber': _regNumCtrl.text.trim(),
+      'regNumber': _normalizedRegNumber,
       'admissionYear': _admissionYear,
       'faculty': _faculty,
       'programName': selectedProgram.name,
@@ -281,12 +286,14 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
                         // â”€â”€ Registration number â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         StTextField(
                           label: AppStrings.registrationNumber,
-                          hint: '2023/BCS/001/PS',
+                          hint: '2023/BSE/164/PS',
                           controller: _regNumCtrl,
                           prefixIcon: const Icon(Icons.badge_outlined),
+                          keyboardType: TextInputType.visiblePassword,
+                          inputFormatters: [_regNumberFormatter],
                           helperText:
                               'Format: YYYY/FacultyCode/Number/PS or GS (auto-fills year/program)',
-                          validator: MustValidators.validateRegNumber,
+                          validator: (_) => MustValidators.validateRegNumber(_normalizedRegNumber),
                           onChanged: (_) {
                             _autoFillFromRegNumber();
                             if (_crossValidationError != null) _validateCrossFields();
@@ -301,11 +308,9 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
                           hint: 'Select Year',
                           items: _admissionYears.map((y) =>
                             DropdownMenuItem(value: y, child: Text(y))).toList(),
-                          onChanged: (v) {
-                            setState(() => _admissionYear = v);
-                            if (_crossValidationError != null) _validateCrossFields();
-                          },
-                          validator: (v) => v == null ? 'Select admission year.' : null,
+                          onChanged: (_) {},
+                          enabled: false,
+                          helperText: 'Auto-filled from your registration number.',
                         ),
                         const SizedBox(height: AppDimensions.spacingMd),
 
@@ -316,14 +321,9 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
                           hint: 'Select Faculty',
                           items: _faculties.map((f) =>
                             DropdownMenuItem(value: f, child: Text(f, overflow: TextOverflow.ellipsis))).toList(),
-                          onChanged: (v) {
-                            setState(() {
-                              _faculty = v;
-                              _selectedProgramCode = null;
-                            });
-                            if (_crossValidationError != null) _validateCrossFields();
-                          },
-                          validator: (v) => v == null ? 'Select your faculty.' : null,
+                          onChanged: (_) {},
+                          enabled: false,
+                          helperText: 'Locked to the program encoded in your registration number.',
                         ),
                         const SizedBox(height: AppDimensions.spacingMd),
 
@@ -343,15 +343,9 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
                                     ),
                                   ))
                               .toList(),
-                          onChanged: (v) {
-                            if (_faculty == null) return;
-                            setState(() => _selectedProgramCode = v);
-                            if (_crossValidationError != null) {
-                              _validateCrossFields();
-                            }
-                          },
-                          validator: (v) =>
-                              v == null ? 'Select your program.' : null,
+                          onChanged: (_) {},
+                          enabled: false,
+                          helperText: 'Locked to the program encoded in your registration number.',
                         ),
                         const SizedBox(height: AppDimensions.spacingMd),
 
@@ -374,11 +368,8 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
                           controller: _emailCtrl,
                           keyboardType: TextInputType.emailAddress,
                           prefixIcon: const Icon(Icons.verified_outlined, color: AppColors.primary),
-                          helperText: 'Use your official MUST student email ending in @std.must.ac.ug',
-                          onChanged: (_) {
-                            if (_crossValidationError != null) _validateCrossFields();
-                          },
-                          validator: MustValidators.validateStudentEmail,
+                          enabled: false,
+                          helperText: 'Auto-generated from the registration number and cannot be edited.',
                         ),
 
                         // â”€â”€ Cross-validation error â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -425,6 +416,114 @@ class _ProgramSelection {
   final _ProgramOption program;
 
   const _ProgramSelection({required this.faculty, required this.program});
+}
+
+class _RegNumberFormatter extends TextInputFormatter {
+  const _RegNumberFormatter();
+
+  static const List<int> _segmentLengths = [4, 3, 3, 2];
+  static const String _mask = '----/---/---/--';
+
+  static String extractValue(String value) =>
+      value.replaceAll('-', '').trim();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final raw = _sanitize(newValue.text);
+
+    final formatted = _format(raw);
+    final rawCursor =
+        _countAcceptedCharsBeforeCursor(newValue.text, newValue.selection.baseOffset);
+    final selectionOffset =
+        _formattedOffsetForRawIndex(rawCursor.clamp(0, raw.length), formatted);
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: selectionOffset),
+      composing: TextRange.empty,
+    );
+  }
+
+  String _sanitize(String value) {
+    final cleaned = value.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    final buffer = StringBuffer();
+    var segmentIndex = 0;
+    var segmentCharCount = 0;
+
+    for (final char in cleaned.characters) {
+      if (segmentIndex >= _segmentLengths.length) break;
+      if (!_isAllowedForSegment(char, segmentIndex, segmentCharCount)) {
+        continue;
+      }
+
+      buffer.write(char);
+      segmentCharCount++;
+
+      if (segmentCharCount == _segmentLengths[segmentIndex]) {
+        segmentIndex++;
+        segmentCharCount = 0;
+      }
+    }
+
+    return buffer.toString();
+  }
+
+  bool _isAllowedForSegment(
+    String char,
+    int segmentIndex,
+    int segmentCharCount,
+  ) {
+    final isDigit = RegExp(r'\d').hasMatch(char);
+    final isLetter = RegExp(r'[A-Z]').hasMatch(char);
+    return switch (segmentIndex) {
+      0 || 2 => isDigit,
+      1 => isLetter,
+      3 => switch (segmentCharCount) {
+          0 => char == 'P' || char == 'G',
+          1 => char == 'S',
+          _ => false,
+        },
+      _ => false,
+    };
+  }
+
+  String _format(String raw) {
+    final chars = _mask.split('');
+    final rawChars = raw.characters.toList(growable: false);
+    var rawIndex = 0;
+
+    for (var i = 0; i < chars.length && rawIndex < rawChars.length; i++) {
+      if (chars[i] == '-') {
+        chars[i] = rawChars[rawIndex++];
+      }
+    }
+
+    return chars.join();
+  }
+
+  int _countAcceptedCharsBeforeCursor(String value, int cursor) {
+    if (cursor <= 0) return 0;
+    final safeCursor = cursor.clamp(0, value.length);
+    return _sanitize(value.substring(0, safeCursor)).length;
+  }
+
+  int _formattedOffsetForRawIndex(int rawIndex, String formatted) {
+    if (rawIndex <= 0) return 0;
+    var seen = 0;
+    for (var i = 0; i < formatted.length; i++) {
+      final char = formatted[i];
+      if (RegExp(r'[A-Z0-9]').hasMatch(char)) {
+        seen++;
+        if (seen == rawIndex) {
+          return i + 1;
+        }
+      }
+    }
+    return formatted.contains('-') ? formatted.indexOf('-') : formatted.length;
+  }
 }
 
 class _StepFooter extends StatelessWidget {

@@ -131,6 +131,7 @@ class CourseManagementCubit extends Cubit<CourseManagementState> {
     required String name,
     required String code,
     String? description,
+    bool activeOnly = true,
   }) async {
     try {
       final course = CourseModel.create(
@@ -148,7 +149,7 @@ class CourseManagementCubit extends Cubit<CourseManagementState> {
         operation: 'create',
         entity: 'courses',
         entityId: course.id,
-        payload: course.toFirestore(),
+        payload: course.toMap(),
       );
 
       // Process sync in background
@@ -156,7 +157,7 @@ class CourseManagementCubit extends Cubit<CourseManagementState> {
 
       emit(CourseCreated(course));
       // Reload the list
-      await loadCourses(facultyId: facultyId);
+      await loadCourses(facultyId: facultyId, activeOnly: activeOnly);
     } catch (e) {
       emit(CourseManagementError('Failed to create course: $e'));
     }
@@ -168,6 +169,7 @@ class CourseManagementCubit extends Cubit<CourseManagementState> {
     required String name,
     required String code,
     String? description,
+    bool activeOnly = true,
   }) async {
     try {
       final existing = await _courseDao.getCourseById(id);
@@ -190,7 +192,7 @@ class CourseManagementCubit extends Cubit<CourseManagementState> {
         operation: 'update',
         entity: 'courses',
         entityId: id,
-        payload: updated.toFirestore(),
+        payload: updated.toMap(),
       );
 
       // Process sync in background
@@ -198,14 +200,17 @@ class CourseManagementCubit extends Cubit<CourseManagementState> {
 
       emit(CourseUpdated(updated));
       // Reload the list
-      await loadCourses(facultyId: existing.facultyId);
+      await loadCourses(
+        facultyId: existing.facultyId,
+        activeOnly: activeOnly,
+      );
     } catch (e) {
       emit(CourseManagementError('Failed to update course: $e'));
     }
   }
 
   /// Archive (soft-delete) a course.
-  Future<void> archiveCourse(String id) async {
+  Future<void> archiveCourse(String id, {bool activeOnly = true}) async {
     try {
       final course = await _courseDao.getCourseById(id);
       if (course == null) {
@@ -222,7 +227,7 @@ class CourseManagementCubit extends Cubit<CourseManagementState> {
         operation: 'update',
         entity: 'courses',
         entityId: id,
-        payload: archivedCourse.toFirestore(),
+        payload: archivedCourse.toMap(),
       );
 
       // Process sync in background
@@ -230,9 +235,43 @@ class CourseManagementCubit extends Cubit<CourseManagementState> {
 
       emit(CourseArchived(id));
       // Reload the list
-      await loadCourses(facultyId: course.facultyId);
+      await loadCourses(
+        facultyId: course.facultyId,
+        activeOnly: activeOnly,
+      );
     } catch (e) {
       emit(CourseManagementError('Failed to archive course: $e'));
+    }
+  }
+
+  Future<void> unarchiveCourse(String id, {bool activeOnly = true}) async {
+    try {
+      final course = await _courseDao.getCourseById(id);
+      if (course == null) {
+        emit(const CourseManagementError('Course not found'));
+        return;
+      }
+
+      final restoredCourse = course.copyWith(isActive: true);
+
+      await _courseDao.updateCourse(restoredCourse);
+
+      await _syncQueueDao.enqueue(
+        operation: 'update',
+        entity: 'courses',
+        entityId: id,
+        payload: restoredCourse.toMap(),
+      );
+
+      unawaited(_syncService.processPendingSync());
+
+      emit(CourseUpdated(restoredCourse));
+      await loadCourses(
+        facultyId: course.facultyId,
+        activeOnly: activeOnly,
+      );
+    } catch (e) {
+      emit(CourseManagementError('Failed to unarchive course: $e'));
     }
   }
 }

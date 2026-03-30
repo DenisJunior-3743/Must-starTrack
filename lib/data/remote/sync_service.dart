@@ -43,6 +43,8 @@ import '../local/dao/post_dao.dart';
 import '../local/dao/message_dao.dart';
 import '../local/dao/faculty_dao.dart';
 import '../local/dao/course_dao.dart';
+import '../local/dao/group_dao.dart';
+import '../local/dao/group_member_dao.dart';
 import '../local/services/notification_preferences_service.dart';
 import '../local/database_helper.dart';
 import '../local/schema/database_schema.dart';
@@ -50,6 +52,8 @@ import 'cloudinary_service.dart';
 import 'firestore_service.dart';
 import '../models/post_model.dart';
 import '../models/user_model.dart';
+import '../models/group_model.dart';
+import '../models/group_member_model.dart';
 
 // ── Sync result ───────────────────────────────────────────────────────────────
 
@@ -79,6 +83,8 @@ class SyncService {
   final CommentDao _commentDao;
   final FacultyDao _facultyDao;
   final CourseDao _courseDao;
+  final GroupDao _groupDao;
+  final GroupMemberDao _groupMemberDao;
   final Connectivity _connectivity;
   final CloudinaryService _cloudinary;
   final FlutterLocalNotificationsPlugin _localNotif;
@@ -97,6 +103,8 @@ class SyncService {
     required CommentDao commentDao,
     required FacultyDao facultyDao,
     required CourseDao courseDao,
+    required GroupDao groupDao,
+    required GroupMemberDao groupMemberDao,
     required CloudinaryService cloudinary,
     required FlutterLocalNotificationsPlugin localNotif,
     required NotificationPreferencesService preferences,
@@ -108,6 +116,8 @@ class SyncService {
         _commentDao = commentDao,
         _facultyDao = facultyDao,
         _courseDao = courseDao,
+        _groupDao = groupDao,
+        _groupMemberDao = groupMemberDao,
         _cloudinary = cloudinary,
         _localNotif = localNotif,
         _preferences = preferences,
@@ -204,6 +214,12 @@ class SyncService {
       }
 
       final remaining = await _queueDao.getPendingCount();
+      final deadLetters = await _queueDao.getDeadLetterCount();
+      debugPrint(
+        '[SyncService] Queue summary processed=$processed failed=$failed '
+        'remaining=$remaining deadLetters=$deadLetters',
+      );
+      await _logSyncSnapshot(label: 'after_queue_push');
       return SyncResult(
           processed: processed, failed: failed, remaining: remaining);
     } finally {
@@ -296,6 +312,7 @@ class SyncService {
       });
 
       final currentUid = FirebaseAuth.instance.currentUser?.uid;
+      await _runHydrationStep('groups', () => _syncRemoteGroups(currentUid));
       if (currentUid != null) {
         await _runHydrationStep(
             'messages', () => _syncRemoteMessages(currentUid));
@@ -388,6 +405,7 @@ class SyncService {
             'post_joins', () => _syncRemoteOpportunityJoins(currentUid));
       }
     } finally {
+      await _logSyncSnapshot(label: 'after_remote_pull');
       _isHydrating = false;
       _hydrationFuture = null;
     }
@@ -419,6 +437,43 @@ class SyncService {
     }
   }
 
+  Future<void> _syncRemoteGroups(String? currentUid) async {
+    final recentGroups = await _firestore.getRecentGroups(limit: 120);
+    final personalMemberships = currentUid == null || currentUid.isEmpty
+        ? const <GroupMemberModel>[]
+        : await _firestore.getGroupMembersForUser(currentUid);
+
+    final allGroupIds = <String>{
+      ...recentGroups.map((group) => group.id),
+      ...personalMemberships.map((member) => member.groupId),
+    };
+
+    final groups = allGroupIds.isEmpty
+        ? recentGroups
+        : await _firestore.getGroupsByIds(allGroupIds);
+    for (final group in groups) {
+      await _groupDao.upsertGroup(group);
+    }
+
+    final groupMembers = allGroupIds.isEmpty
+        ? personalMemberships
+        : await _firestore.getGroupMembersByGroupIds(allGroupIds);
+    final mergedMembers = <String, GroupMemberModel>{
+      for (final member in groupMembers) member.id: member,
+      for (final member in personalMemberships) member.id: member,
+    };
+    await _groupMemberDao.upsertMembers(mergedMembers.values.toList());
+
+    for (final groupId in allGroupIds) {
+      final count = await _groupMemberDao.countActiveMembers(groupId);
+      await _groupDao.updateMemberCount(groupId, count);
+    }
+
+    debugPrint(
+      '[SyncService] Hydrated groups=${groups.length} memberships=${mergedMembers.length}',
+    );
+  }
+
   // ── Process a single job ──────────────────────────────────────────────────
 
   Future<bool> _processJob(SyncJob job) async {
@@ -428,6 +483,10 @@ class SyncService {
           return await _syncUser(job);
         case 'posts':
           return await _syncPost(job);
+        case 'groups':
+          return await _syncGroup(job);
+        case 'group_members':
+          return await _syncGroupMember(job);
         case 'conversation':
           return await _syncConversation(job);
         case 'message':
@@ -450,12 +509,16 @@ class SyncService {
           return await _syncOpportunityJoin(job);
         case 'post_ratings':
           return await _syncPostRating(job);
+        case 'app_feedback':
+          return await _syncAppFeedback(job);
         case 'moderation_queue':
           return await _syncModerationReport(job);
         case 'faculties':
           return await _syncFaculty(job);
         case 'courses':
           return await _syncCourse(job);
+        case 'recommendation_logs':
+          return await _syncRecommendationLog(job);
         default:
           // Unknown entity type — remove from queue to prevent blocking
           return true;
@@ -539,6 +602,50 @@ class SyncService {
     }
   }
 
+  Future<bool> _syncGroup(SyncJob job) async {
+    switch (job.operation) {
+      case 'create':
+      case 'update':
+        final localGroup = await _groupDao.getGroupById(job.entityId);
+        final group = localGroup ??
+            (job.payloadJson.isEmpty
+                ? null
+                : GroupModel.fromJson({'id': job.entityId, ...job.payloadJson}));
+        if (group == null) return true;
+        await _firestore.setGroup(group);
+        return true;
+      case 'delete':
+      case 'dissolve':
+        await _firestore.dissolveGroup(job.entityId);
+        return true;
+      default:
+        return true;
+    }
+  }
+
+  Future<bool> _syncGroupMember(SyncJob job) async {
+    switch (job.operation) {
+      case 'create':
+      case 'update':
+        final localMember = await _groupMemberDao.getMemberById(job.entityId);
+        final member = localMember ??
+            (job.payloadJson.isEmpty
+                ? null
+                : GroupMemberModel.fromJson({
+                    'id': job.entityId,
+                    ...job.payloadJson,
+                  }));
+        if (member == null) return true;
+        await _firestore.setGroupMember(member);
+        return true;
+      case 'delete':
+        await _firestore.deleteGroupMember(job.entityId);
+        return true;
+      default:
+        return true;
+    }
+  }
+
   // ── Message sync ──────────────────────────────────────────────────────────
 
   Future<bool> _syncConversation(SyncJob job) async {
@@ -611,6 +718,23 @@ class SyncService {
         return true;
       case 'delete':
         await _firestore.deletePostRating(job.entityId);
+        return true;
+      default:
+        return true;
+    }
+  }
+
+  Future<bool> _syncAppFeedback(SyncJob job) async {
+    switch (job.operation) {
+      case 'create':
+      case 'update':
+        await _firestore.setAppFeedback(
+          feedbackId: job.entityId,
+          payload: job.payloadJson,
+        );
+        return true;
+      case 'delete':
+        await _firestore.deleteAppFeedback(job.entityId);
         return true;
       default:
         return true;
@@ -2166,6 +2290,32 @@ class SyncService {
     };
   }
 
+  Future<void> _logSyncSnapshot({required String label}) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+      Future<int> countRows(String table) async {
+        final rows = await db.rawQuery('SELECT COUNT(*) AS cnt FROM $table');
+        final value = rows.isNotEmpty ? rows.first['cnt'] : 0;
+        return value is int ? value : int.tryParse('$value') ?? 0;
+      }
+
+      final users = await countRows('users');
+      final posts = await countRows('posts');
+      final comments = await countRows('comments');
+      final notifications = await countRows('notifications');
+      final pending = await _queueDao.getPendingCount();
+      final deadLetters = await _queueDao.getDeadLetterCount();
+
+      debugPrint(
+        '[SyncService][$label] local users=$users posts=$posts '
+        'comments=$comments notifications=$notifications '
+        'queuePending=$pending queueDeadLetters=$deadLetters',
+      );
+    } catch (error) {
+      debugPrint('[SyncService][$label] snapshot failed: $error');
+    }
+  }
+
   // ── Faculty sync ──────────────────────────────────────────────────────────
 
   Future<bool> _syncFaculty(SyncJob job) async {
@@ -2200,5 +2350,28 @@ class SyncService {
       default:
         return true;
     }
+  }
+
+  Future<bool> _syncRecommendationLog(SyncJob job) async {
+    if (job.operation == 'delete') {
+      // Log deletion sync is not required in current analytics model.
+      return true;
+    }
+
+    final payload = job.payloadJson;
+    final id = (payload['id']?.toString().trim().isNotEmpty ?? false)
+        ? payload['id'].toString().trim()
+        : job.entityId;
+    if (id.isEmpty) return true;
+
+    await FirebaseFirestore.instance
+        .collection('recommendation_logs')
+        .doc(id)
+        .set({
+      ...payload,
+      'server_ts': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    return true;
   }
 }

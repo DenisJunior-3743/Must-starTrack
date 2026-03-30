@@ -23,10 +23,23 @@ class FacultyManagementScreen extends StatefulWidget {
 }
 
 class _FacultyManagementScreenState extends State<FacultyManagementScreen> {
+  bool _showArchived = false;
+
   @override
   void initState() {
     super.initState();
-    context.read<FacultyManagementCubit>().loadFaculties();
+    _loadFaculties();
+  }
+
+  void _loadFaculties() {
+    context.read<FacultyManagementCubit>().loadFaculties(
+          activeOnly: !_showArchived,
+        );
+  }
+
+  void _toggleArchivedView() {
+    setState(() => _showArchived = !_showArchived);
+    _loadFaculties();
   }
 
   void _showFacultyDialog({FacultyModel? existing}) {
@@ -84,6 +97,7 @@ class _FacultyManagementScreenState extends State<FacultyManagementScreen> {
                   headOfFaculty: headCtrl.text.trim().isEmpty
                       ? null
                       : headCtrl.text.trim(),
+                  activeOnly: !_showArchived,
                 );
               } else {
                 cubit.createFaculty(
@@ -98,6 +112,7 @@ class _FacultyManagementScreenState extends State<FacultyManagementScreen> {
                   headOfFaculty: headCtrl.text.trim().isEmpty
                       ? null
                       : headCtrl.text.trim(),
+                    activeOnly: !_showArchived,
                 );
               }
               Navigator.pop(ctx);
@@ -152,8 +167,7 @@ class _FacultyManagementScreenState extends State<FacultyManagementScreen> {
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () =>
-                        context.read<FacultyManagementCubit>().loadFaculties(),
+                    onPressed: _loadFaculties,
                     child: const Text('Retry'),
                   ),
                 ],
@@ -162,7 +176,13 @@ class _FacultyManagementScreenState extends State<FacultyManagementScreen> {
           }
 
           if (state is FacultiesLoaded) {
-            if (state.faculties.isEmpty) {
+            final visibleFaculties = _showArchived
+                ? state.faculties
+                    .where((faculty) => !faculty.isActive)
+                    .toList(growable: false)
+                : state.faculties;
+
+            if (visibleFaculties.isEmpty) {
               return Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -174,7 +194,9 @@ class _FacultyManagementScreenState extends State<FacultyManagementScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'No faculties yet',
+                      _showArchived
+                          ? 'No archived faculties yet'
+                          : 'No faculties yet',
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 14,
                         color: AppColors.textHintLight,
@@ -185,17 +207,19 @@ class _FacultyManagementScreenState extends State<FacultyManagementScreen> {
               );
             }
 
-            return ListView.builder(
+            return ListView(
               padding: const EdgeInsets.all(16),
-              itemCount: state.faculties.length,
-              itemBuilder: (context, index) {
-                final faculty = state.faculties[index];
-                return FacultyCard(
-                  faculty: faculty,
-                  onEdit: () => _showFacultyDialog(existing: faculty),
-                  onArchive: () => _showArchiveDialog(faculty),
-                );
-              },
+              children: visibleFaculties
+                  .map(
+                    (faculty) => FacultyCard(
+                      faculty: faculty,
+                      onEdit: () => _showFacultyDialog(existing: faculty),
+                      onArchive: () => faculty.isActive
+                          ? _showArchiveDialog(faculty)
+                          : _showUnarchiveDialog(faculty),
+                    ),
+                  )
+                  .toList(growable: false),
             );
           }
 
@@ -218,7 +242,25 @@ class _FacultyManagementScreenState extends State<FacultyManagementScreen> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const Spacer(),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _toggleArchivedView,
+                  icon: Icon(
+                    _showArchived
+                        ? Icons.visibility_outlined
+                        : Icons.archive_outlined,
+                    size: 16,
+                  ),
+                  label: Text(_showArchived ? 'Show Active' : 'Archived'),
+                ),
                 FilledButton.icon(
                   onPressed: () => _showFacultyDialog(),
                   icon: const Icon(Icons.add, size: 16),
@@ -241,6 +283,17 @@ class _FacultyManagementScreenState extends State<FacultyManagementScreen> {
           'Faculties',
           style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
         ),
+        actions: [
+          IconButton(
+            onPressed: _toggleArchivedView,
+            tooltip: _showArchived ? 'Show active faculties' : 'Show archived faculties',
+            icon: Icon(
+              _showArchived
+                  ? Icons.visibility_outlined
+                  : Icons.archive_outlined,
+            ),
+          ),
+        ],
         elevation: 0,
       ),
       body: body,
@@ -268,11 +321,43 @@ class _FacultyManagementScreenState extends State<FacultyManagementScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              context.read<FacultyManagementCubit>().archiveFaculty(faculty.id);
+              context.read<FacultyManagementCubit>().archiveFaculty(
+                    faculty.id,
+                    activeOnly: !_showArchived,
+                  );
               Navigator.pop(ctx);
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
             child: const Text('Archive'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showUnarchiveDialog(FacultyModel faculty) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Unarchive Faculty?'),
+        content: Text(
+          'Faculty will be moved back to active listings.',
+          style: GoogleFonts.plusJakartaSans(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              context.read<FacultyManagementCubit>().unarchiveFaculty(
+                    faculty.id,
+                    activeOnly: !_showArchived,
+                  );
+              Navigator.pop(ctx);
+            },
+            child: const Text('Unarchive'),
           ),
         ],
       ),
@@ -297,6 +382,8 @@ class FacultyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final description = (faculty.description ?? '').trim();
+    final contactEmail = (faculty.contactEmail ?? '').trim();
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -349,11 +436,11 @@ class FacultyCard extends StatelessWidget {
                   ),
               ],
             ),
-            if (faculty.description != null)
+            if (description.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  faculty.description!,
+                  description,
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 13,
                     color: AppColors.textHintLight,
@@ -362,11 +449,11 @@ class FacultyCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-            if (faculty.contactEmail != null)
+            if (contactEmail.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  'Contact: ${faculty.contactEmail}',
+                  'Contact: $contactEmail',
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 12,
                     color: AppColors.textHintLight,
@@ -374,21 +461,27 @@ class FacultyCard extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 12),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 ElevatedButton.icon(
                   onPressed: onEdit,
                   icon: const Icon(Icons.edit, size: 16),
                   label: const Text('Edit'),
                 ),
-                const SizedBox(width: 8),
                 ElevatedButton.icon(
                   onPressed: onArchive,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.warning,
+                    backgroundColor: faculty.isActive
+                        ? AppColors.warning
+                        : AppColors.success,
                   ),
-                  icon: const Icon(Icons.archive, size: 16),
-                  label: const Text('Archive'),
+                  icon: Icon(
+                    faculty.isActive ? Icons.archive : Icons.unarchive,
+                    size: 16,
+                  ),
+                  label: Text(faculty.isActive ? 'Archive' : 'Unarchive'),
                 ),
               ],
             ),

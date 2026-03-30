@@ -233,3 +233,23 @@ Still needed (type "Continue"):
     Wire all 20+ new routes into app_router.dart
     Fix peers_screen.dart — replace stub with real navigation to mentor/collab sub-screens
     system_reports_screen.dart
+
+
+
+    I still have like four things for this application
+
+1. Implementing rating and Feedback for the users, and should be received by admins for app improvement, we can do that following the hamburger menu in the header of the home_feed_screen.dart
+
+2. Implementing a module for group projects. We can wire it in the peers module, then conditions will be like whatsapp, all group members should have accounts in the system, then collaborating in the same project, then one creates a group and gives them invite, then they approve and can have a group project, we can ask for all the details of the members like we do for individuals , and their faculties and courses etc
+
+3. A chat bot to handle frequently asked questions, and anything as far as the system is concerned.
+
+4. AI handling some tasks on admin side instead of manually doing the work.
+
+5. Implementing robust constraints for error prevention and error tolerance especially in client side validation, am seeing inconsistencies somewhere, reg number not matching with course.
+
+
+But before all those, i want us to ensure what we have so far, works to the best locally and remotely coz in remote I see few collections, yet locally we have so many tables, check through and ensure consistence, coz i wanna deploy for testing but wanna ensure remote syncs well with local, can add several logs to ensure fire store is synced to the local.
+
+
+Ok, now lets resort back to the tasks I told you about,, now if we're to collect feedback from the user, we need a way of them typing in app, so we are to implement a feedback colection mechanism, rate the app, then typing 

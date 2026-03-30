@@ -28,6 +28,7 @@ class CourseManagementScreen extends StatefulWidget {
 class _CourseManagementScreenState extends State<CourseManagementScreen> {
   String? _selectedFacultyId;
   List<FacultyModel> _faculties = [];
+  bool _showArchived = false;
 
   @override
   void initState() {
@@ -37,16 +38,34 @@ class _CourseManagementScreenState extends State<CourseManagementScreen> {
 
   Future<void> _loadFaculties() async {
     final facultyDao = sl<FacultyDao>();
-    final faculties = await facultyDao.getAllFaculties(activeOnly: true);
+    final faculties = await facultyDao.getAllFaculties(
+      activeOnly: !_showArchived,
+    );
+    final keepSelection = faculties.any((faculty) => faculty.id == _selectedFacultyId);
+    final nextSelectedFacultyId = keepSelection
+        ? _selectedFacultyId
+        : (faculties.isNotEmpty ? faculties.first.id : null);
+
+    if (!mounted) {
+      return;
+    }
+
     setState(() {
       _faculties = faculties;
-      if (faculties.isNotEmpty && _selectedFacultyId == null) {
-        _selectedFacultyId = faculties.first.id;
-        context.read<CourseManagementCubit>().loadCourses(
-              facultyId: _selectedFacultyId,
-            );
-      }
+      _selectedFacultyId = nextSelectedFacultyId;
     });
+
+    if (nextSelectedFacultyId != null) {
+      await context.read<CourseManagementCubit>().loadCourses(
+            facultyId: nextSelectedFacultyId,
+            activeOnly: !_showArchived,
+          );
+    }
+  }
+
+  void _toggleArchivedView() {
+    setState(() => _showArchived = !_showArchived);
+    _loadFaculties();
   }
 
   void _showCourseDialog({CourseModel? existing}) {
@@ -99,6 +118,7 @@ class _CourseManagementScreenState extends State<CourseManagementScreen> {
                   description: descCtrl.text.trim().isEmpty
                       ? null
                       : descCtrl.text.trim(),
+                  activeOnly: !_showArchived,
                 );
               } else {
                 cubit.createCourse(
@@ -108,6 +128,7 @@ class _CourseManagementScreenState extends State<CourseManagementScreen> {
                   description: descCtrl.text.trim().isEmpty
                       ? null
                       : descCtrl.text.trim(),
+                  activeOnly: !_showArchived,
                 );
               }
               Navigator.pop(ctx);
@@ -147,6 +168,21 @@ class _CourseManagementScreenState extends State<CourseManagementScreen> {
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (_faculties.isEmpty)
+            Expanded(
+              child: Center(
+                child: Text(
+                  _showArchived
+                      ? 'No faculties with archived courses yet'
+                      : 'No faculties available yet',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 14,
+                    color: AppColors.textHintLight,
+                  ),
+                ),
+              ),
+            )
+          else ...[
           // Faculty selector
           Container(
             color: isDark ? AppColors.surfaceDark : Colors.white,
@@ -170,6 +206,7 @@ class _CourseManagementScreenState extends State<CourseManagementScreen> {
                       setState(() => _selectedFacultyId = value);
                       context.read<CourseManagementCubit>().loadCourses(
                             facultyId: value,
+                            activeOnly: !_showArchived,
                           );
                     }
                   },
@@ -207,7 +244,10 @@ class _CourseManagementScreenState extends State<CourseManagementScreen> {
                         ElevatedButton(
                           onPressed: () => context
                               .read<CourseManagementCubit>()
-                              .loadCourses(facultyId: _selectedFacultyId),
+                              .loadCourses(
+                                facultyId: _selectedFacultyId,
+                                activeOnly: !_showArchived,
+                              ),
                           child: const Text('Retry'),
                         ),
                       ],
@@ -216,7 +256,13 @@ class _CourseManagementScreenState extends State<CourseManagementScreen> {
                 }
 
                 if (state is CoursesLoaded) {
-                  if (state.courses.isEmpty) {
+                  final visibleCourses = _showArchived
+                      ? state.courses
+                          .where((course) => !course.isActive)
+                          .toList(growable: false)
+                      : state.courses;
+
+                  if (visibleCourses.isEmpty) {
                     return Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -228,7 +274,9 @@ class _CourseManagementScreenState extends State<CourseManagementScreen> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            'No courses for this faculty',
+                            _showArchived
+                                ? 'No archived courses for this faculty'
+                                : 'No courses for this faculty',
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 14,
                               color: AppColors.textHintLight,
@@ -239,17 +287,19 @@ class _CourseManagementScreenState extends State<CourseManagementScreen> {
                     );
                   }
 
-                  return ListView.builder(
+                  return ListView(
                     padding: const EdgeInsets.all(16),
-                    itemCount: state.courses.length,
-                    itemBuilder: (context, index) {
-                      final course = state.courses[index];
-                      return CourseCard(
-                        course: course,
-                        onEdit: () => _showCourseDialog(existing: course),
-                        onArchive: () => _showArchiveDialog(course),
-                      );
-                    },
+                    children: visibleCourses
+                        .map(
+                          (course) => CourseCard(
+                            course: course,
+                            onEdit: () => _showCourseDialog(existing: course),
+                            onArchive: () => course.isActive
+                                ? _showArchiveDialog(course)
+                                : _showUnarchiveDialog(course),
+                          ),
+                        )
+                        .toList(growable: false),
                   );
                 }
 
@@ -257,6 +307,7 @@ class _CourseManagementScreenState extends State<CourseManagementScreen> {
               },
             ),
           ),
+          ],
         ],
       );
 
@@ -275,7 +326,25 @@ class _CourseManagementScreenState extends State<CourseManagementScreen> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const Spacer(),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _toggleArchivedView,
+                  icon: Icon(
+                    _showArchived
+                        ? Icons.visibility_outlined
+                        : Icons.archive_outlined,
+                    size: 16,
+                  ),
+                  label: Text(_showArchived ? 'Show Active' : 'Archived'),
+                ),
                 FilledButton.icon(
                   onPressed: () => _showCourseDialog(),
                   icon: const Icon(Icons.add, size: 16),
@@ -298,6 +367,17 @@ class _CourseManagementScreenState extends State<CourseManagementScreen> {
           'Courses',
           style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
         ),
+        actions: [
+          IconButton(
+            onPressed: _toggleArchivedView,
+            tooltip: _showArchived ? 'Show active courses' : 'Show archived courses',
+            icon: Icon(
+              _showArchived
+                  ? Icons.visibility_outlined
+                  : Icons.archive_outlined,
+            ),
+          ),
+        ],
         elevation: 0,
       ),
       body: body,
@@ -325,11 +405,43 @@ class _CourseManagementScreenState extends State<CourseManagementScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              context.read<CourseManagementCubit>().archiveCourse(course.id);
+              context.read<CourseManagementCubit>().archiveCourse(
+                    course.id,
+                    activeOnly: !_showArchived,
+                  );
               Navigator.pop(ctx);
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
             child: const Text('Archive'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showUnarchiveDialog(CourseModel course) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Unarchive Course?'),
+        content: Text(
+          'Course will be moved back to active listings.',
+          style: GoogleFonts.plusJakartaSans(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              context.read<CourseManagementCubit>().unarchiveCourse(
+                    course.id,
+                    activeOnly: !_showArchived,
+                  );
+              Navigator.pop(ctx);
+            },
+            child: const Text('Unarchive'),
           ),
         ],
       ),
@@ -354,6 +466,7 @@ class CourseCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final description = (course.description ?? '').trim();
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -406,11 +519,11 @@ class CourseCard extends StatelessWidget {
                   ),
               ],
             ),
-            if (course.description != null)
+            if (description.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  course.description!,
+                  description,
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 13,
                     color: AppColors.textHintLight,
@@ -420,21 +533,27 @@ class CourseCard extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 12),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 ElevatedButton.icon(
                   onPressed: onEdit,
                   icon: const Icon(Icons.edit, size: 16),
                   label: const Text('Edit'),
                 ),
-                const SizedBox(width: 8),
                 ElevatedButton.icon(
                   onPressed: onArchive,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.warning,
+                    backgroundColor: course.isActive
+                        ? AppColors.warning
+                        : AppColors.success,
                   ),
-                  icon: const Icon(Icons.archive, size: 16),
-                  label: const Text('Archive'),
+                  icon: Icon(
+                    course.isActive ? Icons.archive : Icons.unarchive,
+                    size: 16,
+                  ),
+                  label: Text(course.isActive ? 'Archive' : 'Unarchive'),
                 ),
               ],
             ),

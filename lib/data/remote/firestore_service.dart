@@ -32,6 +32,8 @@ import '../models/user_model.dart';
 import '../models/post_model.dart';
 import '../models/faculty_model.dart';
 import '../models/course_model.dart';
+import '../models/group_model.dart';
+import '../models/group_member_model.dart';
 import '../local/dao/message_dao.dart';
 import '../local/dao/notification_dao.dart';
 
@@ -57,10 +59,18 @@ class FirestoreService {
       _db.collection('faculties');
   CollectionReference<Map<String, dynamic>> get _courses =>
       _db.collection('courses');
+  CollectionReference<Map<String, dynamic>> get _groups =>
+      _db.collection('groups');
+  CollectionReference<Map<String, dynamic>> get _groupMembers =>
+      _db.collection('group_members');
   CollectionReference<Map<String, dynamic>> get _recommendationLogs =>
       _db.collection('recommendation_logs');
-    CollectionReference<Map<String, dynamic>> get _postRatings =>
+  CollectionReference<Map<String, dynamic>> get _postRatings =>
       _db.collection('post_ratings');
+  CollectionReference<Map<String, dynamic>> get _appFeedback =>
+      _db.collection('app_feedback');
+  CollectionReference<Map<String, dynamic>> get _accountDeletionRequests =>
+      _db.collection('account_deletion_requests');
 
   // ── Recommendation log operations ─────────────────────────────────────────
 
@@ -104,6 +114,87 @@ class FirestoreService {
 
   Future<void> deletePostRating(String ratingId) async {
     await _postRatings.doc(ratingId).delete();
+  }
+
+  Future<void> setAppFeedback({
+    required String feedbackId,
+    required Map<String, dynamic> payload,
+  }) async {
+    await _appFeedback.doc(feedbackId).set(
+      {
+        ...payload,
+        'server_ts': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+  }
+
+  Future<void> setGroup(GroupModel group) async {
+    await _groups.doc(group.id).set(
+      {
+        ...group.toJson(),
+        'server_ts': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+  }
+
+  Future<void> dissolveGroup(String groupId) async {
+    await _groups.doc(groupId).set(
+      {
+        'is_dissolved': true,
+        'updated_at': DateTime.now().toIso8601String(),
+        'server_ts': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+  }
+
+  Future<void> setGroupMember(GroupMemberModel member) async {
+    await _groupMembers.doc(member.id).set(
+      {
+        ...member.toJson(),
+        'server_ts': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+  }
+
+  Future<void> deleteGroupMember(String membershipId) async {
+    await _groupMembers.doc(membershipId).delete();
+  }
+
+  Future<void> deleteAppFeedback(String feedbackId) async {
+    await _appFeedback.doc(feedbackId).delete();
+  }
+
+  /// Writes an account deletion request to Firestore.
+  /// The record is flagged for admin review — no data is purged immediately.
+  Future<void> flagAccountForDeletion({
+    required String requestId,
+    required Map<String, dynamic> payload,
+  }) async {
+    await _accountDeletionRequests.doc(requestId).set(
+      {
+        ...payload,
+        'server_ts': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getRecentAppFeedback({
+    int limit = 60,
+  }) async {
+    final safeLimit = limit <= 0 ? 60 : limit;
+    final snapshot = await _appFeedback
+        .orderBy('created_at', descending: true)
+        .limit(safeLimit)
+        .get(const GetOptions(source: Source.serverAndCache));
+
+    return snapshot.docs
+        .map((doc) => {'id': doc.id, ...doc.data()})
+        .toList(growable: false);
   }
 
   // ── User operations ───────────────────────────────────────────────────────
@@ -280,6 +371,83 @@ class FirestoreService {
       }
     }
     return users;
+  }
+
+  Future<List<GroupModel>> getGroupsByIds(Iterable<String> groupIds) async {
+    final uniqueIds = groupIds.where((id) => id.isNotEmpty).toSet().toList();
+    if (uniqueIds.isEmpty) {
+      return const [];
+    }
+
+    final groups = <GroupModel>[];
+    for (var index = 0; index < uniqueIds.length; index += 10) {
+      final batch = uniqueIds.sublist(
+        index,
+        index + 10 > uniqueIds.length ? uniqueIds.length : index + 10,
+      );
+      final snapshot =
+          await _groups.where(FieldPath.documentId, whereIn: batch).get();
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        try {
+          groups.add(GroupModel.fromJson({'id': doc.id, ...data}));
+        } catch (error) {
+          debugPrint('[FirestoreService] Skipping unreadable group ${doc.id}: $error');
+        }
+      }
+    }
+    return groups;
+  }
+
+  Future<List<GroupModel>> getRecentGroups({int limit = 80}) async {
+    final snapshot = await _groups
+        .where('is_dissolved', isEqualTo: false)
+        .orderBy('updated_at', descending: true)
+        .limit(limit)
+        .get(const GetOptions(source: Source.serverAndCache));
+    return snapshot.docs
+        .map((doc) => GroupModel.fromJson({'id': doc.id, ...doc.data()}))
+        .toList();
+  }
+
+  Future<List<GroupMemberModel>> getGroupMembersByGroupIds(
+    Iterable<String> groupIds,
+  ) async {
+    final uniqueIds = groupIds.where((id) => id.isNotEmpty).toSet().toList();
+    if (uniqueIds.isEmpty) {
+      return const [];
+    }
+
+    final members = <GroupMemberModel>[];
+    for (var index = 0; index < uniqueIds.length; index += 10) {
+      final batch = uniqueIds.sublist(
+        index,
+        index + 10 > uniqueIds.length ? uniqueIds.length : index + 10,
+      );
+      final snapshot = await _groupMembers
+          .where('group_id', whereIn: batch)
+          .get(const GetOptions(source: Source.serverAndCache));
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        try {
+          members.add(GroupMemberModel.fromJson({'id': doc.id, ...data}));
+        } catch (error) {
+          debugPrint('[FirestoreService] Skipping unreadable group member ${doc.id}: $error');
+        }
+      }
+    }
+    return members;
+  }
+
+  Future<List<GroupMemberModel>> getGroupMembersForUser(
+    String userId,
+  ) async {
+    final snapshot = await _groupMembers
+        .where('user_id', isEqualTo: userId)
+        .get(const GetOptions(source: Source.serverAndCache));
+    return snapshot.docs
+        .map((doc) => GroupMemberModel.fromJson({'id': doc.id, ...doc.data()}))
+        .toList();
   }
 
   // ── Messaging operations ──────────────────────────────────────────────────

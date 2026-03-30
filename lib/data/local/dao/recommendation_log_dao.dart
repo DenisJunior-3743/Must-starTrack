@@ -9,9 +9,8 @@
 // Design decisions:
 //   • insertBatch() is the primary write path — accepts a flat list so
 //     the caller (cubit) doesn't need to know about SQL.
-//   • Firestore push is fire-and-forget: if the device is offline the
-//     SQLite record remains; we don't retry via SyncQueue because log
-//     data is append-only and eventual consistency is acceptable.
+//   • Queue + push dual-path: each row is enqueued for reliable sync, and
+//     also pushed fire-and-forget for low-latency admin visibility.
 //   • getAlgorithmSummary() powers the admin Recommendations tab with
 //     per-algorithm totals and interaction rates.
 
@@ -22,6 +21,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
 import '../database_helper.dart';
+import 'sync_queue_dao.dart';
 import '../schema/database_schema.dart';
 import '../../remote/firestore_service.dart';
 
@@ -63,18 +63,31 @@ class AlgorithmStats {
       '${(interactionRate * 100).toStringAsFixed(1)}%';
 }
 
+class UserLogVolume {
+  final String userId;
+  final int total;
+
+  const UserLogVolume({
+    required this.userId,
+    required this.total,
+  });
+}
+
 // ── DAO ───────────────────────────────────────────────────────────────────────
 
 class RecommendationLogDao {
   final DatabaseHelper _db;
   final FirestoreService? _firestore;
+  final SyncQueueDao? _syncQueue;
   final _uuid = const Uuid();
 
   RecommendationLogDao({
     DatabaseHelper? db,
     FirestoreService? firestoreService,
+    SyncQueueDao? syncQueueDao,
   })  : _db = db ?? DatabaseHelper.instance,
-        _firestore = firestoreService;
+        _firestore = firestoreService,
+        _syncQueue = syncQueueDao;
 
   // ── Write ─────────────────────────────────────────────────────────────────
 
@@ -109,6 +122,20 @@ class RecommendationLogDao {
     }
 
     await batch.commit(noResult: true);
+
+    // Reliable path: enqueue each log row so SyncService can push even after restarts.
+    if (_syncQueue != null) {
+      for (final row in rows) {
+        final id = row['id']?.toString() ?? '';
+        if (id.isEmpty) continue;
+        await _syncQueue.enqueue(
+          operation: 'create',
+          entity: 'recommendation_logs',
+          entityId: id,
+          payload: row,
+        );
+      }
+    }
 
     // Fire-and-forget Firestore push — ignore failures (log is best-effort remote)
     _firestore?.pushRecommendationLogs(rows).catchError((e) {
@@ -209,6 +236,31 @@ class RecommendationLogDao {
       LIMIT $limit
     ''');
     return rows.map((r) => r['user_id'] as String).toList();
+  }
+
+  /// Top users by recommendation log volume.
+  Future<List<UserLogVolume>> getTopUsersByLogCount({int limit = 10}) async {
+    final db = await _db.database;
+    final safeLimit = limit <= 0 ? 10 : limit;
+    final rows = await db.rawQuery('''
+      SELECT
+        user_id,
+        COUNT(*) AS total
+      FROM ${DatabaseSchema.tableRecommendationLogs}
+      GROUP BY user_id
+      ORDER BY total DESC, user_id ASC
+      LIMIT $safeLimit
+    ''');
+
+    return rows
+        .map(
+          (r) => UserLogVolume(
+            userId: r['user_id'] as String? ?? '',
+            total: (r['total'] as int?) ?? 0,
+          ),
+        )
+        .where((item) => item.userId.isNotEmpty)
+        .toList();
   }
 
   /// Latest log row for a specific (userId, itemId) pair — used by tests.

@@ -32,6 +32,7 @@ import '../../../core/constants/app_dimensions.dart';
 import '../../../core/constants/app_enums.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../core/network/connectivity_service.dart';
+import '../../../core/router/route_names.dart';
 import '../../../core/router/route_guards.dart';
 import '../../../core/utils/media_path_utils.dart';
 import '../../../data/local/dao/post_dao.dart';
@@ -45,9 +46,18 @@ import '../../shared/hci_components/st_form_widgets.dart';
 import '../bloc/feed_cubit.dart';
 
 class CreatePostScreen extends StatefulWidget {
-  const CreatePostScreen({super.key, this.existingPost});
+  const CreatePostScreen({
+    super.key,
+    this.existingPost,
+    this.groupId,
+    this.groupName,
+    this.groupAvatarUrl,
+  });
 
   final PostModel? existingPost;
+  final String? groupId;
+  final String? groupName;
+  final String? groupAvatarUrl;
 
   @override
   State<CreatePostScreen> createState() => _CreatePostScreenState();
@@ -77,6 +87,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   final _uuid = const Uuid();
 
   bool get _isEditing => widget.existingPost != null;
+  bool get _isGroupProject =>
+      (widget.groupId?.isNotEmpty ?? false) || widget.existingPost?.groupId != null;
 
   bool get _isLecturer =>
       sl<AuthCubit>().currentUser?.isLecturer == true ||
@@ -103,6 +115,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     // Lecturers can only post opportunities — lock the type.
     if (_isLecturer && _type != 'opportunity') {
       _type = 'opportunity';
+    }
+    if (_isGroupProject) {
+      _type = 'project';
+      _visibility = PostVisibility.public;
     }
   }
 
@@ -429,6 +445,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           authorName: publishingUser.displayName,
           authorPhotoUrl: publishingUser.photoUrl,
           authorRole: publishingUser.role.name,
+        groupId: widget.groupId ?? widget.existingPost?.groupId,
+        groupName: widget.groupName ?? widget.existingPost?.groupName,
+        groupAvatarUrl:
+          widget.groupAvatarUrl ?? widget.existingPost?.groupAvatarUrl,
           type: _type,
           title: _titleCtrl.text.trim(),
           description: _descCtrl.text.trim(),
@@ -453,6 +473,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           authorName: publishingUser.displayName,
           authorPhotoUrl: publishingUser.photoUrl,
           authorRole: publishingUser.role.name,
+          groupId: widget.groupId,
+          groupName: widget.groupName,
+          groupAvatarUrl: widget.groupAvatarUrl,
           type: _type,
           title: _titleCtrl.text.trim(),
           description: _descCtrl.text.trim(),
@@ -556,6 +579,15 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     }
   }
 
+  void _handleClose() {
+    final router = GoRouter.of(context);
+    if (router.canPop()) {
+      context.pop();
+      return;
+    }
+    context.go(RouteNames.home);
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -563,13 +595,17 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.close_rounded),
-          onPressed: () => context.pop(),
+          onPressed: _handleClose,
           tooltip: 'Discard',
         ),
         title: Text(
           _isEditing
-              ? (_type == 'project' ? 'Edit Project' : 'Edit Opportunity')
-              : (_type == 'project' ? 'New Project' : 'New Opportunity'),
+            ? (_isGroupProject
+              ? 'Edit Group Project'
+              : (_type == 'project' ? 'Edit Project' : 'Edit Opportunity'))
+            : (_isGroupProject
+              ? 'New Group Project'
+              : (_type == 'project' ? 'New Project' : 'New Opportunity')),
         ),
         actions: _isEditing
             ? const []
@@ -590,8 +626,42 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (_isGroupProject)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryTint10,
+                      borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.groupName ?? widget.existingPost?.groupName ?? 'Group Project',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'This project will be published under the group identity and remain visible in the home feed.',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            color: AppColors.textSecondaryLight,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               // Type selector (hidden for lecturers  they can only post opportunities)
-              if (!_isLecturer) ...[
+              if (!_isLecturer && !_isGroupProject) ...[
                 const _SectionHeader('Post Type'),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -779,14 +849,16 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
               ),
 
               // â”€â”€ Visibility â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-              const _SectionHeader('Privacy & Visibility'),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _VisibilityPicker(
-                  value: _visibility,
-                  onChanged: (v) => setState(() => _visibility = v),
+              if (!_isGroupProject) ...[
+                const _SectionHeader('Privacy & Visibility'),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: _VisibilityPicker(
+                    value: _visibility,
+                    onChanged: (v) => setState(() => _visibility = v),
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
@@ -803,8 +875,12 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           top: false,
           child: StButton(
             label: _isEditing
-                ? (_type == 'project' ? 'Save Project Changes' : 'Save Opportunity Changes')
-                : (_type == 'project' ? 'Publish Project' : 'Publish Opportunity'),
+              ? (_isGroupProject
+                ? 'Save Group Project'
+                : (_type == 'project' ? 'Save Project Changes' : 'Save Opportunity Changes'))
+              : (_isGroupProject
+                ? 'Publish Group Project'
+                : (_type == 'project' ? 'Publish Project' : 'Publish Opportunity')),
             trailingIcon: Icons.rocket_launch_rounded,
             isLoading: _publishing,
             onPressed: _publish,

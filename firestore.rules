@@ -94,7 +94,11 @@ service cloud.firestore {
       allow delete: if isAdmin();
 
       match /tokens/{tokenId} {
-        allow read, write: if isMustUser() && userId == uid();
+        // Avoid calling isMustUser() here — it invokes userRole() which does a
+        // get() on the parent user doc. That doc may not exist yet when the FCM
+        // token is first saved (race condition on sign-in), causing permission-
+        // denied. Checking request.auth + ownership is sufficient security.
+        allow read, write: if request.auth != null && userId == uid();
       }
     }
 
@@ -106,9 +110,12 @@ service cloud.firestore {
       // immediately (TikTok-style open discovery).
       // Anonymous visitors are further limited to approved / unmoderated
       // posts so flagged content is never served to unauthenticated clients.
-      allow read: if resource.data.is_archived == false
-        && (request.auth != null
-            || resource.data.get('moderation_status', null) in [null, 'approved']);
+      allow read: if isAdmin()
+        || (
+          resource.data.is_archived == false
+          && (request.auth != null
+              || resource.data.get('moderation_status', null) in [null, 'approved'])
+        );
 
       allow create: if isMustUser()
         && request.resource.data.author_id == uid()
@@ -199,7 +206,7 @@ service cloud.firestore {
     // NOTIFICATIONS
     match /notifications/{notifId} {
 
-      allow read: if isMustUser() && resource.data.user_id == uid();
+      allow read: if isMustUser() && (resource.data.user_id == uid() || isAdmin());
 
       // Any authenticated user may create a notification for another user
       // as long as they are the declared sender (prevents impersonation).
@@ -255,7 +262,8 @@ service cloud.firestore {
       // Sender and receiver can read their own requests.
       allow read: if isMustUser()
         && (resource.data.sender_id == uid()
-         || resource.data.receiver_id == uid());
+         || resource.data.receiver_id == uid()
+         || isAdmin());
 
       // Only the sender can create a request (and set/retry via sync).
       allow create, update: if isMustUser()
@@ -362,6 +370,64 @@ service cloud.firestore {
         && request.resource.data.user_id == uid();
 
       allow delete: if isAdmin();
+    }
+
+
+    // GROUPS
+    match /groups/{groupId} {
+
+      allow read: if isMustUser();
+
+      allow create: if isMustUser()
+        && request.resource.data.creator_id == uid();
+
+      allow update: if isMustUser()
+        && (resource.data.creator_id == uid() || isAdmin());
+
+      allow delete: if isAdmin();
+    }
+
+
+    // GROUP MEMBERS
+    match /group_members/{membershipId} {
+
+      allow read: if isMustUser();
+
+      allow create: if isMustUser()
+        && (
+          request.resource.data.invited_by == uid()
+          || get(/databases/$(database)/documents/groups/$(request.resource.data.group_id)).data.creator_id == uid()
+          || isAdmin()
+        );
+
+      allow update: if isMustUser()
+        && (
+          resource.data.user_id == uid()
+          || resource.data.invited_by == uid()
+          || get(/databases/$(database)/documents/groups/$(resource.data.group_id)).data.creator_id == uid()
+          || isAdmin()
+        );
+
+      allow delete: if isMustUser()
+        && (
+          resource.data.user_id == uid()
+          || resource.data.invited_by == uid()
+          || get(/databases/$(database)/documents/groups/$(resource.data.group_id)).data.creator_id == uid()
+          || isAdmin()
+        );
+    }
+
+
+    // APP FEEDBACK
+    match /app_feedback/{feedbackId} {
+
+      allow read: if isMustUser();
+
+      allow create, update: if isMustUser()
+        && request.resource.data.user_id == uid();
+
+      allow delete: if isMustUser()
+        && (resource.data.user_id == uid() || isAdmin());
     }
 
 

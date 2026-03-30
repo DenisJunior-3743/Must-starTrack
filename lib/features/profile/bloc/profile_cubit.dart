@@ -315,9 +315,9 @@ class ProfileCubit extends Cubit<ProfileState> {
         updatedAt: now,
       )).copyWith(
         bio: bio,
-        faculty: faculty,
-        programName: programme,
-        yearOfStudy: yearOfStudy,
+        faculty: oldProfile?.faculty,
+        programName: oldProfile?.programName,
+        yearOfStudy: oldProfile?.yearOfStudy,
         skills: skills,
         portfolioLinks: portfolioLinks,
         profileVisibility: visibility,

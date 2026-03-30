@@ -15,7 +15,6 @@
 //      error handling if post not found.
 
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -35,7 +34,6 @@ import 'package:uuid/uuid.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../data/local/dao/activity_log_dao.dart';
 import '../../../data/local/dao/comment_dao.dart';
-import '../../../data/local/dao/notification_dao.dart';
 import '../../../data/local/dao/post_dao.dart';
 import '../../../data/local/dao/sync_queue_dao.dart';
 import '../../../data/local/database_helper.dart';
@@ -44,7 +42,6 @@ import '../../../data/models/post_model.dart';
 import '../../../data/remote/firestore_service.dart';
 import '../../../data/remote/sync_service.dart';
 import '../../../features/auth/bloc/auth_cubit.dart';
-import '../../../features/notifications/bloc/notification_cubit.dart';
 import '../../shared/screens/offline_video_player_screen.dart';
 import '../../shared/hci_components/post_card.dart';
 
@@ -557,24 +554,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       // Trigger immediate sync so the collab request reaches Firestore now.
       unawaited(sl<SyncService>().processPendingSync());
 
-      // Insert a local confirmation notification for the sender (current user).
-      // The receiver's notification is written to Firestore by _syncCollabRequest
-      // and pulled into their SQLite on next syncRemoteToLocal.
-      await sl<NotificationDao>().insertNotification(NotificationModel(
-        id: _uuid.v4(),
-        userId: uid,
-        type: 'collaboration',
-        body: 'Collaboration request sent to ${post.authorName ?? "the author"} for "${post.title}"',
-        detail: message.isNotEmpty ? message : null,
-        entityId: collabId,
-        createdAt: DateTime.now(),
-      ));
-
-      if (mounted) {
-        unawaited(context.read<NotificationCubit>().loadNotifications());
-      }
-
-      debugPrint('[Collab] âœ… Notification inserted for author=${post.authorId}');
+      // Note: Self-notifications are not sent. Only the receiver gets a notification
+      // via _syncCollabRequest in sync_service.dart.
+      debugPrint('[Collab] âœ… Collaboration request synced for author=${post.authorId}');
       debugPrint('[Collab] âœ… All steps complete for collabId=$collabId');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -628,19 +610,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       );
       unawaited(sl<SyncService>().processPendingSync());
 
-      if (isNowJoined) {
-        await sl<NotificationDao>().insertNotification(NotificationModel(
-          id: _uuid.v4(),
-          userId: uid,
-          type: 'opportunity',
-          body: 'You joined "${post.title}"',
-          entityId: post.id,
-          createdAt: DateTime.now(),
-        ));
-        if (mounted) {
-          unawaited(context.read<NotificationCubit>().loadNotifications());
-        }
-      }
+      // Note: Self-notifications are not sent. The UI feedback is shown via 
+      // setState above, which updates _hasJoined status in real-time.
 
       setState(() {
         _hasJoined = isNowJoined;
