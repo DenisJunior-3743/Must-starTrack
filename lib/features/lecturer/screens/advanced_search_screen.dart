@@ -1,8 +1,8 @@
-﻿// lib/features/lecturer/screens/advanced_search_screen.dart
+// lib/features/lecturer/screens/advanced_search_screen.dart
 //
 // MUST StarTrack — Advanced Student Search (Lecturer)
 //
-// Multi-filter search: query text, faculty, specific skill.
+// Multi-filter search: query text, faculty, course, specific skill.
 // Results show student cards with profile links.
 
 import 'package:flutter/material.dart';
@@ -12,7 +12,12 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
+import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_names.dart';
+import '../../../data/local/dao/course_dao.dart';
+import '../../../data/local/dao/faculty_dao.dart';
+import '../../../data/models/course_model.dart';
+import '../../../data/models/faculty_model.dart';
 import '../../../data/models/user_model.dart';
 import '../bloc/lecturer_cubit.dart';
 
@@ -25,31 +30,123 @@ class AdvancedSearchScreen extends StatefulWidget {
 
 class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
   final _queryCtrl = TextEditingController();
-  String? _selectedFaculty;
+  final _facultyDao = sl<FacultyDao>();
+  final _courseDao = sl<CourseDao>();
+
+  String? _selectedFacultyId;
+  String? _selectedCourseId;
   String? _selectedSkill;
   bool _hasSearched = false;
 
-  static const _faculties = [
-    'Computing and Informatics',
-    'Science',
-    'Engineering',
-    'Medicine',
-    'Business and Management',
-    'Education',
-    'Arts and Social Sciences',
-  ];
+  List<FacultyModel> _faculties = const [];
+  List<CourseModel> _courses = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFaculties();
+    _loadInitialStudents();
+  }
+
+  void _loadInitialStudents() {
+    _hasSearched = true;
+    context.read<LecturerCubit>().searchStudents(query: '');
+  }
+
+  Future<void> _loadFaculties() async {
+    try {
+      final faculties = await _facultyDao.getAllFaculties(activeOnly: true);
+      if (!mounted) return;
+      setState(() {
+        _faculties = faculties;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load faculties: $e')),
+      );
+    }
+  }
+
+  Future<void> _loadCoursesForFaculty(String facultyId) async {
+    try {
+      final courses =
+          await _courseDao.getCoursesByFaculty(facultyId, activeOnly: true);
+      if (!mounted) return;
+      setState(() {
+        _courses = courses;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load courses: $e')),
+      );
+    }
+  }
+
+  FacultyModel? get _selectedFaculty {
+    for (final faculty in _faculties) {
+      if (faculty.id == _selectedFacultyId) {
+        return faculty;
+      }
+    }
+    return null;
+  }
+
+  CourseModel? get _selectedCourse {
+    for (final course in _courses) {
+      if (course.id == _selectedCourseId) {
+        return course;
+      }
+    }
+    return null;
+  }
 
   void _doSearch() {
     final query = _queryCtrl.text.trim();
-    if (query.isEmpty && _selectedFaculty == null && _selectedSkill == null) {
-      return;
-    }
     setState(() => _hasSearched = true);
+
     context.read<LecturerCubit>().searchStudents(
-          query: query.isEmpty ? '' : query,
-          faculty: _selectedFaculty,
+          query: query,
+          faculty: _selectedFaculty?.name,
+          course: _selectedCourse?.name,
           skill: _selectedSkill,
         );
+  }
+
+  String _sortKeyForStudent(UserModel user) {
+    final display = user.displayName?.trim() ?? '';
+    if (display.isNotEmpty) return display.toLowerCase();
+    return user.email.trim().toLowerCase();
+  }
+
+  List<UserModel> _sortedStudents(List<UserModel> results) {
+    final sorted = List<UserModel>.from(results);
+    sorted.sort((a, b) {
+      final byName = _sortKeyForStudent(a).compareTo(_sortKeyForStudent(b));
+      if (byName != 0) return byName;
+      return a.email.toLowerCase().compareTo(b.email.toLowerCase());
+    });
+    return sorted;
+  }
+
+  String _buildResultMeta(List<UserModel> results) {
+    final faculties = <String>{};
+    final programs = <String>{};
+
+    for (final user in results) {
+      final faculty = user.profile?.faculty?.trim();
+      if (faculty != null && faculty.isNotEmpty) {
+        faculties.add(faculty);
+      }
+
+      final program = user.profile?.programName?.trim();
+      if (program != null && program.isNotEmpty) {
+        programs.add(program);
+      }
+    }
+
+    return '${results.length} students • ${faculties.length} faculties • ${programs.length} programs';
   }
 
   @override
@@ -73,13 +170,11 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
       ),
       body: Column(
         children: [
-          // ── Search controls ────────────────────────────────────────────
           Container(
             color: isDark ? AppColors.surfaceDark : Colors.white,
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             child: Column(
               children: [
-                // Search bar
                 TextField(
                   controller: _queryCtrl,
                   onSubmitted: (_) => _doSearch(),
@@ -96,7 +191,9 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
                       onPressed: () => _showFilterSheet(context),
                     ),
                     contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 14),
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
                     border: OutlineInputBorder(
                       borderRadius:
                           BorderRadius.circular(AppDimensions.radiusMd),
@@ -108,26 +205,41 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
                     ),
                   ),
                 ),
-
-                // Active filter chips
-                if (_selectedFaculty != null || _selectedSkill != null) ...[
+                if (_selectedFaculty != null ||
+                    _selectedCourse != null ||
+                    _selectedSkill != null) ...[
                   const SizedBox(height: 8),
-                  Row(
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
                     children: [
                       if (_selectedFaculty != null)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: InputChip(
-                            label: Text(
-                              _selectedFaculty!,
-                              style: GoogleFonts.plusJakartaSans(fontSize: 11),
-                            ),
-                            onDeleted: () {
-                              setState(() => _selectedFaculty = null);
-                              if (_hasSearched) _doSearch();
-                            },
-                            visualDensity: VisualDensity.compact,
+                        InputChip(
+                          label: Text(
+                            _selectedFaculty!.name,
+                            style: GoogleFonts.plusJakartaSans(fontSize: 11),
                           ),
+                          onDeleted: () {
+                            setState(() {
+                              _selectedFacultyId = null;
+                              _selectedCourseId = null;
+                              _courses = const [];
+                            });
+                            if (_hasSearched) _doSearch();
+                          },
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      if (_selectedCourse != null)
+                        InputChip(
+                          label: Text(
+                            _selectedCourse!.name,
+                            style: GoogleFonts.plusJakartaSans(fontSize: 11),
+                          ),
+                          onDeleted: () {
+                            setState(() => _selectedCourseId = null);
+                            if (_hasSearched) _doSearch();
+                          },
+                          visualDensity: VisualDensity.compact,
                         ),
                       if (_selectedSkill != null)
                         InputChip(
@@ -144,10 +256,7 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
                     ],
                   ),
                 ],
-
                 const SizedBox(height: 8),
-
-                // Search button
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
@@ -155,7 +264,7 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
                     icon: const Icon(Icons.search, size: 18),
                     label: const Text('Search'),
                     style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.roleLecturer,
+                      backgroundColor: AppColors.primary,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius:
@@ -167,10 +276,7 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
               ],
             ),
           ),
-
           const Divider(height: 1),
-
-          // ── Results ────────────────────────────────────────────────────
           Expanded(
             child: BlocBuilder<LecturerCubit, LecturerState>(
               builder: (context, state) {
@@ -181,15 +287,19 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
                   return Center(child: Text(state.message));
                 }
                 if (state is StudentSearchLoaded) {
+                  final sortedResults = _sortedStudents(state.results);
+
                   if (state.results.isEmpty) {
                     return Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.person_search_outlined,
-                              size: 56,
-                              color: AppColors.textSecondaryLight
-                                  .withValues(alpha: 0.5)),
+                          Icon(
+                            Icons.person_search_outlined,
+                            size: 56,
+                            color: AppColors.textSecondaryLight
+                                .withValues(alpha: 0.5),
+                          ),
                           const SizedBox(height: 12),
                           Text(
                             'No students found',
@@ -211,25 +321,47 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
                     );
                   }
 
-                  return ListView.builder(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: state.results.length,
-                    itemBuilder: (context, index) {
-                      return _SearchResultCard(user: state.results[index]);
-                    },
+                  return Column(
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+                        color: isDark ? AppColors.surfaceDark : Colors.white,
+                        child: Text(
+                          _buildResultMeta(sortedResults),
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: isDark
+                                ? AppColors.textSecondaryDark
+                                : AppColors.textSecondaryLight,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: ListView.builder(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          itemCount: sortedResults.length,
+                          itemBuilder: (context, index) {
+                            return _SearchResultCard(user: sortedResults[index]);
+                          },
+                        ),
+                      ),
+                    ],
                   );
                 }
 
-                // Initial state — prompt
                 if (!_hasSearched) {
                   return Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.school_outlined,
-                            size: 56,
-                            color: AppColors.textSecondaryLight
-                                .withValues(alpha: 0.5)),
+                        Icon(
+                          Icons.school_outlined,
+                          size: 56,
+                          color:
+                              AppColors.textSecondaryLight.withValues(alpha: 0.5),
+                        ),
                         const SizedBox(height: 12),
                         Text(
                           'Find talented students',
@@ -241,7 +373,7 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Search by name, skill, or faculty',
+                          'Search by name, skill, faculty, or course',
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 12,
                             color: AppColors.textHintLight,
@@ -251,6 +383,7 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
                     ),
                   );
                 }
+
                 return const SizedBox.shrink();
               },
             ),
@@ -262,7 +395,11 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
 
   void _showFilterSheet(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final skillCtrl = TextEditingController(text: _selectedSkill);
+    final skillCtrl = TextEditingController(text: _selectedSkill ?? '');
+
+    String? tempFacultyId = _selectedFacultyId;
+    String? tempCourseId = _selectedCourseId;
+    List<CourseModel> tempCourses = List<CourseModel>.from(_courses);
 
     showModalBottomSheet(
       context: context,
@@ -275,7 +412,11 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
           builder: (ctx, setSheetState) {
             return Padding(
               padding: EdgeInsets.fromLTRB(
-                  16, 20, 16, MediaQuery.of(ctx).viewInsets.bottom + 20),
+                16,
+                20,
+                16,
+                MediaQuery.of(ctx).viewInsets.bottom + 20,
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -291,8 +432,6 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-
-                  // Faculty dropdown
                   Text(
                     'Faculty',
                     style: GoogleFonts.plusJakartaSans(
@@ -302,24 +441,50 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
                   ),
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
-                    initialValue: _selectedFaculty,
+                    initialValue: tempFacultyId,
                     isExpanded: true,
-                    hint: Text('All faculties',
-                        style: GoogleFonts.plusJakartaSans(fontSize: 13)),
-                    items: _faculties
-                        .map((f) => DropdownMenuItem(
-                              value: f,
-                              child: Text(f,
-                                  style: GoogleFonts.plusJakartaSans(fontSize: 13)),
-                            ))
-                        .toList(),
-                    onChanged: (v) {
-                      setSheetState(() {});
-                      setState(() => _selectedFaculty = v);
+                    hint: Text(
+                      'All faculties',
+                      style: GoogleFonts.plusJakartaSans(fontSize: 13),
+                    ),
+                    items: [
+                      DropdownMenuItem<String>(
+                        value: null,
+                        child: Text(
+                          'All faculties',
+                          style: GoogleFonts.plusJakartaSans(fontSize: 13),
+                        ),
+                      ),
+                      ..._faculties.map(
+                        (f) => DropdownMenuItem<String>(
+                          value: f.id,
+                          child: Text(
+                            f.name,
+                            style: GoogleFonts.plusJakartaSans(fontSize: 13),
+                          ),
+                        ),
+                      ),
+                    ],
+                    onChanged: (v) async {
+                      setSheetState(() {
+                        tempFacultyId = v;
+                        tempCourseId = null;
+                        tempCourses = const [];
+                      });
+
+                      if (v != null) {
+                        final courses =
+                            await _courseDao.getCoursesByFaculty(v, activeOnly: true);
+                        setSheetState(() {
+                          tempCourses = courses;
+                        });
+                      }
                     },
                     decoration: InputDecoration(
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 14),
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius:
                             BorderRadius.circular(AppDimensions.radiusMd),
@@ -327,8 +492,61 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
-
-                  // Skill filter
+                  Text(
+                    'Course',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<String>(
+                    initialValue: tempCourseId,
+                    isExpanded: true,
+                    hint: Text(
+                      tempFacultyId == null
+                          ? 'Select faculty first'
+                          : 'All courses',
+                      style: GoogleFonts.plusJakartaSans(fontSize: 13),
+                    ),
+                    items: tempFacultyId == null
+                        ? const []
+                        : [
+                            DropdownMenuItem<String>(
+                              value: null,
+                              child: Text(
+                                'All courses',
+                                style: GoogleFonts.plusJakartaSans(fontSize: 13),
+                              ),
+                            ),
+                            ...tempCourses.map(
+                              (c) => DropdownMenuItem<String>(
+                                value: c.id,
+                                child: Text(
+                                  c.name,
+                                  style:
+                                      GoogleFonts.plusJakartaSans(fontSize: 13),
+                                ),
+                              ),
+                            ),
+                          ],
+                    onChanged: tempFacultyId == null
+                        ? null
+                        : (v) {
+                            setSheetState(() => tempCourseId = v);
+                          },
+                    decoration: InputDecoration(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius:
+                            BorderRadius.circular(AppDimensions.radiusMd),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
                   Text(
                     'Skill',
                     style: GoogleFonts.plusJakartaSans(
@@ -347,7 +565,9 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
                         color: AppColors.textHintLight,
                       ),
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 14),
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
                       border: OutlineInputBorder(
                         borderRadius:
                             BorderRadius.circular(AppDimensions.radiusMd),
@@ -355,22 +575,30 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  // Apply button
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
-                      onPressed: () {
+                      onPressed: () async {
                         setState(() {
+                          _selectedFacultyId = tempFacultyId;
+                          _selectedCourseId = tempCourseId;
                           _selectedSkill = skillCtrl.text.trim().isNotEmpty
                               ? skillCtrl.text.trim()
                               : null;
+                          _courses = tempCourses;
                         });
-                        Navigator.pop(ctx);
-                        _doSearch();
+
+                        if (_selectedFacultyId != null && _courses.isEmpty) {
+                          await _loadCoursesForFaculty(_selectedFacultyId!);
+                        }
+
+                        if (context.mounted) {
+                          Navigator.pop(ctx);
+                          _doSearch();
+                        }
                       },
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.roleLecturer,
+                        backgroundColor: AppColors.primary,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       child: const Text('Apply Filters'),
@@ -386,10 +614,9 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
   }
 }
 
-// ── Search result card ────────────────────────────────────────────────────────
-
 class _SearchResultCard extends StatelessWidget {
   final UserModel user;
+
   const _SearchResultCard({required this.user});
 
   @override
@@ -420,7 +647,6 @@ class _SearchResultCard extends StatelessWidget {
             ),
             child: Row(
               children: [
-                // Avatar
                 CircleAvatar(
                   radius: 24,
                   backgroundColor: AppColors.primaryTint10,
@@ -441,8 +667,6 @@ class _SearchResultCard extends StatelessWidget {
                       : null,
                 ),
                 const SizedBox(width: 12),
-
-                // Info
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -477,7 +701,9 @@ class _SearchResultCard extends StatelessWidget {
                               .map(
                                 (s) => Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 7, vertical: 2),
+                                    horizontal: 7,
+                                    vertical: 2,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: AppColors.primaryTint10,
                                     borderRadius: BorderRadius.circular(20),
@@ -498,8 +724,6 @@ class _SearchResultCard extends StatelessWidget {
                     ],
                   ),
                 ),
-
-                // Stats column
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
@@ -507,8 +731,11 @@ class _SearchResultCard extends StatelessWidget {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.local_fire_department,
-                              size: 14, color: Colors.orange.shade400),
+                          Icon(
+                            Icons.local_fire_department,
+                            size: 14,
+                            color: Colors.orange.shade400,
+                          ),
                           const SizedBox(width: 2),
                           Text(
                             '${profile.activityStreak}',
@@ -526,8 +753,11 @@ class _SearchResultCard extends StatelessWidget {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.article_outlined,
-                              size: 14, color: AppColors.textHintLight),
+                          const Icon(
+                            Icons.article_outlined,
+                            size: 14,
+                            color: AppColors.textHintLight,
+                          ),
                           const SizedBox(width: 2),
                           Text(
                             '${profile.totalPosts}',
@@ -541,10 +771,12 @@ class _SearchResultCard extends StatelessWidget {
                     ],
                   ],
                 ),
-
                 const SizedBox(width: 4),
-                const Icon(Icons.chevron_right,
-                    size: 20, color: AppColors.textHintLight),
+                const Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: AppColors.textHintLight,
+                ),
               ],
             ),
           ),
@@ -553,4 +785,3 @@ class _SearchResultCard extends StatelessWidget {
     );
   }
 }
-

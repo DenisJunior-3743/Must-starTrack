@@ -21,6 +21,20 @@ service cloud.firestore {
       return userRole() == 'admin' || userRole() == 'super_admin';
     }
 
+    function isPrivilegedPublisher() {
+      return isStaffRole() || isAdminRole();
+    }
+
+    function touchesModerationFields() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'moderation_status',
+        'is_archived',
+        'status',
+        'trust_score',
+        'suspicion_score'
+      ]);
+    }
+
     // Same as hasAllowedDomainForRole but uses a role value passed as
     // an argument instead of reading from the (possibly missing) user doc.
     // Used for the users/create rule where the document doesn't exist yet.
@@ -97,10 +111,28 @@ service cloud.firestore {
             || resource.data.get('moderation_status', null) in [null, 'approved']);
 
       allow create: if isMustUser()
-        && request.resource.data.author_id == uid();
+        && request.resource.data.author_id == uid()
+        && request.resource.data.get('is_archived', false) == false
+        && (
+          (
+            isStudentRole()
+            && request.resource.data.get('moderation_status', 'pending') == 'pending'
+          )
+          || (
+            isPrivilegedPublisher()
+            && request.resource.data.get('moderation_status', 'approved') in ['approved', 'pending']
+          )
+        );
 
       allow update: if isMustUser()
-        && (resource.data.author_id == uid() || isAdmin());
+        && (
+          isAdmin()
+          || (
+            resource.data.author_id == uid()
+            && request.resource.data.author_id == resource.data.author_id
+            && !touchesModerationFields()
+          )
+        );
 
       allow delete: if isMustUser()
         && (resource.data.author_id == uid() || isAdmin());
@@ -294,8 +326,40 @@ service cloud.firestore {
           || isAdmin()
         );
 
-      allow create, update: if isMustUser()
+      allow create: if isMustUser()
         && request.resource.data.viewer_id == uid();
+
+      // update: viewer_id is not re-sent on partial .update() calls, so check
+      // the *existing* document's viewer_id against the caller instead.
+      allow update: if isMustUser()
+        && resource.data.viewer_id == uid();
+
+      allow delete: if isAdmin();
+    }
+
+
+    // POST RATINGS
+    match /post_ratings/{ratingId} {
+
+      allow read: if isMustUser()
+        && (resource.data.user_id == uid() || isAdmin());
+
+      allow create, update: if isMustUser()
+        && request.resource.data.user_id == uid();
+
+      allow delete: if isMustUser()
+        && (resource.data.user_id == uid() || isAdmin());
+    }
+
+
+    // RECOMMENDATION LOGS
+    match /recommendation_logs/{logId} {
+
+      allow read: if isMustUser()
+        && (resource.data.user_id == uid() || isAdmin());
+
+      allow create, update: if isMustUser()
+        && request.resource.data.user_id == uid();
 
       allow delete: if isAdmin();
     }
@@ -315,6 +379,34 @@ service cloud.firestore {
 
       allow read: if isMustUser();
       allow write: if isAdmin();
+    }
+
+
+    // FACULTIES
+    match /faculties/{facultyId} {
+
+      // Public read — all users can see faculty listings
+      allow read: if true;
+
+      // Admins can create, update, archive faculties
+      allow create, update: if isAdmin();
+
+      // Admins can soft-delete (via archive) — hard deletes forbidden
+      allow delete: if false;
+    }
+
+
+    // COURSES
+    match /courses/{courseId} {
+
+      // Public read — all users can see course listings
+      allow read: if true;
+
+      // Admins can create, update, archive courses
+      allow create, update: if isAdmin();
+
+      // Admins can soft-delete (via archive) — hard deletes forbidden
+      allow delete: if false;
     }
 
 

@@ -9,10 +9,12 @@
 //   - Rating / ranking students
 
 import 'package:equatable/equatable.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../data/local/dao/post_dao.dart';
 import '../../../data/local/dao/post_join_dao.dart';
+import '../../../data/local/dao/recommendation_log_dao.dart';
 import '../../../data/local/dao/user_dao.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/models/user_model.dart';
@@ -75,17 +77,25 @@ class StudentSearchLoaded extends LecturerState {
   final List<UserModel> results;
   final String query;
   final String? facultyFilter;
+  final String? courseFilter;
   final String? skillFilter;
 
   const StudentSearchLoaded({
     required this.results,
     required this.query,
     this.facultyFilter,
+    this.courseFilter,
     this.skillFilter,
   });
 
   @override
-  List<Object?> get props => [results, query, facultyFilter, skillFilter];
+  List<Object?> get props => [
+        results,
+        query,
+        facultyFilter,
+        courseFilter,
+        skillFilter,
+      ];
 }
 
 class StudentRankingLoaded extends LecturerState {
@@ -117,16 +127,19 @@ class LecturerCubit extends Cubit<LecturerState> {
   final PostJoinDao _postJoinDao;
   final UserDao _userDao;
   final RecommenderService _recommenderService;
+  final RecommendationLogDao? _recLogDao;
 
   LecturerCubit({
     required PostDao postDao,
     required PostJoinDao postJoinDao,
     required UserDao userDao,
     required RecommenderService recommenderService,
+    RecommendationLogDao? recLogDao,
   })  : _postDao = postDao,
         _postJoinDao = postJoinDao,
         _userDao = userDao,
         _recommenderService = recommenderService,
+        _recLogDao = recLogDao,
         super(const LecturerInitial());
 
   // ── Dashboard ─────────────────────────────────────────────────────────────
@@ -138,6 +151,7 @@ class LecturerCubit extends Cubit<LecturerState> {
       final allPosts = await _postDao.getPostsByAuthor(
         lecturerId,
         pageSize: 200,
+        includeArchived: true,
       );
 
       // Filter to opportunities only
@@ -152,15 +166,22 @@ class LecturerCubit extends Cubit<LecturerState> {
 
       final now = DateTime.now();
       final active = opportunities.where((o) {
+        if (o.isArchived) return false;
         if (o.opportunityDeadline == null) return true;
         return o.opportunityDeadline!.isAfter(now);
+      }).length;
+
+      final expired = opportunities.where((o) {
+        if (o.isArchived) return false;
+        if (o.opportunityDeadline == null) return false;
+        return o.opportunityDeadline!.isBefore(now);
       }).length;
 
       emit(LecturerDashboardLoaded(
         opportunities: opportunities,
         totalApplicants: totalApplicants,
         activeOpportunities: active,
-        expiredOpportunities: opportunities.length - active,
+        expiredOpportunities: expired,
       ));
     } catch (e) {
       emit(LecturerError('Failed to load dashboard: $e'));
@@ -182,6 +203,23 @@ class LecturerCubit extends Cubit<LecturerState> {
         for (final item in ranked) item.user.id: item,
       };
 
+      // Log applicant ranking decisions (SQLite + Firestore fire-and-forget)
+      if (_recLogDao != null && ranked.isNotEmpty) {
+        final entries = ranked
+            .map((r) => RecommendationLogEntry(
+                  userId: opportunity.authorId,
+                  itemId: r.user.id,
+                  itemType: 'user',
+                  algorithm: 'applicant',
+                  score: r.score,
+                  reasons: r.reasons,
+                ))
+            .toList();
+        _recLogDao.insertBatch(entries).catchError(
+          (e) => debugPrint('[LecturerCubit] rec log failed: $e'),
+        );
+      }
+
       emit(ApplicantsLoaded(
         opportunity: opportunity,
         applicants: ranked.map((item) => item.user).toList(),
@@ -197,6 +235,7 @@ class LecturerCubit extends Cubit<LecturerState> {
   Future<void> searchStudents({
     required String query,
     String? faculty,
+    String? course,
     String? skill,
   }) async {
     emit(const LecturerLoading());
@@ -204,6 +243,7 @@ class LecturerCubit extends Cubit<LecturerState> {
       final results = await _userDao.searchUsers(
         query: query,
         faculty: faculty,
+        course: course,
         skill: skill,
       );
 
@@ -211,6 +251,7 @@ class LecturerCubit extends Cubit<LecturerState> {
         results: results,
         query: query,
         facultyFilter: faculty,
+        courseFilter: course,
         skillFilter: skill,
       ));
     } catch (e) {

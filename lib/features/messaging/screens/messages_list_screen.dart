@@ -3,16 +3,16 @@
 // MUST StarTrack â€” Messages List Screen (Phase 4)
 //
 // Matches messages_list.html:
-//   â€¢ Search conversations
-//   â€¢ Unread badge on conversations
-//   â€¢ Last message preview + timestamp
-//   â€¢ Online presence dot
-//   â€¢ Swipe-to-delete conversation
+//    Search conversations
+//    Unread badge on conversations
+//    Last message preview + timestamp
+//    Online presence dot
+//    Swipe-to-delete conversation
 //
 // HCI:
-//   â€¢ Visibility: unread count badge, online dot
-//   â€¢ Feedback: swipe reveals delete action
-//   â€¢ Recognition: avatar initial when no photo
+//    Visibility: unread count badge, online dot
+//      Feedback: swipe reveals delete action
+//      Recognition: avatar initial when no photo
 
 import 'dart:async';
 
@@ -86,7 +86,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                 }
               },
               decoration: InputDecoration(
-                hintText: 'Search conversationsâ€¦',
+                hintText: 'Search conversations',
                 hintStyle: GoogleFonts.plusJakartaSans(fontSize: 13),
                 prefixIcon: const Icon(Icons.search_rounded),
                 contentPadding: const EdgeInsets.symmetric(vertical: 10),
@@ -165,7 +165,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                               : () => context.push('/project/${request.postId}'),
                           onMessage: request.counterpartId.isEmpty
                               ? null
-                              : () {
+                              : () async {
                                   final currentUserId = sl<AuthCubit>().currentUser?.id;
                                   if (currentUserId != null && currentUserId.isNotEmpty) {
                                     unawaited(sl<ActivityLogDao>().logAction(
@@ -175,7 +175,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                                       entityId: request.counterpartId,
                                     ));
                                   }
-                                  context.push(
+                                  await context.push(
                                     '/chat/${request.counterpartId}',
                                     extra: {
                                       'peerName': request.counterpartName,
@@ -183,6 +183,8 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                                       'isPeerLecturer': false,
                                     },
                                   );
+                                  if (!context.mounted) return;
+                                  context.read<MessageCubit>().loadConversations();
                                 },
                         ),
                       ),
@@ -197,7 +199,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                         (convo) => _ConversationTile(
                           convo: convo,
                           onDelete: () => context.read<MessageCubit>().deleteConversation(convo.id),
-                          onTap: () {
+                          onTap: () async {
                             final currentUserId = sl<AuthCubit>().currentUser?.id;
                             if (currentUserId != null && currentUserId.isNotEmpty) {
                               unawaited(sl<ActivityLogDao>().logAction(
@@ -207,7 +209,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                                 entityId: convo.peerId,
                               ));
                             }
-                            context.push(
+                            await context.push(
                               '/chat/${convo.peerId}',
                               extra: {
                                 'peerName': convo.peerName,
@@ -215,6 +217,8 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                                 'isPeerLecturer': convo.isPeerLecturer,
                               },
                             );
+                            if (!context.mounted) return;
+                            context.read<MessageCubit>().loadConversations();
                           },
                         ),
                       ),
@@ -400,6 +404,7 @@ class _RequestTile extends StatelessWidget {
       'rejected' || 'cancelled' => AppColors.danger,
       _ => AppColors.warning,
     };
+    final aiFitScore = request.aiFitScore;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -486,6 +491,10 @@ class _RequestTile extends StatelessWidget {
               ),
             ),
           ],
+          if (request.isIncoming && aiFitScore != null) ...[
+            const SizedBox(height: 12),
+            _RequestFitPanel(request: request),
+          ],
           const SizedBox(height: 12),
           Row(
             children: [
@@ -517,6 +526,146 @@ class _RequestTile extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _RequestFitPanel extends StatelessWidget {
+  final CollaborationInboxItem request;
+
+  const _RequestFitPanel({required this.request});
+
+  @override
+  Widget build(BuildContext context) {
+    final score = request.aiFitScore ?? 0;
+    final stars = (score * 5).clamp(1, 5).round();
+    final reasons = request.aiReasons.map(_reasonLabel).toList();
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.primaryTint10,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.auto_graph_rounded, size: 16, color: AppColors.primary),
+              const SizedBox(width: 8),
+              Text(
+                'AI fit for this collaborator',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${(score * 100).round()}%',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: List.generate(5, (index) {
+              final filled = index < stars;
+              return Padding(
+                padding: const EdgeInsets.only(right: 2),
+                child: Icon(
+                  filled ? Icons.star_rounded : Icons.star_border_rounded,
+                  size: 16,
+                  color: filled ? AppColors.warning : AppColors.borderLight,
+                ),
+              );
+            }),
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: score.clamp(0.0, 1.0),
+              minHeight: 7,
+              backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+              color: AppColors.primary,
+            ),
+          ),
+          if (request.aiMatchedSkills.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: request.aiMatchedSkills.take(4).map((skill) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+                  ),
+                  child: Text(
+                    skill,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.success,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+          if (reasons.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: reasons.take(3).map((reason) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+                    border: Border.all(color: AppColors.border(context)),
+                  ),
+                  child: Text(
+                    reason,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondaryLight,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static String _reasonLabel(String reason) {
+    switch (reason) {
+      case 'skill_match':
+        return 'Skill match';
+      case 'complementary_skills':
+        return 'Complementary skills';
+      case 'faculty_match':
+        return 'Same faculty';
+      case 'program_match':
+        return 'Same program';
+      case 'search_intent':
+        return 'Matches your interest';
+      default:
+        return reason.replaceAll('_', ' ');
+    }
   }
 }
 

@@ -17,6 +17,8 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/constants/must_validators.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_names.dart';
+import '../../../data/local/dao/faculty_dao.dart';
+import '../../../data/local/dao/course_dao.dart';
 import '../../shared/hci_components/st_form_widgets.dart';
 import '../bloc/auth_cubit.dart';
 
@@ -37,19 +39,61 @@ class _LecturerRegisterScreenState extends State<LecturerRegisterScreen> {
   String? _faculty;
   String? _department;
 
-  static const _faculties = [
-    'Computing and Informatics',
-    'Applied Sciences and Technology',
-    'Medicine',
-    'Business Sciences',
+  // DB-backed faculty and department data
+  bool _loadingFaculties = true;
+  List<String> _faculties = [];
+  Map<String, List<String>> _departments = {};
+
+  static const _fallbackFaculties = [
+    'Faculty of Computing and Informatics',
+    'Faculty of Applied Sciences and Technology',
+    'Faculty of Medicine',
+    'Faculty of Business and Management Sciences',
   ];
 
-  static const _departments = {
-    'Computing and Informatics': ['Computer Science', 'Information Technology', 'Software Engineering'],
-    'Applied Sciences and Technology': ['Civil Engineering', 'Electrical Engineering', 'Mechanical Engineering'],
-    'Medicine': ['Clinical Medicine', 'Nursing', 'Public Health'],
-    'Business Sciences': ['Accounting', 'Management', 'Marketing'],
+  static const _fallbackDepartments = {
+    'Faculty of Computing and Informatics': ['Computer Science', 'Information Technology', 'Software Engineering'],
+    'Faculty of Applied Sciences and Technology': ['Civil Engineering', 'Electrical Engineering', 'Mechanical Engineering'],
+    'Faculty of Medicine': ['Clinical Medicine', 'Nursing', 'Public Health'],
+    'Faculty of Business and Management Sciences': ['Accounting', 'Management', 'Marketing'],
   };
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFacultyData();
+  }
+
+  Future<void> _loadFacultyData() async {
+    try {
+      final faculties = await sl<FacultyDao>().getAllFaculties();
+      final courseDao = sl<CourseDao>();
+      final facultyNames = <String>[];
+      final deptMap = <String, List<String>>{};
+
+      for (final faculty in faculties) {
+        facultyNames.add(faculty.name);
+        final courses = await courseDao.getCoursesByFaculty(faculty.id);
+        deptMap[faculty.name] = courses.map((c) => c.name).toList();
+      }
+
+      if (mounted) {
+        setState(() {
+          _faculties = facultyNames.isNotEmpty ? facultyNames : _fallbackFaculties;
+          _departments = deptMap.isNotEmpty ? deptMap : Map.from(_fallbackDepartments);
+          _loadingFaculties = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _faculties = _fallbackFaculties;
+          _departments = Map.from(_fallbackDepartments);
+          _loadingFaculties = false;
+        });
+      }
+    }
+  }
 
   List<String> get _currentDepts =>
       _faculty != null ? (_departments[_faculty] ?? []) : [];
@@ -114,7 +158,9 @@ class _LecturerRegisterScreenState extends State<LecturerRegisterScreen> {
               title: const Text('Staff Registration'),
               leading: BackButton(onPressed: () => ctx.pop()),
             ),
-            body: SingleChildScrollView(
+            body: _loadingFaculties
+                ? const Center(child: CircularProgressIndicator())
+                : SingleChildScrollView(
               padding: const EdgeInsets.all(AppDimensions.spacingMd),
               child: Form(
                 key: _formKey,

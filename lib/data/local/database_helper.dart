@@ -240,6 +240,38 @@ class DatabaseHelper {
 
       debugPrint('✅ Database v8 migration complete: posts table columns verified');
     }
+    if (oldVersion < 9) {
+      await _ensureColumn(
+          db, DatabaseSchema.tableMessages, 'reply_to_id', 'TEXT');
+      await _ensureColumn(
+          db, DatabaseSchema.tableMessages, 'reply_to_preview', 'TEXT');
+      debugPrint('✅ Database v9 migration complete: reply columns added to messages');
+    }
+    if (oldVersion < 10) {
+      // Create faculties and courses tables for master data management
+      await db.execute(DatabaseSchema.createFaculties);
+      await db.execute(DatabaseSchema.createCourses);
+      
+      // Create indexes for performance
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_courses_faculty ON ${DatabaseSchema.tableCourses}(faculty_id)');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_courses_active ON ${DatabaseSchema.tableCourses}(is_active)');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_faculties_active ON ${DatabaseSchema.tableFaculties}(is_active)');
+      
+      debugPrint('✅ Database v10 migration complete: faculties and courses tables created');
+    }
+    if (oldVersion < 11) {
+      await db.execute(DatabaseSchema.createRecommendationLogs);
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_rec_logs_user ON ${DatabaseSchema.tableRecommendationLogs}(user_id)');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_rec_logs_algo ON ${DatabaseSchema.tableRecommendationLogs}(algorithm)');
+      await db.execute(
+          'CREATE INDEX IF NOT EXISTS idx_rec_logs_time ON ${DatabaseSchema.tableRecommendationLogs}(logged_at DESC)');
+      debugPrint('✅ Database v11 migration complete: recommendation_logs table created');
+    }
   }
 
   Future<void> _ensureColumn(

@@ -41,6 +41,8 @@ import '../local/dao/sync_queue_dao.dart';
 import '../local/dao/user_dao.dart';
 import '../local/dao/post_dao.dart';
 import '../local/dao/message_dao.dart';
+import '../local/dao/faculty_dao.dart';
+import '../local/dao/course_dao.dart';
 import '../local/services/notification_preferences_service.dart';
 import '../local/database_helper.dart';
 import '../local/schema/database_schema.dart';
@@ -75,6 +77,8 @@ class SyncService {
   final UserDao _userDao;
   final PostDao _postDao;
   final CommentDao _commentDao;
+  final FacultyDao _facultyDao;
+  final CourseDao _courseDao;
   final Connectivity _connectivity;
   final CloudinaryService _cloudinary;
   final FlutterLocalNotificationsPlugin _localNotif;
@@ -91,6 +95,8 @@ class SyncService {
     required UserDao userDao,
     required PostDao postDao,
     required CommentDao commentDao,
+    required FacultyDao facultyDao,
+    required CourseDao courseDao,
     required CloudinaryService cloudinary,
     required FlutterLocalNotificationsPlugin localNotif,
     required NotificationPreferencesService preferences,
@@ -100,6 +106,8 @@ class SyncService {
         _userDao = userDao,
         _postDao = postDao,
         _commentDao = commentDao,
+        _facultyDao = facultyDao,
+        _courseDao = courseDao,
         _cloudinary = cloudinary,
         _localNotif = localNotif,
         _preferences = preferences,
@@ -440,8 +448,14 @@ class SyncService {
           return await _syncCollabRequest(job);
         case 'opportunity_joins':
           return await _syncOpportunityJoin(job);
+        case 'post_ratings':
+          return await _syncPostRating(job);
         case 'moderation_queue':
           return await _syncModerationReport(job);
+        case 'faculties':
+          return await _syncFaculty(job);
+        case 'courses':
+          return await _syncCourse(job);
         default:
           // Unknown entity type — remove from queue to prevent blocking
           return true;
@@ -571,6 +585,9 @@ class SyncService {
       senderId: payload['sender_id'] as String,
       content: payload['content'] as String,
       messageType: payload['message_type'] as String? ?? 'text',
+      fileUrl: payload['file_url'] as String?,
+      fileName: payload['file_name'] as String?,
+      fileSize: payload['file_size'] as String?,
       createdAt: DateTime.tryParse(payload['created_at'] as String? ?? '') ??
           DateTime.now(),
     );
@@ -581,6 +598,23 @@ class SyncService {
     debugPrint(
         '[SyncMessage] ✅ Message ${msg.id} written to Firestore successfully');
     return true;
+  }
+
+  Future<bool> _syncPostRating(SyncJob job) async {
+    switch (job.operation) {
+      case 'create':
+      case 'update':
+        await _firestore.setPostRating(
+          ratingId: job.entityId,
+          payload: job.payloadJson,
+        );
+        return true;
+      case 'delete':
+        await _firestore.deletePostRating(job.entityId);
+        return true;
+      default:
+        return true;
+    }
   }
 
   // ── Follow sync ───────────────────────────────────────────────────────────
@@ -2130,5 +2164,41 @@ class SyncService {
       'dead_letter_count': deadLetter,
       'is_syncing': _isSyncing,
     };
+  }
+
+  // ── Faculty sync ──────────────────────────────────────────────────────────
+
+  Future<bool> _syncFaculty(SyncJob job) async {
+    switch (job.operation) {
+      case 'create':
+      case 'update':
+        final faculty = await _facultyDao.getFacultyById(job.entityId);
+        if (faculty == null) return true; // deleted locally
+        await _firestore.setFaculty(faculty);
+        return true;
+      case 'delete':
+        await _firestore.deleteFaculty(job.entityId);
+        return true;
+      default:
+        return true;
+    }
+  }
+
+  // ── Course sync ───────────────────────────────────────────────────────────
+
+  Future<bool> _syncCourse(SyncJob job) async {
+    switch (job.operation) {
+      case 'create':
+      case 'update':
+        final course = await _courseDao.getCourseById(job.entityId);
+        if (course == null) return true; // deleted locally
+        await _firestore.setCourse(course);
+        return true;
+      case 'delete':
+        await _firestore.deleteCourse(job.entityId);
+        return true;
+      default:
+        return true;
+    }
   }
 }

@@ -21,11 +21,13 @@
 
 abstract final class DatabaseSchema {
   static const String databaseName = 'must_startrack.db';
-  static const int databaseVersion = 8;
+  static const int databaseVersion = 11;
 
   // ── Table Names ────────────────────────────────────────────────────────────
   static const String tableUsers = 'users';
   static const String tableProfiles = 'profiles';
+  static const String tableFaculties = 'faculties';
+  static const String tableCourses = 'courses';
   static const String tablePosts = 'posts';
   static const String tableComments = 'comments';
   static const String tableLikes = 'likes';
@@ -48,6 +50,7 @@ abstract final class DatabaseSchema {
   static const String tableSearchHistory = 'search_history';
   static const String tableDraftPosts = 'draft_posts';
   static const String tableAchievements = 'achievements';
+  static const String tableRecommendationLogs = 'recommendation_logs';
 
   // ─────────────────────────────────────────────────────────────────────────
   // CREATE TABLE STATEMENTS
@@ -103,6 +106,40 @@ abstract final class DatabaseSchema {
       updated_at          TEXT NOT NULL,
       sync_status         INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (user_id) REFERENCES $tableUsers(id) ON DELETE CASCADE
+    )
+  ''';
+
+  /// Faculties — master data for institutional faculties/schools.
+  /// Managed by admins; lecturers and students assigned to faculties.
+  static const String createFaculties = '''
+    CREATE TABLE IF NOT EXISTS $tableFaculties (
+      id              TEXT PRIMARY KEY,
+      name            TEXT NOT NULL UNIQUE,
+      code            TEXT NOT NULL UNIQUE,
+      description     TEXT,
+      contact_email   TEXT,
+      head_of_faculty TEXT,
+      is_active       INTEGER NOT NULL DEFAULT 1,
+      created_at      TEXT NOT NULL,
+      updated_at      TEXT NOT NULL,
+      sync_status     INTEGER NOT NULL DEFAULT 0
+    )
+  ''';
+
+  /// Courses — master data for academic courses within faculties.
+  /// Linked to faculties via foreign key; managed by admins.
+  static const String createCourses = '''
+    CREATE TABLE IF NOT EXISTS $tableCourses (
+      id          TEXT PRIMARY KEY,
+      faculty_id  TEXT NOT NULL,
+      name        TEXT NOT NULL,
+      code        TEXT NOT NULL UNIQUE,
+      description TEXT,
+      is_active   INTEGER NOT NULL DEFAULT 1,
+      created_at  TEXT NOT NULL,
+      updated_at  TEXT NOT NULL,
+      sync_status INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (faculty_id) REFERENCES $tableFaculties(id) ON DELETE CASCADE
     )
   ''';
 
@@ -282,10 +319,12 @@ abstract final class DatabaseSchema {
       sent_at     TEXT NOT NULL,
       delivered_at TEXT,
       read_at     TEXT,
-      is_read     INTEGER NOT NULL DEFAULT 0,
-      is_deleted  INTEGER NOT NULL DEFAULT 0,
-      is_queued   INTEGER NOT NULL DEFAULT 0,
-      sync_status INTEGER NOT NULL DEFAULT 0,
+      is_read        INTEGER NOT NULL DEFAULT 0,
+      is_deleted     INTEGER NOT NULL DEFAULT 0,
+      is_queued      INTEGER NOT NULL DEFAULT 0,
+      sync_status    INTEGER NOT NULL DEFAULT 0,
+      reply_to_id    TEXT,
+      reply_to_preview TEXT,
       FOREIGN KEY (thread_id)  REFERENCES $tableMessageThreads(id) ON DELETE CASCADE,
       FOREIGN KEY (sender_id)  REFERENCES $tableUsers(id)          ON DELETE CASCADE
     )
@@ -494,6 +533,24 @@ abstract final class DatabaseSchema {
     )
   ''';
 
+  /// Recommendation Logs — records every scored recommendation for analytics.
+  /// algorithm: 'local' | 'hybrid' | 'applicant' | 'collaborator'
+  /// item_type:  'post' | 'user'
+  static const String createRecommendationLogs = '''
+    CREATE TABLE IF NOT EXISTS $tableRecommendationLogs (
+      id              TEXT PRIMARY KEY,
+      user_id         TEXT NOT NULL,
+      item_id         TEXT NOT NULL,
+      item_type       TEXT NOT NULL,
+      algorithm       TEXT NOT NULL,
+      score           REAL NOT NULL DEFAULT 0.0,
+      reasons         TEXT DEFAULT '[]',
+      was_interacted  INTEGER NOT NULL DEFAULT 0,
+      logged_at       TEXT NOT NULL,
+      sync_status     INTEGER NOT NULL DEFAULT 0
+    )
+  ''';
+
   /// Post Joins — tracks which users have joined an opportunity post.
   static const String createPostJoins = '''
     CREATE TABLE IF NOT EXISTS $tablePostJoins (
@@ -531,6 +588,12 @@ abstract final class DatabaseSchema {
     'CREATE INDEX IF NOT EXISTS idx_activity_user ON $tableActivityLogs(user_id)',
     'CREATE INDEX IF NOT EXISTS idx_post_joins_user ON $tablePostJoins(user_id)',
     'CREATE INDEX IF NOT EXISTS idx_post_joins_post ON $tablePostJoins(post_id)',
+    'CREATE INDEX IF NOT EXISTS idx_courses_faculty ON $tableCourses(faculty_id)',
+    'CREATE INDEX IF NOT EXISTS idx_courses_active ON $tableCourses(is_active)',
+    'CREATE INDEX IF NOT EXISTS idx_faculties_active ON $tableFaculties(is_active)',
+    'CREATE INDEX IF NOT EXISTS idx_rec_logs_user ON $tableRecommendationLogs(user_id)',
+    'CREATE INDEX IF NOT EXISTS idx_rec_logs_algo ON $tableRecommendationLogs(algorithm)',
+    'CREATE INDEX IF NOT EXISTS idx_rec_logs_time ON $tableRecommendationLogs(logged_at DESC)',
   ];
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -541,6 +604,8 @@ abstract final class DatabaseSchema {
   static const List<String> allCreateStatements = [
     createUsers,
     createProfiles,
+    createFaculties,
+    createCourses,
     createPosts,
     createComments,
     createLikes,
@@ -563,5 +628,6 @@ abstract final class DatabaseSchema {
     createDraftPosts,
     createAchievements,
     createPostJoins,
+    createRecommendationLogs,
   ];
 }

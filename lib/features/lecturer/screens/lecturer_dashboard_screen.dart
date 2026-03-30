@@ -14,8 +14,12 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
+import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_names.dart';
+import '../../../data/local/dao/post_dao.dart';
+import '../../../data/local/dao/sync_queue_dao.dart';
 import '../../../data/models/post_model.dart';
+import '../../../data/remote/sync_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
 import '../bloc/lecturer_cubit.dart';
 
@@ -39,6 +43,264 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
     if (authState is AuthAuthenticated) {
       context.read<LecturerCubit>().loadDashboard(authState.user.id);
     }
+  }
+
+  Future<void> _editOpportunity(PostModel post) async {
+    final result = await context.push(
+      RouteNames.createPost,
+      extra: post,
+    );
+    if (result != null) {
+      _loadData();
+    }
+  }
+
+  Future<void> _deleteOpportunity(PostModel post) async {
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Delete opportunity?'),
+            content: Text(
+              'This permanently removes "${post.title}" from your device and Firebase after sync.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!confirmed) {
+      return;
+    }
+
+    await sl<SyncQueueDao>().enqueue(
+      operation: 'delete',
+      entity: 'posts',
+      entityId: post.id,
+      payload: {'post_id': post.id},
+    );
+    await sl<PostDao>().deletePost(post.id);
+    await sl<SyncService>().processPendingSync();
+
+    if (!mounted) {
+      return;
+    }
+
+    _loadData();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Opportunity deleted.')),
+    );
+  }
+
+  Future<void> _archiveOpportunity(PostModel post) async {
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Archive opportunity?'),
+            content: Text(
+              '"${post.title}" will be removed from active listings but kept in your archive.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Archive'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!confirmed) {
+      return;
+    }
+
+    await sl<PostDao>().archivePost(post.id);
+    await sl<SyncQueueDao>().enqueue(
+      operation: 'archive',
+      entity: 'posts',
+      entityId: post.id,
+      payload: {'post_id': post.id},
+    );
+    await sl<SyncService>().processPendingSync();
+
+    if (!mounted) {
+      return;
+    }
+
+    _loadData();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Opportunity archived.')),
+    );
+  }
+
+  Future<void> _unarchiveOpportunity(PostModel post) async {
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Unarchive opportunity?'),
+            content: Text(
+              '"${post.title}" will be moved back to your active opportunities.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Unarchive'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!confirmed) {
+      return;
+    }
+
+    final restored = post.copyWith(
+      isArchived: false,
+      updatedAt: DateTime.now(),
+    );
+
+    await sl<PostDao>().updatePost(restored);
+    await sl<SyncQueueDao>().enqueue(
+      operation: 'update',
+      entity: 'posts',
+      entityId: restored.id,
+      payload: restored.toMap(),
+    );
+    await sl<SyncService>().processPendingSync();
+
+    if (!mounted) {
+      return;
+    }
+
+    _loadData();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Opportunity unarchived.')),
+    );
+  }
+
+  Future<void> _showArchivedOpportunities(List<PostModel> archived) async {
+    if (archived.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No archived opportunities yet.')),
+      );
+      return;
+    }
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? AppColors.surfaceDark : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.82,
+            minChildSize: 0.45,
+            maxChildSize: 0.95,
+            builder: (context, scrollController) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 12),
+                      width: 42,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppColors.textHintLight.withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Archived Opportunities',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: isDark
+                                  ? AppColors.textPrimaryDark
+                                  : AppColors.textPrimaryLight,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '${archived.length}',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: Text(
+                      'Unarchive an opportunity to move it back into your active list.',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView.builder(
+                      controller: scrollController,
+                      padding: const EdgeInsets.only(bottom: 24),
+                      itemCount: archived.length,
+                      itemBuilder: (context, index) {
+                        final opportunity = archived[index];
+                        return _OpportunityTile(
+                          opportunity: opportunity,
+                          onEdit: () => _editOpportunity(opportunity),
+                          onArchive: () => _archiveOpportunity(opportunity),
+                          onRestore: () async {
+                            Navigator.of(sheetContext).pop();
+                            await _unarchiveOpportunity(opportunity);
+                          },
+                          onDelete: () => _deleteOpportunity(opportunity),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -84,16 +346,17 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
             );
           }
           if (state is LecturerDashboardLoaded) {
-            return _DashboardBody(state: state);
+            return _DashboardBody(
+              state: state,
+              onEditOpportunity: _editOpportunity,
+              onArchiveOpportunity: _archiveOpportunity,
+              onRestoreOpportunity: _unarchiveOpportunity,
+              onDeleteOpportunity: _deleteOpportunity,
+              onShowArchived: (archived) => _showArchivedOpportunities(archived),
+            );
           }
           return const SizedBox.shrink();
         },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push(RouteNames.createPost),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('New Opportunity'),
-        backgroundColor: AppColors.roleLecturer,
       ),
     );
   }
@@ -103,11 +366,28 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
 
 class _DashboardBody extends StatelessWidget {
   final LecturerDashboardLoaded state;
-  const _DashboardBody({required this.state});
+  final Future<void> Function(PostModel post) onEditOpportunity;
+  final Future<void> Function(PostModel post) onArchiveOpportunity;
+  final Future<void> Function(PostModel post) onRestoreOpportunity;
+  final Future<void> Function(PostModel post) onDeleteOpportunity;
+  final Future<void> Function(List<PostModel> archived) onShowArchived;
+
+  const _DashboardBody({
+    required this.state,
+    required this.onEditOpportunity,
+    required this.onArchiveOpportunity,
+    required this.onRestoreOpportunity,
+    required this.onDeleteOpportunity,
+    required this.onShowArchived,
+  });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final activeOpportunities =
+        state.opportunities.where((opp) => !opp.isArchived).toList();
+    final archivedOpportunities =
+        state.opportunities.where((opp) => opp.isArchived).toList();
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -192,18 +472,74 @@ class _DashboardBody extends StatelessWidget {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-              child: Text(
-                'Your Opportunities',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  color: isDark
-                      ? AppColors.textPrimaryDark
-                      : AppColors.textPrimaryLight,
-                ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Your Opportunities',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: isDark
+                            ? AppColors.textPrimaryDark
+                            : AppColors.textPrimaryLight,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: OutlinedButton.icon(
+                        onPressed: () => onShowArchived(archivedOpportunities),
+                        icon: const Icon(Icons.unarchive_outlined, size: 18),
+                        label: Text(
+                          'Archived${archivedOpportunities.isNotEmpty ? ' (${archivedOpportunities.length})' : ''}',
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          side: BorderSide(
+                            color: AppColors.primary.withValues(alpha: 0.24),
+                          ),
+                          minimumSize: const Size(0, 40),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppDimensions.radiusMd),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
+
+          if (archivedOpportunities.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text(
+                  '${archivedOpportunities.length} archived opportunit${archivedOpportunities.length == 1 ? 'y' : 'ies'} available',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    color: isDark
+                        ? AppColors.textSecondaryDark
+                        : AppColors.textSecondaryLight,
+                  ),
+                ),
+              ),
+            ),
 
           // â”€â”€ Opportunity list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           if (state.opportunities.isEmpty)
@@ -225,7 +561,7 @@ class _DashboardBody extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Tap the button below to create your first opportunity',
+                      'Use the bottom navigation to create your first opportunity',
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 12,
                         color: AppColors.textHintLight,
@@ -236,16 +572,39 @@ class _DashboardBody extends StatelessWidget {
                 ),
               ),
             )
-          else
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final opp = state.opportunities[index];
-                  return _OpportunityTile(opportunity: opp);
-                },
-                childCount: state.opportunities.length,
+          else ...[
+            if (activeOpportunities.isNotEmpty)
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final opp = activeOpportunities[index];
+                    return _OpportunityTile(
+                      opportunity: opp,
+                      onEdit: () => onEditOpportunity(opp),
+                      onArchive: () => onArchiveOpportunity(opp),
+                      onRestore: null,
+                      onDelete: () => onDeleteOpportunity(opp),
+                    );
+                  },
+                  childCount: activeOpportunities.length,
+                ),
+              )
+            else
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                  child: Text(
+                    archivedOpportunities.isNotEmpty
+                        ? 'No active opportunities. Open Archived to unarchive one.'
+                        : 'No active opportunities yet.',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13,
+                      color: AppColors.textSecondaryLight,
+                    ),
+                  ),
+                ),
               ),
-            ),
+          ],
 
           // Bottom padding
           const SliverToBoxAdapter(child: SizedBox(height: 80)),
@@ -372,11 +731,23 @@ class _ActionTile extends StatelessWidget {
 
 class _OpportunityTile extends StatelessWidget {
   final PostModel opportunity;
-  const _OpportunityTile({required this.opportunity});
+  final VoidCallback onEdit;
+  final VoidCallback onArchive;
+  final VoidCallback? onRestore;
+  final VoidCallback onDelete;
+
+  const _OpportunityTile({
+    required this.opportunity,
+    required this.onEdit,
+    required this.onArchive,
+    required this.onRestore,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isArchived = opportunity.isArchived;
     final isExpired = opportunity.opportunityDeadline != null &&
         opportunity.opportunityDeadline!.isBefore(DateTime.now());
 
@@ -426,19 +797,93 @@ class _OpportunityTile extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: isExpired
+                        color: isArchived
+                            ? AppColors.warning.withValues(alpha: 0.12)
+                            : isExpired
                             ? AppColors.warning.withValues(alpha: 0.12)
                             : AppColors.success.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        isExpired ? 'Expired' : 'Active',
+                        isArchived ? 'Archived' : (isExpired ? 'Expired' : 'Active'),
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: isExpired ? AppColors.warning : AppColors.success,
+                          color: isArchived
+                              ? AppColors.warning
+                              : (isExpired ? AppColors.warning : AppColors.success),
                         ),
                       ),
+                    ),
+                    PopupMenuButton<String>(
+                      icon: const Icon(
+                        Icons.more_vert_rounded,
+                        size: 20,
+                        color: AppColors.textSecondaryLight,
+                      ),
+                      onSelected: (value) {
+                        if (value == 'edit') {
+                          onEdit();
+                          return;
+                        }
+                        if (value == 'delete') {
+                          onDelete();
+                          return;
+                        }
+                        if (value == 'restore') {
+                          onRestore?.call();
+                          return;
+                        }
+                        if (value == 'archive') {
+                          onArchive();
+                        }
+                      },
+                      itemBuilder: (ctx) => [
+                        const PopupMenuItem<String>(
+                          value: 'edit',
+                          child: ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.edit_outlined),
+                            title: Text('Edit'),
+                          ),
+                        ),
+                        if (isArchived)
+                          const PopupMenuItem<String>(
+                            value: 'restore',
+                            child: ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(Icons.unarchive_outlined),
+                              title: Text('Unarchive'),
+                            ),
+                          )
+                        else
+                          const PopupMenuItem<String>(
+                            value: 'archive',
+                            child: ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: Icon(Icons.archive_outlined),
+                              title: Text('Archive'),
+                            ),
+                          ),
+                        const PopupMenuItem<String>(
+                          value: 'delete',
+                          child: ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(
+                              Icons.delete_outline_rounded,
+                              color: AppColors.danger,
+                            ),
+                            title: Text(
+                              'Delete',
+                              style: TextStyle(color: AppColors.danger),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -517,6 +962,23 @@ class _OpportunityTile extends StatelessWidget {
                           ),
                         )
                         .toList(),
+                  ),
+                ],
+                if (isArchived && onRestore != null) ...[
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: OutlinedButton.icon(
+                      onPressed: onRestore,
+                      icon: const Icon(Icons.unarchive_outlined, size: 18),
+                      label: const Text('Unarchive'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        side: BorderSide(
+                          color: AppColors.primary.withValues(alpha: 0.22),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ],

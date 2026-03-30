@@ -21,6 +21,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/di/injection_container.dart';
+import '../../../core/router/route_guards.dart';
 import '../../../core/router/route_names.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -61,10 +63,14 @@ class _SplashScreenState extends State<SplashScreen>
   late final AnimationController _mainCtrl;
   late final Animation<double> _logoScale;
   late final Animation<double> _logoFade;
-  late final Animation<double> _titleFade;
-  late final Animation<Offset> _titleSlide;
-  late final Animation<double> _subtitleFade;
   late final Animation<double> _dotsFade;
+  late final AnimationController _nameCtrl;
+  late final Animation<double> _mustFade;
+  late final Animation<Offset> _mustSlide;
+  late final Animation<double> _starTrackFade;
+  late final Animation<Offset> _starTrackSlide;
+  late final Animation<double> _subtitleFade;
+  bool _isNavigating = false;
 
   // Stars particle system
   late final AnimationController _starsCtrl;
@@ -113,25 +119,6 @@ class _SplashScreenState extends State<SplashScreen>
       curve: const Interval(0.0, 0.25, curve: Curves.easeIn),
     );
 
-    // Title slides + fades in  400–850 ms
-    _titleFade = CurvedAnimation(
-      parent: _mainCtrl,
-      curve: const Interval(0.20, 0.50, curve: Curves.easeOut),
-    );
-    _titleSlide = Tween<Offset>(
-      begin: const Offset(0, 0.3),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _mainCtrl,
-      curve: const Interval(0.20, 0.55, curve: Curves.easeOut),
-    ));
-
-    // Subtitle   600–1000 ms
-    _subtitleFade = CurvedAnimation(
-      parent: _mainCtrl,
-      curve: const Interval(0.38, 0.65, curve: Curves.easeOut),
-    );
-
     // Progress dots  800 ms →
     _dotsFade = CurvedAnimation(
       parent: _mainCtrl,
@@ -146,14 +133,67 @@ class _SplashScreenState extends State<SplashScreen>
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
 
-    // ── Navigate ─────────────────────────────────────────────────────────────
-    _navigate();
+    // ── Tap-triggered app name reveal ─────────────────────────────────────
+    _nameCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+
+    _mustFade = CurvedAnimation(
+      parent: _nameCtrl,
+      curve: const Interval(0.0, 0.45, curve: Curves.easeOut),
+    );
+    _mustSlide = Tween<Offset>(
+      begin: const Offset(0, 0.35),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _nameCtrl,
+      curve: const Interval(0.0, 0.45, curve: Curves.easeOutBack),
+    ));
+
+    _starTrackFade = CurvedAnimation(
+      parent: _nameCtrl,
+      curve: const Interval(0.40, 1.0, curve: Curves.easeOut),
+    );
+    _starTrackSlide = Tween<Offset>(
+      begin: const Offset(0, 0.35),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _nameCtrl,
+      curve: const Interval(0.40, 1.0, curve: Curves.easeOutBack),
+    ));
+
+    _subtitleFade = CurvedAnimation(
+      parent: _nameCtrl,
+      curve: const Interval(0.70, 1.0, curve: Curves.easeOut),
+    );
+
+    // ── Auto sequence: icon -> name reveal -> navigate ─────────────────────
+    _startSequence();
   }
 
-  Future<void> _navigate() async {
-    await Future.delayed(const Duration(milliseconds: 2800));
+  Future<void> _startSequence() async {
+    if (_isNavigating) return;
+
+    // Let the icon settle in before revealing the app name.
+    await Future.delayed(const Duration(milliseconds: 350));
     if (!mounted) return;
-    context.go(RouteNames.home);
+
+    await _nameCtrl.forward();
+
+    _isNavigating = true;
+    await Future.delayed(const Duration(milliseconds: 450));
+    if (!mounted) return;
+    final guards = sl<RouteGuards>();
+    final destination = guards.isAuthenticated
+        ? switch (guards.currentRole) {
+            UserRole.lecturer => RouteNames.lecturerDashboard,
+            UserRole.admin => RouteNames.adminDashboard,
+            UserRole.superAdmin => RouteNames.superAdminDashboard,
+            _ => RouteNames.home,
+          }
+        : RouteNames.home;
+    context.go(destination);
   }
 
   @override
@@ -161,6 +201,7 @@ class _SplashScreenState extends State<SplashScreen>
     _mainCtrl.dispose();
     _starsCtrl.dispose();
     _dotsCtrl.dispose();
+    _nameCtrl.dispose();
     super.dispose();
   }
 
@@ -245,19 +286,61 @@ class _SplashScreenState extends State<SplashScreen>
 
                     const SizedBox(height: 28),
 
-                    // App name
+                    // App name reveals only after tap: MUST → StarTrack
+                    AnimatedBuilder(
+                      animation: _nameCtrl,
+                      builder: (_, __) {
+                        return Wrap(
+                          alignment: WrapAlignment.center,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 8,
+                          children: [
+                            FadeTransition(
+                              opacity: _mustFade,
+                              child: SlideTransition(
+                                position: _mustSlide,
+                                child: Text(
+                                  'MUST',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 38,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                    letterSpacing: -0.8,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            FadeTransition(
+                              opacity: _starTrackFade,
+                              child: SlideTransition(
+                                position: _starTrackSlide,
+                                child: Text(
+                                  'StarTrack',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 38,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                    letterSpacing: -0.8,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+
+                    const SizedBox(height: 12),
+
                     FadeTransition(
-                      opacity: _titleFade,
-                      child: SlideTransition(
-                        position: _titleSlide,
-                        child: Text(
-                          AppStrings.appName,
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 38,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            letterSpacing: -0.8,
-                          ),
+                      opacity: _dotsFade,
+                      child: Text(
+                        'Launching...',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white.withValues(alpha: 0.78),
+                          letterSpacing: 0.7,
                         ),
                       ),
                     ),

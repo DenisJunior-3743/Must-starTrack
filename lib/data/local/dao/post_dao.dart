@@ -107,6 +107,43 @@ class PostDao {
     );
   }
 
+  Future<void> updateModerationStatus({
+    required String postId,
+    required ModerationStatus status,
+  }) async {
+    final db = await _db.database;
+    final postColumns = await _tableColumns(db, DatabaseSchema.tablePosts);
+
+    final update = <String, Object?>{
+      'updated_at': DateTime.now().millisecondsSinceEpoch,
+      'sync_status': 0,
+    };
+
+    if (postColumns.contains('moderation_status')) {
+      update['moderation_status'] = status.name;
+    }
+    if (postColumns.contains('status')) {
+      update['status'] = switch (status) {
+        ModerationStatus.approved => 'published',
+        ModerationStatus.pending => 'pending',
+        ModerationStatus.rejected => 'rejected',
+      };
+    }
+
+    final safeUpdate = await _filterToExistingColumns(
+      db,
+      DatabaseSchema.tablePosts,
+      update,
+    );
+
+    await db.update(
+      DatabaseSchema.tablePosts,
+      safeUpdate,
+      where: 'id = ?',
+      whereArgs: [postId],
+    );
+  }
+
   Future<void> deletePost(String postId) async {
     final db = await _db.database;
     await db.delete(
@@ -147,12 +184,17 @@ class PostDao {
       conditions.add("COALESCE(p.status, 'published') != 'archived'");
     }
 
-    // Show all non-archived posts regardless of moderation status so the
-    // local cache reflects what the user has access to see.
-    // Explicitly hide only rejected content.
+    // Public feed only serves approved/unmoderated posts.
+    // Authors can still see their own pending submissions.
     if (postColumns.contains('moderation_status')) {
-      conditions.add(
-          "(p.moderation_status IS NULL OR p.moderation_status != 'rejected')");
+      if (currentUserId != null && currentUserId.isNotEmpty) {
+        conditions.add(
+          "(p.moderation_status IS NULL OR p.moderation_status = 'approved' OR p.author_id = ?)",
+        );
+        args.add(currentUserId);
+      } else {
+        conditions.add("(p.moderation_status IS NULL OR p.moderation_status = 'approved')");
+      }
     }
 
     if (afterCursor != null) {
@@ -329,8 +371,16 @@ class PostDao {
         }
 
         if (postColumns.contains('moderation_status')) {
-          fallbackConditions.add(
-              "(p.moderation_status IS NULL OR p.moderation_status != 'rejected')");
+          if (currentUserId != null && currentUserId.isNotEmpty) {
+            fallbackConditions.add(
+              "(p.moderation_status IS NULL OR p.moderation_status = 'approved' OR p.author_id = ?)",
+            );
+            fallbackArgs.add(currentUserId);
+          } else {
+            fallbackConditions.add(
+              "(p.moderation_status IS NULL OR p.moderation_status = 'approved')",
+            );
+          }
         }
         if (afterCursor != null) {
           fallbackConditions.add('p.created_at < ?');
@@ -372,6 +422,65 @@ class PostDao {
         }
       }
     }
+    return rows.map(_fromDbRow).toList();
+  }
+
+  Future<List<PostModel>> getPendingModerationPosts({
+    int limit = 50,
+  }) async {
+    final db = await _db.database;
+    final postColumns = await _tableColumns(db, DatabaseSchema.tablePosts);
+    final userColumns = await _tableColumns(db, DatabaseSchema.tableUsers);
+
+    final conditions = <String>[];
+    final args = <dynamic>[];
+
+    if (postColumns.contains('moderation_status')) {
+      conditions.add("p.moderation_status = 'pending'");
+    }
+    if (postColumns.contains('is_archived')) {
+      conditions.add('COALESCE(p.is_archived, 0) = 0');
+    }
+
+    final userNameColumn = userColumns.contains('display_name')
+        ? 'display_name'
+        : userColumns.contains('name')
+            ? 'name'
+            : null;
+    final userPhotoColumn = userColumns.contains('photo_url')
+        ? 'photo_url'
+        : userColumns.contains('avatar_url')
+            ? 'avatar_url'
+            : null;
+
+    final selectAuthorName = userNameColumn != null
+        ? 'u.$userNameColumn AS author_name'
+        : "'' AS author_name";
+    final selectAuthorPhoto = userPhotoColumn != null
+        ? 'u.$userPhotoColumn AS author_photo_url'
+        : 'NULL AS author_photo_url';
+    final selectAuthorRole = userColumns.contains('role')
+        ? 'u.role AS author_role'
+        : "'student' AS author_role";
+
+    if (conditions.isEmpty) {
+      return const [];
+    }
+
+    args.add(limit);
+
+    final rows = await db.rawQuery(
+      '''
+      SELECT p.*, $selectAuthorName, $selectAuthorPhoto, $selectAuthorRole
+      FROM ${DatabaseSchema.tablePosts} p
+      LEFT JOIN ${DatabaseSchema.tableUsers} u ON u.id = p.author_id
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY p.created_at DESC
+      LIMIT ?
+      ''',
+      args,
+    );
+
     return rows.map(_fromDbRow).toList();
   }
 
@@ -436,7 +545,7 @@ class PostDao {
 
     if (postColumns.contains('moderation_status')) {
       conditions.add(
-          "(p.moderation_status IS NULL OR p.moderation_status != 'rejected')");
+          "(p.moderation_status IS NULL OR p.moderation_status = 'approved')");
     }
 
     if (faculty != null) {

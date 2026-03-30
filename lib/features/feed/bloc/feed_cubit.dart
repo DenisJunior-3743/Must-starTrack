@@ -25,7 +25,9 @@ import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import '../../../data/local/dao/activity_log_dao.dart';
 import '../../../core/utils/media_path_utils.dart';
+import '../../../data/local/schema/database_schema.dart';
 import '../../../data/local/dao/post_dao.dart';
+import '../../../data/local/dao/recommendation_log_dao.dart';
 import '../../../data/local/dao/sync_queue_dao.dart';
 import '../../../data/local/dao/user_dao.dart';
 import '../../../data/models/post_model.dart';
@@ -146,6 +148,7 @@ class FeedCubit extends Cubit<FeedState> {
   final UserDao _userDao;
   final ActivityLogDao _activityLogDao;
   final RecommenderService _recommenderService;
+  final RecommendationLogDao? _recLogDao;
   final SyncQueueDao _syncQueue;
   final SyncService? _syncService;
   final String? _currentUserId;
@@ -161,6 +164,7 @@ class FeedCubit extends Cubit<FeedState> {
     UserDao? userDao,
     ActivityLogDao? activityLogDao,
     RecommenderService? recommenderService,
+    RecommendationLogDao? recLogDao,
     SyncQueueDao? syncQueue,
     SyncService? syncService,
     String? currentUserId,
@@ -169,6 +173,7 @@ class FeedCubit extends Cubit<FeedState> {
         _userDao = userDao ?? UserDao(),
         _activityLogDao = activityLogDao ?? ActivityLogDao(),
         _recommenderService = recommenderService ?? RecommenderService(),
+        _recLogDao = recLogDao,
         _syncQueue = syncQueue ?? SyncQueueDao(),
         _syncService = syncService,
         _currentUserId = currentUserId,
@@ -188,7 +193,9 @@ class FeedCubit extends Cubit<FeedState> {
       }
 
       _lastObservedAuthUserId = nextUserId;
-      unawaited(refresh());
+      // Always reset to "All" when auth identity changes so the new session
+      // starts from an unfiltered feed. Users can then apply filters in UI.
+      unawaited(loadFeed(filter: const FeedFilter()));
     });
   }
 
@@ -408,10 +415,15 @@ class FeedCubit extends Cubit<FeedState> {
         await _activityLogDao.getRecentCategorySignals(currentUserId);
     final recentSearchTerms =
         await _activityLogDao.getRecentSearchTerms(currentUserId);
+    final postRatingSignals = await _activityLogDao.getPostRatingSignalsForPosts(
+      posts.map((post) => post.id).toList(),
+    );
     log.writeln(
         '  Viewed cats: ${recentlyViewedCategories.isEmpty ? 'none yet' : recentlyViewedCategories.take(4).join(', ')}');
     log.writeln(
         '  Searches   : ${recentSearchTerms.isEmpty ? 'none yet' : recentSearchTerms.take(4).join(', ')}');
+    log.writeln(
+      '  Ratings    : lecturer=${postRatingSignals.lecturerRatings.length}, student=${postRatingSignals.studentRatings.length}');
     log.writeln(
         '  Mode       : ${useHybrid ? 'hybrid (local + Gemini rerank)' : 'local scoring only'}');
     log.writeln('──────────────────────────────────────────────────────');
@@ -423,12 +435,16 @@ class FeedCubit extends Cubit<FeedState> {
             candidates: posts,
             recentlyViewedCategories: recentlyViewedCategories,
             recentSearchTerms: recentSearchTerms,
+            lecturerRatingsByPost: postRatingSignals.lecturerRatings,
+            studentRatingsByPost: postRatingSignals.studentRatings,
           )
         : _recommenderService.rankLocally(
             user: user,
             candidates: posts,
             recentlyViewedCategories: recentlyViewedCategories,
             recentSearchTerms: recentSearchTerms,
+            lecturerRatingsByPost: postRatingSignals.lecturerRatings,
+            studentRatingsByPost: postRatingSignals.studentRatings,
           );
 
     // ── Log ranked results ────────────────────────────────────────────────────
@@ -469,7 +485,76 @@ class FeedCubit extends Cubit<FeedState> {
     log.writeln('  ✓ Serving  : ${ranked.length} posts (ranked order)');
     log.writeln('══════════════════════════════════════════════════════');
     debugPrint(log.toString());
+
+    // Log top 25 scored posts to recommendation_logs (SQLite + Firestore)
+    if (_recLogDao != null && ranked.isNotEmpty) {
+      final algoLabel = useHybrid ? 'hybrid' : 'local';
+      final entries = ranked
+          .take(25)
+          .map((r) => RecommendationLogEntry(
+                userId: currentUserId,
+                itemId: r.post.id,
+                itemType: 'post',
+                algorithm: algoLabel,
+                score: r.score,
+                reasons: r.reasons,
+              ))
+          .toList();
+      _recLogDao.insertBatch(entries).catchError(
+        (e) => debugPrint('[FeedCubit] rec log failed: $e'),
+      );
+    }
+
     return ranked.map((entry) => entry.post).toList();
+  }
+
+  Future<void> ratePost({
+    required PostModel post,
+    required int stars,
+  }) async {
+    final currentUserId = _activeUserId;
+    if (currentUserId == null || currentUserId.isEmpty) {
+      debugPrint('[FeedCubit] Ignoring rating because user is guest.');
+      return;
+    }
+
+    final safeStars = stars.clamp(1, 5);
+    final role = _authCubit?.currentUser?.role.name ?? 'student';
+
+    try {
+      await _activityLogDao.logAction(
+        userId: currentUserId,
+        action: 'rate_post',
+        entityType: DatabaseSchema.tablePosts,
+        entityId: post.id,
+        metadata: {
+          'stars': safeStars,
+          'rater_role': role,
+          'post_title': post.title,
+          'author_id': post.authorId,
+        },
+      );
+
+      await _syncQueue.enqueue(
+        operation: 'create',
+        entity: 'post_ratings',
+        entityId: '${currentUserId}_${post.id}_${DateTime.now().millisecondsSinceEpoch}',
+        payload: {
+          'post_id': post.id,
+          'user_id': currentUserId,
+          'stars': safeStars,
+          'rater_role': role,
+          'rated_at': DateTime.now().toIso8601String(),
+        },
+      );
+
+      unawaited(_syncService?.processPendingSync());
+      debugPrint(
+        '[FeedCubit] Rating logged post=${post.id} stars=$safeStars role=$role',
+      );
+    } catch (e) {
+      debugPrint('[FeedCubit] ratePost failed: $e');
+    }
   }
 
   // ── Apply filters ──────────────────────────────────────────────────────────
@@ -562,6 +647,67 @@ class FeedCubit extends Cubit<FeedState> {
       debugPrint(
           '[FeedCubit] Like toggle failed for post=$postId user=$_currentUserId. Rolling back optimistic UI.');
       // 6. Rollback on failure
+      if (state is FeedLoaded) {
+        final rolled = (state as FeedLoaded).posts.toList()..[index] = original;
+        _emitIfOpen((state as FeedLoaded).copyWith(posts: rolled));
+      }
+    }
+  }
+
+  // ── Optimistic Dislike ─────────────────────────────────────────────────────
+
+  Future<void> dislikePost(String postId) async {
+    final current = state;
+    if (current is! FeedLoaded) return;
+    final currentUserId = _activeUserId;
+    if (currentUserId == null || currentUserId.isEmpty) return;
+
+    final index = current.posts.indexWhere((p) => p.id == postId);
+    if (index == -1) return;
+
+    final original = current.posts[index];
+    final wasDisliked = original.isDislikedByMe;
+    final optimistic = original.copyWith(
+      isDislikedByMe: !wasDisliked,
+      dislikeCount: wasDisliked
+          ? (original.dislikeCount - 1).clamp(0, 999999)
+          : original.dislikeCount + 1,
+    );
+
+    final updatedPosts = List<PostModel>.from(current.posts)..[index] = optimistic;
+    _emitIfOpen(current.copyWith(posts: updatedPosts));
+
+    try {
+      final newCount = await _postDao.toggleDislike(
+        postId: postId,
+        userId: currentUserId,
+      );
+      await _activityLogDao.logAction(
+        userId: currentUserId,
+        action: wasDisliked ? 'undislike_post' : 'dislike_post',
+        entityType: 'posts',
+        entityId: postId,
+        metadata: {'post_title': original.title, 'author_id': original.authorId},
+      );
+      await _syncQueue.enqueue(
+        operation: wasDisliked ? 'delete' : 'create',
+        entity: 'dislikes',
+        entityId: '${currentUserId}_$postId',
+        payload: {
+          'post_id': postId,
+          'user_id': currentUserId,
+          'is_disliking': !wasDisliked,
+          'dislike_count': newCount,
+          'author_id': original.authorId,
+        },
+      );
+      unawaited(_syncService?.processPendingSync());
+      final confirmed = current.posts.toList()
+        ..[index] = optimistic.copyWith(dislikeCount: newCount);
+      if (state is FeedLoaded) {
+        _emitIfOpen((state as FeedLoaded).copyWith(posts: confirmed));
+      }
+    } catch (_) {
       if (state is FeedLoaded) {
         final rolled = (state as FeedLoaded).posts.toList()..[index] = original;
         _emitIfOpen((state as FeedLoaded).copyWith(posts: rolled));

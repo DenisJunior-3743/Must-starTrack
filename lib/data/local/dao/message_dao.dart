@@ -17,6 +17,8 @@ class MessageModel {
   final DateTime createdAt;
   final bool isRead;
   final bool isDeleted;
+  final String? replyToId;
+  final String? replyToPreview;
 
   const MessageModel({
     required this.id,
@@ -30,6 +32,8 @@ class MessageModel {
     required this.createdAt,
     this.isRead = false,
     this.isDeleted = false,
+    this.replyToId,
+    this.replyToPreview,
   });
 
   factory MessageModel.fromMap(Map<String, dynamic> map) => MessageModel(
@@ -44,6 +48,8 @@ class MessageModel {
         createdAt: _dateFromDb(map['created_at'] ?? map['sent_at']),
         isRead: (map['is_read'] as int? ?? (map['read_at'] != null ? 1 : 0)) == 1,
         isDeleted: (map['is_deleted'] as int? ?? 0) == 1,
+        replyToId: map['reply_to_id'] as String?,
+        replyToPreview: map['reply_to_preview'] as String?,
       );
 
   Map<String, dynamic> toMap() => {
@@ -62,6 +68,8 @@ class MessageModel {
         'status': isRead ? 'read' : 'sent',
         'is_read': isRead ? 1 : 0,
         'is_deleted': isDeleted ? 1 : 0,
+        'reply_to_id': replyToId,
+        'reply_to_preview': replyToPreview,
       };
 
   static DateTime _dateFromDb(dynamic value) {
@@ -126,6 +134,9 @@ class CollaborationInboxItem {
   final String status;
   final bool isIncoming;
   final DateTime createdAt;
+  final double? aiFitScore;
+  final List<String> aiReasons;
+  final List<String> aiMatchedSkills;
 
   const CollaborationInboxItem({
     required this.id,
@@ -138,7 +149,32 @@ class CollaborationInboxItem {
     required this.status,
     required this.isIncoming,
     required this.createdAt,
+    this.aiFitScore,
+    this.aiReasons = const [],
+    this.aiMatchedSkills = const [],
   });
+
+  CollaborationInboxItem copyWith({
+    double? aiFitScore,
+    List<String>? aiReasons,
+    List<String>? aiMatchedSkills,
+  }) {
+    return CollaborationInboxItem(
+      id: id,
+      counterpartId: counterpartId,
+      counterpartName: counterpartName,
+      counterpartPhotoUrl: counterpartPhotoUrl,
+      postId: postId,
+      postTitle: postTitle,
+      message: message,
+      status: status,
+      isIncoming: isIncoming,
+      createdAt: createdAt,
+      aiFitScore: aiFitScore ?? this.aiFitScore,
+      aiReasons: aiReasons ?? this.aiReasons,
+      aiMatchedSkills: aiMatchedSkills ?? this.aiMatchedSkills,
+    );
+  }
 }
 
 class AcceptedPeerCollaboration {
@@ -205,6 +241,7 @@ class MessageDao {
 
   Future<void> insertMessage(MessageModel message) async {
     final db = await _db.database;
+    final previewText = _conversationPreviewText(message);
 
     await db.transaction((txn) async {
       await txn.insert(
@@ -224,15 +261,40 @@ class MessageDao {
             END
         WHERE id = ?
       ''', [
-        message.content.length > 80
-            ? '${message.content.substring(0, 80)}…'
-            : message.content,
+        previewText.length > 80 ? '${previewText.substring(0, 80)}…' : previewText,
         message.createdAt.millisecondsSinceEpoch,
         message.createdAt.toIso8601String(),
         message.senderId,
         message.conversationId,
       ]);
     });
+  }
+
+  Future<void> updateMessageMedia({
+    required String messageId,
+    required String fileUrl,
+    String? fileName,
+    String? fileSize,
+  }) async {
+    final db = await _db.database;
+    await db.update(
+      DatabaseSchema.tableMessages,
+      {
+        'file_url': fileUrl,
+        'media_url': fileUrl,
+        'file_name': fileName,
+        'file_size': fileSize,
+      },
+      where: 'id = ?',
+      whereArgs: [messageId],
+    );
+  }
+
+  String _conversationPreviewText(MessageModel message) {
+    if (message.messageType == 'audio') {
+      return 'Voice message';
+    }
+    return message.content;
   }
 
   Future<List<ConversationSummary>> getConversations({

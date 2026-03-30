@@ -46,9 +46,13 @@ import '../../data/local/dao/post_dao.dart';
 import '../../data/local/dao/comment_dao.dart';
 import '../../data/local/dao/message_dao.dart';
 import '../../data/local/dao/notification_dao.dart';
+import '../../data/local/dao/faculty_dao.dart';
+import '../../data/local/dao/course_dao.dart';
 import '../../data/local/dao/sync_queue_dao.dart';
 import '../../data/local/dao/post_join_dao.dart';
+import '../../data/local/dao/recommendation_log_dao.dart';
 import '../../data/local/services/notification_preferences_service.dart';
+import '../../data/local/services/faculty_seeder.dart';
 
 import '../../data/remote/firestore_service.dart';
 import '../../data/remote/fcm_service.dart';
@@ -57,6 +61,7 @@ import '../../data/remote/recommender_service.dart';
 import '../../data/remote/sync_service.dart';
 import '../../data/remote/cloudinary_service.dart';
 
+import '../../core/services/session_timeout_service.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/firebase_auth_repository.dart';
 
@@ -66,6 +71,8 @@ import '../../features/profile/bloc/profile_cubit.dart';
 import '../../features/messaging/bloc/message_cubit.dart';
 import '../../features/notifications/bloc/notification_cubit.dart';
 import '../../features/admin/bloc/admin_cubit.dart';
+import '../../features/admin/bloc/faculty_management_cubit.dart';
+import '../../features/admin/bloc/course_management_cubit.dart';
 import '../../features/lecturer/bloc/lecturer_cubit.dart';
 import '../theme/theme_cubit.dart';
 
@@ -95,6 +102,10 @@ class InjectionContainer {
     sl.registerSingleton<FlutterSecureStorage>(secureStorage);
 
     sl.registerSingleton<Connectivity>(Connectivity());
+
+    sl.registerSingleton<SessionTimeoutService>(
+      SessionTimeoutService(prefs: sharedPrefs),
+    );
 
     // Local notifications plugin (used by FcmService foreground handler)
     sl.registerSingleton<FlutterLocalNotificationsPlugin>(
@@ -129,13 +140,25 @@ class InjectionContainer {
     sl.registerSingleton<CommentDao>(CommentDao());
     sl.registerSingleton<MessageDao>(MessageDao());
     sl.registerSingleton<NotificationDao>(NotificationDao());
+    sl.registerSingleton<FacultyDao>(FacultyDao(sl<DatabaseHelper>()));
+    sl.registerSingleton<CourseDao>(CourseDao(sl<DatabaseHelper>()));
     sl.registerSingleton<SyncQueueDao>(SyncQueueDao());
     sl.registerSingleton<PostJoinDao>(PostJoinDao());
+
+    // Seed canonical MUST faculties + programs on first run (idempotent)
+    await FacultySeeder.seed(
+      sl<FacultyDao>(),
+      sl<CourseDao>(),
+    );
 
     // ── 5. Remote services ──────────────────────────────────────────────────
 
     sl.registerSingleton<FirestoreService>(
       FirestoreService(firestore: sl<FirebaseFirestore>()),
+    );
+
+    sl.registerSingleton<RecommendationLogDao>(
+      RecommendationLogDao(firestoreService: sl<FirestoreService>()),
     );
 
     // Gemini key is injected at runtime via --dart-define. Empty disables remote rerank.
@@ -167,6 +190,8 @@ class InjectionContainer {
         userDao: sl<UserDao>(),
         postDao: sl<PostDao>(),
         commentDao: sl<CommentDao>(),
+        facultyDao: sl<FacultyDao>(),
+        courseDao: sl<CourseDao>(),
         cloudinary: sl<CloudinaryService>(),
         connectivity: sl<Connectivity>(),
         localNotif: sl<FlutterLocalNotificationsPlugin>(),
@@ -230,6 +255,7 @@ class InjectionContainer {
         syncService: sl<SyncService>(),
         currentUserId: sl<AuthCubit>().currentUser?.id,
         authCubit: sl<AuthCubit>(),
+        recLogDao: sl<RecommendationLogDao>(),
       ),
     );
 
@@ -251,6 +277,9 @@ class InjectionContainer {
         authCubit: sl<AuthCubit>(),
         userDao: sl<UserDao>(),
         syncService: sl<SyncService>(),
+        cloudinary: sl<CloudinaryService>(),
+        firestore: sl<FirestoreService>(),
+        recommenderService: sl<RecommenderService>(),
       ),
     );
 
@@ -270,12 +299,29 @@ class InjectionContainer {
       ),
     );
 
+    sl.registerFactory<FacultyManagementCubit>(
+      () => FacultyManagementCubit(
+        facultyDao: sl<FacultyDao>(),
+        syncQueueDao: sl<SyncQueueDao>(),
+        syncService: sl<SyncService>(),
+      ),
+    );
+
+    sl.registerFactory<CourseManagementCubit>(
+      () => CourseManagementCubit(
+        courseDao: sl<CourseDao>(),
+        syncQueueDao: sl<SyncQueueDao>(),
+        syncService: sl<SyncService>(),
+      ),
+    );
+
     sl.registerFactory<LecturerCubit>(
       () => LecturerCubit(
         postDao: sl<PostDao>(),
         postJoinDao: sl<PostJoinDao>(),
         userDao: sl<UserDao>(),
         recommenderService: sl<RecommenderService>(),
+        recLogDao: sl<RecommendationLogDao>(),
       ),
     );
   }
