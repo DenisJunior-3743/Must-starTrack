@@ -101,7 +101,7 @@ class FacultyManagementCubit extends Cubit<FacultyManagementState> {
     emit(const FacultyManagementLoading());
     try {
       final faculties = await _facultyDao.getAllFaculties(activeOnly: activeOnly);
-      final totalCount = await _facultyDao.getFacultyCount();
+      final totalCount = await _facultyDao.getFacultyCount(activeOnly: activeOnly);
       emit(FacultiesLoaded(faculties: faculties, totalCount: totalCount));
     } catch (e) {
       emit(FacultyManagementError('Failed to load faculties: $e'));
@@ -115,6 +115,7 @@ class FacultyManagementCubit extends Cubit<FacultyManagementState> {
     String? description,
     String? contactEmail,
     String? headOfFaculty,
+    bool activeOnly = true,
   }) async {
     try {
       final faculty = FacultyModel.create(
@@ -133,7 +134,7 @@ class FacultyManagementCubit extends Cubit<FacultyManagementState> {
         operation: 'create',
         entity: 'faculties',
         entityId: faculty.id,
-        payload: faculty.toFirestore(),
+        payload: faculty.toMap(),
       );
 
       // Process sync in background
@@ -141,7 +142,7 @@ class FacultyManagementCubit extends Cubit<FacultyManagementState> {
 
       emit(FacultyCreated(faculty));
       // Reload the list
-      await loadFaculties();
+      await loadFaculties(activeOnly: activeOnly);
     } catch (e) {
       emit(FacultyManagementError('Failed to create faculty: $e'));
     }
@@ -155,6 +156,7 @@ class FacultyManagementCubit extends Cubit<FacultyManagementState> {
     String? description,
     String? contactEmail,
     String? headOfFaculty,
+    bool activeOnly = true,
   }) async {
     try {
       final existing = await _facultyDao.getFacultyById(id);
@@ -179,7 +181,7 @@ class FacultyManagementCubit extends Cubit<FacultyManagementState> {
         operation: 'update',
         entity: 'faculties',
         entityId: id,
-        payload: updated.toFirestore(),
+        payload: updated.toMap(),
       );
 
       // Process sync in background
@@ -187,14 +189,14 @@ class FacultyManagementCubit extends Cubit<FacultyManagementState> {
 
       emit(FacultyUpdated(updated));
       // Reload the list
-      await loadFaculties();
+      await loadFaculties(activeOnly: activeOnly);
     } catch (e) {
       emit(FacultyManagementError('Failed to update faculty: $e'));
     }
   }
 
   /// Archive (soft-delete) a faculty.
-  Future<void> archiveFaculty(String id) async {
+  Future<void> archiveFaculty(String id, {bool activeOnly = true}) async {
     try {
       final faculty = await _facultyDao.getFacultyById(id);
       if (faculty == null) {
@@ -211,7 +213,7 @@ class FacultyManagementCubit extends Cubit<FacultyManagementState> {
         operation: 'update',
         entity: 'faculties',
         entityId: id,
-        payload: archivedFaculty.toFirestore(),
+        payload: archivedFaculty.toMap(),
       );
 
       // Process sync in background
@@ -219,9 +221,37 @@ class FacultyManagementCubit extends Cubit<FacultyManagementState> {
 
       emit(FacultyArchived(id));
       // Reload the list
-      await loadFaculties();
+      await loadFaculties(activeOnly: activeOnly);
     } catch (e) {
       emit(FacultyManagementError('Failed to archive faculty: $e'));
+    }
+  }
+
+  Future<void> unarchiveFaculty(String id, {bool activeOnly = true}) async {
+    try {
+      final faculty = await _facultyDao.getFacultyById(id);
+      if (faculty == null) {
+        emit(const FacultyManagementError('Faculty not found'));
+        return;
+      }
+
+      final restoredFaculty = faculty.copyWith(isActive: true);
+
+      await _facultyDao.updateFaculty(restoredFaculty);
+
+      await _syncQueueDao.enqueue(
+        operation: 'update',
+        entity: 'faculties',
+        entityId: id,
+        payload: restoredFaculty.toMap(),
+      );
+
+      unawaited(_syncService.processPendingSync());
+
+      emit(FacultyUpdated(restoredFaculty));
+      await loadFaculties(activeOnly: activeOnly);
+    } catch (e) {
+      emit(FacultyManagementError('Failed to unarchive faculty: $e'));
     }
   }
 }

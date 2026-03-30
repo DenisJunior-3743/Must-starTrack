@@ -21,6 +21,7 @@
 
 import 'dart:convert';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../database_helper.dart';
@@ -113,10 +114,64 @@ class NotificationDao {
 
   // ── Insert ───────────────────────────────────────────────────────────────
 
+  /// Checks if a notification with the same key (type, sender, entity) already exists.
+  /// Used to prevent duplicate notifications for the same action.
+  Future<bool> notificationExists({
+    required String userId,
+    required String type,
+    String? senderId,
+    String? entityId,
+  }) async {
+    final db = await _db.database;
+    final args = <dynamic>[userId, type];
+    final filters = <String>['user_id = ?', 'type = ?'];
+    
+    if (senderId != null && senderId.isNotEmpty) {
+      filters.add('sender_id = ?');
+      args.add(senderId);
+    }
+    
+    if (entityId != null && entityId.isNotEmpty) {
+      filters.add('entity_id = ?');
+      args.add(entityId);
+    }
+    
+    final where = filters.join(' AND ');
+    final rows = await db.query(
+      'notifications',
+      where: where,
+      whereArgs: args,
+    );
+    return rows.isNotEmpty;
+  }
+
   /// Inserts [notification]. Uses REPLACE to handle FCM deduplication
   /// (same notification ID may arrive twice if network is flaky).
-  Future<void> insertNotification(NotificationModel notification) async {
+  /// Optionally checks for duplicates using [checkDuplicate] (default: false).
+  Future<void> insertNotification(
+    NotificationModel notification, {
+    bool checkDuplicate = false,
+  }) async {
     final db = await _db.database;
+    
+    // Skip if duplicate check is enabled and a similar notification exists
+    if (checkDuplicate) {
+      final exists = await notificationExists(
+        userId: notification.userId,
+        type: notification.type,
+        senderId: notification.senderId,
+        entityId: notification.entityId,
+      );
+      if (exists) {
+        debugPrint(
+          '[NotificationDao] Skipping duplicate notification: '
+          'user=${notification.userId} type=${notification.type} '
+          'sender=${notification.senderId} entity=${notification.entityId}',
+        );
+        return;
+      }
+    }
+    
     await db.insert(
       'notifications',
       notification.toMap(),

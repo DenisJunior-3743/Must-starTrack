@@ -166,6 +166,8 @@ class PostDao {
     String? filterFaculty,
     String? filterCategory,
     String? filterType, // 'project' | 'opportunity'
+    bool groupsOnly = false,
+    String? filterGroupId,
     String? currentUserId,
   }) async {
     final db = await _db.database;
@@ -214,6 +216,14 @@ class PostDao {
     if (filterType != null && postColumns.contains('type')) {
       conditions.add('p.type = ?');
       args.add(filterType);
+    }
+    if (groupsOnly && postColumns.contains('group_id')) {
+      conditions.add("COALESCE(p.group_id, '') != ''");
+    }
+    if (filterGroupId != null && filterGroupId.isNotEmpty &&
+        postColumns.contains('group_id')) {
+      conditions.add('p.group_id = ?');
+      args.add(filterGroupId);
     }
 
     args.addAll([pageSize]);
@@ -503,6 +513,32 @@ class PostDao {
       LIMIT  ?
     ''', [authorId, pageSize]);
     return rows.map(_fromDbRow).toList();
+  }
+
+  Future<List<PostModel>> getPostsByGroup(
+    String groupId, {
+    int pageSize = 60,
+    bool includeArchived = false,
+  }) async {
+    final db = await _db.database;
+    final postColumns = await _tableColumns(db, DatabaseSchema.tablePosts);
+    final rows = await db.rawQuery('''
+      SELECT *
+      FROM ${DatabaseSchema.tablePosts}
+      WHERE group_id = ?
+        ${!includeArchived && postColumns.contains('is_archived') ? 'AND COALESCE(is_archived, 0) = 0' : ''}
+      ORDER BY created_at DESC
+      LIMIT ?
+    ''', [groupId, pageSize]);
+    return rows.map(_fromDbRow).toList();
+  }
+
+  Future<List<PostModel>> getRecentGroupProjects({int limit = 20}) async {
+    return getFeedPage(
+      pageSize: limit,
+      filterType: 'project',
+      groupsOnly: true,
+    );
   }
 
   /// Full-text search across title, description, tags.
@@ -849,6 +885,10 @@ class PostDao {
         'author_id': p.authorId,
         'author_name': p.authorName,
         'author_photo_url': p.authorPhotoUrl,
+        'author_role': p.authorRole,
+        'group_id': p.groupId,
+        'group_name': p.groupName,
+        'group_avatar_url': p.groupAvatarUrl,
         'type': p.type,
         'title': p.title,
         'description': p.description,
@@ -976,6 +1016,9 @@ class PostDao {
       authorPhotoUrl:
           pickString(['author_photo_url', 'photo_url', 'avatar_url']),
       authorRole: parseNullableString(row['author_role']),
+      groupId: parseNullableString(row['group_id']),
+      groupName: parseNullableString(row['group_name']),
+      groupAvatarUrl: parseNullableString(row['group_avatar_url']),
       type: parseRequiredString(row['type'], fallback: 'project'),
       title: parseRequiredString(row['title']),
       description: parseNullableString(row['description']),

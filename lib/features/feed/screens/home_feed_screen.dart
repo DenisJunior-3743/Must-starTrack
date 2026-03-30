@@ -71,6 +71,11 @@ _PostKind _kindOf(PostModel post) {
 bool _photoRailHintShown = false;
 bool _collabRailHintShown = false;
 
+bool _isGroupPost(PostModel post) {
+  final groupId = post.groupId?.trim() ?? '';
+  return groupId.isNotEmpty;
+}
+
 String _titleCaseName(String value) {
   final parts = value
       .split(RegExp(r'\s+'))
@@ -212,18 +217,21 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                     }
                     if (state is FeedLoaded) {
                       final isGuest = sl<AuthCubit>().currentUser == null;
+                      final visiblePosts = state.filter.groupsOnly
+                          ? state.posts.where(_isGroupPost).toList(growable: false)
+                          : state.posts;
 
-                      final videoPosts = state.posts
+                      final videoPosts = visiblePosts
                           .where((p) => _kindOf(p) == _PostKind.video)
                           .toList();
-                      final photoPosts = state.posts
+                      final photoPosts = visiblePosts
                           .where((p) => _kindOf(p) == _PostKind.photo)
                           .toList();
-                      final showcasePosts = state.posts
+                      final showcasePosts = visiblePosts
                           .where((p) => _kindOf(p) == _PostKind.showcase)
                           .toList();
 
-                      if (state.posts.isEmpty) {
+                      if (visiblePosts.isEmpty) {
                         return RefreshIndicator(
                           color: AppColors.primary,
                           onRefresh: cubit.refresh,
@@ -231,7 +239,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                             physics: const AlwaysScrollableScrollPhysics(),
                             children: [
                               SizedBox(height: MediaQuery.of(context).size.height * 0.35),
-                              _EmptyFeed(isGuest: isGuest),
+                              _EmptyFeed(
+                                isGuest: isGuest,
+                                groupsOnly: state.filter.groupsOnly,
+                              ),
                             ],
                           ),
                         );
@@ -688,6 +699,31 @@ class _VideoPageState extends State<_VideoPage> {
     }
   }
 
+  /// Pauses the video, shows the guest sign-in snackbar, and resumes playback
+  /// if the user returns without signing in (or after signing in).
+  Future<void> _guestPrompt() async {
+    _ctrl?.pause();
+    if (mounted) setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Sign in to interact with posts',
+          style: GoogleFonts.plusJakartaSans(),
+        ),
+        action: SnackBarAction(
+          label: 'Sign In',
+          onPressed: () async {
+            await context.push(RouteNames.login);
+            if (mounted && widget.isActive) {
+              _ctrl?.play();
+              setState(() {});
+            }
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _ctrl?.dispose();
@@ -891,7 +927,7 @@ class _VideoPageState extends State<_VideoPage> {
                   label: _compact(post.likeCount),
                   color: post.isLikedByMe ? Colors.red : Colors.white,
                   onTap: () => widget.isGuest
-                      ? _promptLogin(context)
+                      ? _guestPrompt()
                       : widget.cubit.likePost(post.id),
                 ),
                 const SizedBox(height: 16),
@@ -903,7 +939,7 @@ class _VideoPageState extends State<_VideoPage> {
                   color:
                       post.isDislikedByMe ? AppColors.primary : Colors.white,
                   onTap: () => widget.isGuest
-                      ? _promptLogin(context)
+                      ? _guestPrompt()
                       : widget.cubit.dislikePost(post.id),
                 ),
                 const SizedBox(height: 16),
@@ -911,7 +947,15 @@ class _VideoPageState extends State<_VideoPage> {
                   icon: Icons.chat_bubble_outline_rounded,
                   label: _compact(post.commentCount),
                   color: Colors.white,
-                  onTap: () => context.push('/project/${post.id}'),
+                  onTap: () async {
+                    _ctrl?.pause();
+                    if (mounted) setState(() {});
+                    await context.push('/project/${post.id}');
+                    if (mounted && widget.isActive) {
+                      _ctrl?.play();
+                      setState(() {});
+                    }
+                  },
                 ),
                 const SizedBox(height: 16),
                 _VideoActionBtn(
@@ -929,7 +973,7 @@ class _VideoPageState extends State<_VideoPage> {
                   label: _myRating == null ? 'Rate' : '${_myRating!}★',
                   color: Colors.white,
                   onTap: () => widget.isGuest
-                      ? _promptLogin(context)
+                      ? _guestPrompt()
                       : _showRatePostSheet(
                           context,
                           post,
@@ -3253,21 +3297,37 @@ class _FilterChips extends StatelessWidget {
             children: [
               _Chip(
                 label: 'All',
-                active: current.type == null,
-                onTap: () =>
-                    cubit.applyFilter(current.copyWith(clearType: true)),
+                active: current.type == null && !current.groupsOnly,
+                onTap: () => cubit.applyFilter(
+                  current.copyWith(
+                    clearType: true,
+                    clearGroupsOnly: true,
+                  ),
+                ),
               ),
               _Chip(
                 label: 'Projects',
-                active: current.type == 'project',
-                onTap: () =>
-                    cubit.applyFilter(current.copyWith(type: 'project')),
+                active: current.type == 'project' && !current.groupsOnly,
+                onTap: () => cubit.applyFilter(
+                  current.copyWith(type: 'project', groupsOnly: false),
+                ),
               ),
               _Chip(
                 label: 'Opportunities',
-                active: current.type == 'opportunity',
-                onTap: () => cubit
-                    .applyFilter(current.copyWith(type: 'opportunity')),
+                active: current.type == 'opportunity' && !current.groupsOnly,
+                onTap: () => cubit.applyFilter(
+                  current.copyWith(type: 'opportunity', groupsOnly: false),
+                ),
+              ),
+              _Chip(
+                label: 'Groups',
+                active: current.groupsOnly,
+                onTap: () => cubit.applyFilter(
+                  current.copyWith(
+                    type: 'project',
+                    groupsOnly: true,
+                  ),
+                ),
               ),
               if (current.isActive)
                 Padding(
@@ -3780,7 +3840,12 @@ class _EmptyTab extends StatelessWidget {
 
 class _EmptyFeed extends StatelessWidget {
   final bool isGuest;
-  const _EmptyFeed({this.isGuest = false});
+  final bool groupsOnly;
+
+  const _EmptyFeed({
+    this.isGuest = false,
+    this.groupsOnly = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -3797,16 +3862,20 @@ class _EmptyFeed extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              isGuest ? 'Discover MUST Projects' : 'No posts yet',
+              groupsOnly
+                  ? 'No group posts yet'
+                  : (isGuest ? 'Discover MUST Projects' : 'No posts yet'),
               style: GoogleFonts.plusJakartaSans(
                   fontSize: 18, fontWeight: FontWeight.w700),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
-              isGuest
-                  ? 'Projects are loading. Pull down to refresh, or join the community to collaborate.'
-                  : 'Be the first to share a project!',
+              groupsOnly
+                  ? 'Only projects published under a group will appear here.'
+                  : (isGuest
+                      ? 'Projects are loading. Pull down to refresh, or join the community to collaborate.'
+                      : 'Be the first to share a project!'),
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 14,
                 color: AppColors.textSecondaryLight,

@@ -48,6 +48,8 @@ import '../../data/local/dao/message_dao.dart';
 import '../../data/local/dao/notification_dao.dart';
 import '../../data/local/dao/faculty_dao.dart';
 import '../../data/local/dao/course_dao.dart';
+import '../../data/local/dao/group_dao.dart';
+import '../../data/local/dao/group_member_dao.dart';
 import '../../data/local/dao/sync_queue_dao.dart';
 import '../../data/local/dao/post_join_dao.dart';
 import '../../data/local/dao/recommendation_log_dao.dart';
@@ -142,6 +144,8 @@ class InjectionContainer {
     sl.registerSingleton<NotificationDao>(NotificationDao());
     sl.registerSingleton<FacultyDao>(FacultyDao(sl<DatabaseHelper>()));
     sl.registerSingleton<CourseDao>(CourseDao(sl<DatabaseHelper>()));
+    sl.registerSingleton<GroupDao>(GroupDao());
+    sl.registerSingleton<GroupMemberDao>(GroupMemberDao());
     sl.registerSingleton<SyncQueueDao>(SyncQueueDao());
     sl.registerSingleton<PostJoinDao>(PostJoinDao());
 
@@ -158,7 +162,10 @@ class InjectionContainer {
     );
 
     sl.registerSingleton<RecommendationLogDao>(
-      RecommendationLogDao(firestoreService: sl<FirestoreService>()),
+      RecommendationLogDao(
+        firestoreService: sl<FirestoreService>(),
+        syncQueueDao: sl<SyncQueueDao>(),
+      ),
     );
 
     // Gemini key is injected at runtime via --dart-define. Empty disables remote rerank.
@@ -192,6 +199,8 @@ class InjectionContainer {
         commentDao: sl<CommentDao>(),
         facultyDao: sl<FacultyDao>(),
         courseDao: sl<CourseDao>(),
+        groupDao: sl<GroupDao>(),
+        groupMemberDao: sl<GroupMemberDao>(),
         cloudinary: sl<CloudinaryService>(),
         connectivity: sl<Connectivity>(),
         localNotif: sl<FlutterLocalNotificationsPlugin>(),

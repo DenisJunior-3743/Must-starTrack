@@ -8,6 +8,7 @@
 // HCI: progress stepper, live validation, skill chip input, footer sticky CTA.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -37,7 +38,7 @@ class _RegisterStep1ScreenState extends State<RegisterStep1Screen> {
   String? _selectedGender;
   List<String> _skills = [];
 
-  static const _genders = ['Male', 'Female', 'Other', 'Prefer not to say'];
+  static const _genders = ['Male', 'Female'];
 
   @override
   void dispose() {
@@ -134,7 +135,17 @@ class _RegisterStep1ScreenState extends State<RegisterStep1Screen> {
                                 controller: _phoneCtrl,
                                 keyboardType: TextInputType.phone,
                                 prefixIcon: const Icon(Icons.phone_outlined),
-                                validator: MustValidators.validatePhone,
+                                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(10),
+                                  ],
+                                  validator: (v) {
+                                    if (v == null || v.isEmpty) return 'Phone number is required';
+                                    if (!v.startsWith('07')) return 'Must start with 07';
+                                    if (v.length < 10) return 'Must be exactly 10 digits';
+                                    return null;
+                                  },
                               ),
                             ),
                           ],

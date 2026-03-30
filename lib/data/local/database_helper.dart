@@ -47,6 +47,7 @@ class DatabaseHelper {
       version: DatabaseSchema.databaseVersion,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
+      onOpen: _onOpen,
       // Enable foreign key enforcement — SQLite disables this by default.
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
@@ -272,6 +273,45 @@ class DatabaseHelper {
           'CREATE INDEX IF NOT EXISTS idx_rec_logs_time ON ${DatabaseSchema.tableRecommendationLogs}(logged_at DESC)');
       debugPrint('✅ Database v11 migration complete: recommendation_logs table created');
     }
+    if (oldVersion < 12) {
+      await _ensureGroupSchema(db);
+      debugPrint('✅ Database v12 migration complete: groups and group_members created');
+    }
+  }
+
+  Future<void> _onOpen(Database db) async {
+    await _ensureGroupSchema(db);
+  }
+
+  Future<void> _ensureGroupSchema(Database db) async {
+    await db.execute(DatabaseSchema.createGroups);
+    await db.execute(DatabaseSchema.createGroupMembers);
+    await _ensureColumn(db, DatabaseSchema.tablePosts, 'group_id', 'TEXT');
+    await _ensureColumn(db, DatabaseSchema.tablePosts, 'group_name', 'TEXT');
+    await _ensureColumn(
+      db,
+      DatabaseSchema.tablePosts,
+      'group_avatar_url',
+      'TEXT',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_groups_creator ON ${DatabaseSchema.tableGroups}(creator_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_groups_dissolved ON ${DatabaseSchema.tableGroups}(is_dissolved)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_group_members_group ON ${DatabaseSchema.tableGroupMembers}(group_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_group_members_user ON ${DatabaseSchema.tableGroupMembers}(user_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_group_members_status ON ${DatabaseSchema.tableGroupMembers}(status)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_posts_group ON ${DatabaseSchema.tablePosts}(group_id)',
+    );
   }
 
   Future<void> _ensureColumn(
@@ -328,7 +368,9 @@ class DatabaseHelper {
         DatabaseSchema.tableDislikes,
         DatabaseSchema.tableLikes,
         DatabaseSchema.tableComments,
+        DatabaseSchema.tableGroupMembers,
         DatabaseSchema.tablePosts,
+        DatabaseSchema.tableGroups,
         DatabaseSchema.tableProfiles,
         DatabaseSchema.tableUsers,
       ]) {

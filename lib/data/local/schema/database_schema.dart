@@ -21,13 +21,15 @@
 
 abstract final class DatabaseSchema {
   static const String databaseName = 'must_startrack.db';
-  static const int databaseVersion = 11;
+  static const int databaseVersion = 12;
 
   // ── Table Names ────────────────────────────────────────────────────────────
   static const String tableUsers = 'users';
   static const String tableProfiles = 'profiles';
   static const String tableFaculties = 'faculties';
   static const String tableCourses = 'courses';
+  static const String tableGroups = 'groups';
+  static const String tableGroupMembers = 'group_members';
   static const String tablePosts = 'posts';
   static const String tableComments = 'comments';
   static const String tableLikes = 'likes';
@@ -143,6 +145,46 @@ abstract final class DatabaseSchema {
     )
   ''';
 
+  /// Groups - user-created teams that can publish shared projects.
+  static const String createGroups = '''
+    CREATE TABLE IF NOT EXISTS $tableGroups (
+      id              TEXT PRIMARY KEY,
+      name            TEXT NOT NULL,
+      description     TEXT,
+      avatar_url      TEXT,
+      creator_id      TEXT NOT NULL,
+      creator_name    TEXT,
+      member_count    INTEGER NOT NULL DEFAULT 1,
+      is_dissolved    INTEGER NOT NULL DEFAULT 0,
+      created_at      TEXT NOT NULL,
+      updated_at      TEXT NOT NULL,
+      sync_status     INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (creator_id) REFERENCES $tableUsers(id) ON DELETE CASCADE
+    )
+  ''';
+
+  /// Group members - active members and pending invites.
+  static const String createGroupMembers = '''
+    CREATE TABLE IF NOT EXISTS $tableGroupMembers (
+      id              TEXT PRIMARY KEY,
+      group_id        TEXT NOT NULL,
+      user_id         TEXT NOT NULL,
+      user_name       TEXT,
+      user_photo_url  TEXT,
+      role            TEXT NOT NULL DEFAULT 'member',
+      status          TEXT NOT NULL DEFAULT 'pending',
+      invited_by      TEXT,
+      invited_by_name TEXT,
+      joined_at       TEXT,
+      created_at      TEXT NOT NULL,
+      updated_at      TEXT NOT NULL,
+      sync_status     INTEGER NOT NULL DEFAULT 0,
+      UNIQUE (group_id, user_id),
+      FOREIGN KEY (group_id) REFERENCES $tableGroups(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES $tableUsers(id) ON DELETE CASCADE
+    )
+  ''';
+
   /// Posts — project posts, opportunity posts, challenges.
   /// images, videos, tags, skills_used stored as JSON arrays.
   /// visibility: 'public' | 'followers' | 'collaborators'
@@ -151,6 +193,9 @@ abstract final class DatabaseSchema {
     CREATE TABLE IF NOT EXISTS $tablePosts (
       id               TEXT PRIMARY KEY,
       author_id        TEXT NOT NULL,
+      group_id         TEXT,
+      group_name       TEXT,
+      group_avatar_url TEXT,
       type             TEXT NOT NULL DEFAULT 'project',
       title            TEXT NOT NULL,
       description      TEXT,
@@ -184,7 +229,8 @@ abstract final class DatabaseSchema {
       created_at       TEXT NOT NULL,
       updated_at       TEXT NOT NULL,
       sync_status      INTEGER NOT NULL DEFAULT 0,
-      FOREIGN KEY (author_id) REFERENCES $tableUsers(id) ON DELETE CASCADE
+      FOREIGN KEY (author_id) REFERENCES $tableUsers(id) ON DELETE CASCADE,
+      FOREIGN KEY (group_id) REFERENCES $tableGroups(id) ON DELETE SET NULL
     )
   ''';
 
@@ -591,6 +637,12 @@ abstract final class DatabaseSchema {
     'CREATE INDEX IF NOT EXISTS idx_courses_faculty ON $tableCourses(faculty_id)',
     'CREATE INDEX IF NOT EXISTS idx_courses_active ON $tableCourses(is_active)',
     'CREATE INDEX IF NOT EXISTS idx_faculties_active ON $tableFaculties(is_active)',
+    'CREATE INDEX IF NOT EXISTS idx_groups_creator ON $tableGroups(creator_id)',
+    'CREATE INDEX IF NOT EXISTS idx_groups_dissolved ON $tableGroups(is_dissolved)',
+    'CREATE INDEX IF NOT EXISTS idx_group_members_group ON $tableGroupMembers(group_id)',
+    'CREATE INDEX IF NOT EXISTS idx_group_members_user ON $tableGroupMembers(user_id)',
+    'CREATE INDEX IF NOT EXISTS idx_group_members_status ON $tableGroupMembers(status)',
+    'CREATE INDEX IF NOT EXISTS idx_posts_group ON $tablePosts(group_id)',
     'CREATE INDEX IF NOT EXISTS idx_rec_logs_user ON $tableRecommendationLogs(user_id)',
     'CREATE INDEX IF NOT EXISTS idx_rec_logs_algo ON $tableRecommendationLogs(algorithm)',
     'CREATE INDEX IF NOT EXISTS idx_rec_logs_time ON $tableRecommendationLogs(logged_at DESC)',
@@ -606,6 +658,8 @@ abstract final class DatabaseSchema {
     createProfiles,
     createFaculties,
     createCourses,
+    createGroups,
+    createGroupMembers,
     createPosts,
     createComments,
     createLikes,

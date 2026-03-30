@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -8,18 +10,27 @@ import '../../../core/constants/app_dimensions.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_names.dart';
 import '../../../data/local/dao/activity_log_dao.dart';
+import '../../../data/local/dao/group_dao.dart';
 import '../../../data/local/dao/post_dao.dart';
 import '../../../data/local/dao/sync_queue_dao.dart';
 import '../../../data/local/dao/user_dao.dart';
+import '../../../data/models/group_model.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/models/user_model.dart';
+import '../../../data/remote/firestore_service.dart';
 import '../../../data/remote/sync_service.dart';
 import '../../../data/local/dao/recommendation_log_dao.dart';
 import '../../../core/constants/app_enums.dart';
+import '../../auth/bloc/auth_cubit.dart';
 import '../bloc/course_management_cubit.dart';
 import '../bloc/faculty_management_cubit.dart';
 import 'course_management_screen.dart';
 import 'faculty_management_screen.dart';
+import 'resource_monitoring_screen.dart';
+import 'sync_queue_details_screen.dart';
+import 'user_behavior_analytics_detailed_screen.dart';
+import 'moderation_analytics_screen.dart';
+import 'sync_consistency_screen.dart';
 
 enum _Risk { high, medium, low }
 
@@ -58,6 +69,30 @@ String _bestUserLabel({String? displayName, String? email, String? userId}) {
   return rawId.length > 8 ? '${rawId.substring(0, 8)}…' : rawId;
 }
 
+String _taskBucketFromRecRow(Map<String, dynamic> row) {
+  final algorithm = (row['algorithm'] as String? ?? '').trim().toLowerCase();
+  final itemType = (row['item_type'] as String? ?? '').trim().toLowerCase();
+
+  if (algorithm == 'applicant') return 'opportunities';
+  if (algorithm == 'collaborator') return 'streaming';
+  if (itemType == 'user') return 'members';
+  return 'projects';
+}
+
+String _taskBucketLabel(String bucket) {
+  switch (bucket) {
+    case 'opportunities':
+      return 'Opportunities';
+    case 'streaming':
+      return 'Streaming';
+    case 'members':
+      return 'Members';
+    case 'projects':
+    default:
+      return 'Projects';
+  }
+}
+
 class _FlaggedItem {
   final String postId;
   final String authorId;
@@ -94,6 +129,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final _userDao = sl<UserDao>();
   final _syncQueueDao = sl<SyncQueueDao>();
   final _syncService = sl<SyncService>();
+  late final FacultyManagementCubit _facultyManagementCubit;
+  late final CourseManagementCubit _courseManagementCubit;
+  bool _isSidebarVisible = true;
 
   int _selectedTab = 0;
   bool _loading = true;
@@ -107,13 +145,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   int _weeklyReports = 0;
   int _weeklyActiveUsers = 0;
   List<PostModel> _pendingQueue = const [];
-  List<UserModel> _recentUsers = const [];
+  List<UserModel> _allUsers = const [];
+  List<UserModel> _filteredUsers = const [];
+  String _userSearchQuery = '';
   final List<_FlaggedItem> _items = [];
 
   @override
   void initState() {
     super.initState();
+    _facultyManagementCubit = FacultyManagementCubit();
+    _courseManagementCubit = CourseManagementCubit();
     _reloadDashboard();
+  }
+
+  @override
+  void dispose() {
+    _facultyManagementCubit.close();
+    _courseManagementCubit.close();
+    super.dispose();
   }
 
   List<_FlaggedItem> get _selected => _items.where((i) => i.isSelected).toList();
@@ -124,7 +173,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       final postStats = await _postDao.getPostStats();
       final pendingPosts = await _postDao.getPendingModerationPosts(limit: 80);
       final flaggedRows = await _activityLogDao.getReportedPostSummaries(limit: 80);
-      final allUsers = await _userDao.getAllUsers(pageSize: 60);
+      final allUsers = await _userDao.getAllUsers(pageSize: 500);
       final syncPending = await _syncQueueDao.getPendingCount();
       final syncDeadLetters = await _syncQueueDao.getDeadLetterCount();
       final weeklyReports = await _activityLogDao.getActionCountForDays(action: 'report_post', days: 7);
@@ -169,7 +218,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         _reportedUsers = reportedUsers;
         _totalPosts = postStats['total'] ?? 0;
         _totalUsers = allUsers.length;
-        _recentUsers = allUsers.take(20).toList();
+        _allUsers = allUsers;
+        _filterUsers(_userSearchQuery);
         _syncPending = syncPending;
         _syncDeadLetters = syncDeadLetters;
         _weeklyReports = weeklyReports;
@@ -182,10 +232,59 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     }
   }
 
+  Future<void> _logoutAdmin() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Log out admin?'),
+        content: const Text('You will be returned to the login screen.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+            child: const Text('Log out'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    await sl<AuthCubit>().logout();
+    if (!mounted) return;
+    context.go(RouteNames.login);
+  }
+
   void _toggleSelect(String id) {
     setState(() {
       final item = _items.firstWhere((i) => i.postId == id);
       item.isSelected = !item.isSelected;
+    });
+  }
+
+  void _filterUsers(String query) {
+    setState(() {
+      _userSearchQuery = query.toLowerCase();
+      if (_userSearchQuery.isEmpty) {
+        _filteredUsers = _allUsers;
+      } else {
+        _filteredUsers = _allUsers
+            .where((user) {
+              final displayName = _bestUserLabel(
+                displayName: user.displayName,
+                email: user.email,
+                userId: user.id,
+              ).toLowerCase();
+              final email = user.email.toLowerCase();
+              return displayName.contains(_userSearchQuery) ||
+                  email.contains(_userSearchQuery) ||
+                  user.id.toLowerCase().contains(_userSearchQuery);
+            })
+            .toList();
+      }
     });
   }
 
@@ -361,7 +460,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   void _setSelectedTab(int index) {
-    setState(() => _selectedTab = index);
+    final isWide = MediaQuery.of(context).size.width >= 980;
+    setState(() {
+      _selectedTab = index;
+      if (isWide) {
+        _isSidebarVisible = false;
+      }
+    });
     final scaffold = Scaffold.maybeOf(context);
     if (scaffold?.isDrawerOpen ?? false) {
       Navigator.of(context).pop();
@@ -510,7 +615,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              initiallyExpanded: _selectedTab == 5 || _selectedTab == 6,
+              initiallyExpanded:
+                  _selectedTab == 5 || _selectedTab == 6 || _selectedTab == 13 || _selectedTab == 14,
               children: [
                 navTile(
                   tab: 5,
@@ -522,6 +628,63 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   icon: Icons.history_outlined,
                   title: 'System Logs',
                   count: _syncPending,
+                ),
+                navTile(
+                  tab: 13,
+                  icon: Icons.feedback_outlined,
+                  title: 'App Feedback',
+                ),
+                navTile(
+                  tab: 14,
+                  icon: Icons.groups_rounded,
+                  title: 'Groups',
+                ),
+              ],
+            ),
+            ExpansionTile(
+              tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+              childrenPadding: const EdgeInsets.only(left: 8),
+              leading: const Icon(Icons.monitor_heart_rounded),
+              title: Text(
+                'Monitoring',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              initiallyExpanded:
+                  _selectedTab == 8 ||
+                  _selectedTab == 9 ||
+                  _selectedTab == 10 ||
+                  _selectedTab == 11 ||
+                  _selectedTab == 12,
+              children: [
+                navTile(
+                  tab: 8,
+                  icon: Icons.memory_rounded,
+                  title: 'Resources',
+                ),
+                navTile(
+                  tab: 9,
+                  icon: Icons.cloud_sync_rounded,
+                  title: 'Sync Queue',
+                  count: _syncDeadLetters,
+                ),
+                navTile(
+                  tab: 10,
+                  icon: Icons.people_outline_rounded,
+                  title: 'User Behavior',
+                ),
+                navTile(
+                  tab: 11,
+                  icon: Icons.assessment_rounded,
+                  title: 'Moderation Stats',
+                  count: _flaggedPosts,
+                ),
+                navTile(
+                  tab: 12,
+                  icon: Icons.verified_rounded,
+                  title: 'Sync Consistency',
                 ),
               ],
             ),
@@ -544,6 +707,29 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   title: 'Settings',
                 ),
               ],
+            ),
+            const SizedBox(height: 10),
+            const Divider(height: 1),
+            const SizedBox(height: 6),
+            ListTile(
+              dense: true,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+              ),
+              leading: const Icon(
+                Icons.logout_rounded,
+                size: 20,
+                color: AppColors.danger,
+              ),
+              title: Text(
+                'Log Out',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.danger,
+                ),
+              ),
+              onTap: _logoutAdmin,
             ),
           ],
         ),
@@ -606,20 +792,52 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
     if (_selectedTab == 2) {
       return ListView(
-        padding: const EdgeInsets.fromLTRB(0, 0, 0, 24),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              'Users Management',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textSecondaryLight,
+          // Search bar
+          TextField(
+            onChanged: _filterUsers,
+            decoration: InputDecoration(
+              hintText: 'Search users by name, email, or ID...',
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: _userSearchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () => _filterUsers(''),
+                    )
+                  : null,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
               ),
             ),
           ),
-          ..._recentUsers.map(
+          const SizedBox(height: 12),
+          Text(
+            'Users Management${_filteredUsers.length != _allUsers.length ? ' (${_filteredUsers.length} results)' : ' (${_allUsers.length} total)'}',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textSecondaryLight,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (_filteredUsers.isEmpty)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  _userSearchQuery.isNotEmpty
+                      ? 'No users match your search'
+                      : 'No users found',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 12),
+                ),
+              ),
+            ),
+          ..._filteredUsers.map(
             (user) {
               final displayName = _bestUserLabel(
                 displayName: user.displayName,
@@ -631,7 +849,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   : '?';
 
               return Card(
-                margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                margin: const EdgeInsets.only(bottom: 10),
                 child: ListTile(
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -770,15 +988,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     }
 
     if (_selectedTab == 3) {
-      return BlocProvider(
-        create: (_) => FacultyManagementCubit(),
+      return BlocProvider.value(
+        value: _facultyManagementCubit,
         child: const FacultyManagementScreen(embedded: true),
       );
     }
 
     if (_selectedTab == 4) {
-      return BlocProvider(
-        create: (_) => CourseManagementCubit(),
+      return BlocProvider.value(
+        value: _courseManagementCubit,
         child: const CourseManagementScreen(embedded: true),
       );
     }
@@ -853,6 +1071,34 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         ],
       );
+    }
+
+    if (_selectedTab == 13) {
+      return const _AdminAppFeedbackTab();
+    }
+
+    if (_selectedTab == 14) {
+      return const _AdminGroupsTab();
+    }
+
+    if (_selectedTab == 8) {
+      return const ResourceMonitoringScreen();
+    }
+
+    if (_selectedTab == 9) {
+      return const SyncQueueDetailsScreen();
+    }
+
+    if (_selectedTab == 10) {
+      return const UserBehaviorAnalyticsScreen();
+    }
+
+    if (_selectedTab == 11) {
+      return const ModerationAnalyticsScreen();
+    }
+
+    if (_selectedTab == 12) {
+      return const SyncConsistencyScreen();
     }
 
     return ListView(
@@ -930,9 +1176,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
       appBar: AppBar(
         leading: isWide
-            ? const Padding(
-                padding: EdgeInsets.all(12),
-                child: Icon(Icons.shield_outlined, color: AppColors.primary),
+            ? IconButton(
+                tooltip: _isSidebarVisible ? 'Hide sidebar' : 'Show sidebar',
+                icon: Icon(
+                  _isSidebarVisible
+                      ? Icons.menu_open_rounded
+                      : Icons.menu_rounded,
+                  color: AppColors.primary,
+                ),
+                onPressed: () {
+                  setState(() => _isSidebarVisible = !_isSidebarVisible);
+                },
               )
             : Builder(
                 builder: (context) => IconButton(
@@ -949,11 +1203,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             icon: const Icon(Icons.refresh_rounded),
             onPressed: _reloadDashboard,
           ),
+          IconButton(
+            tooltip: 'Log out',
+            icon: const Icon(Icons.logout_rounded),
+            onPressed: _logoutAdmin,
+          ),
         ],
       ),
       body: Row(
         children: [
-          if (isWide)
+          if (isWide && _isSidebarVisible)
             SizedBox(
               width: 280,
               child: _buildSidebar(),
@@ -1209,6 +1468,478 @@ class _BulkActionBar extends StatelessWidget {
   }
 }
 
+class _AdminAppFeedbackTab extends StatefulWidget {
+  const _AdminAppFeedbackTab();
+
+  @override
+  State<_AdminAppFeedbackTab> createState() => _AdminAppFeedbackTabState();
+}
+
+class _AdminAppFeedbackTabState extends State<_AdminAppFeedbackTab> {
+  late Future<_AdminFeedbackSummary> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  Future<_AdminFeedbackSummary> _load() async {
+    final firestore = sl<FirestoreService>();
+    final rows = await firestore.getRecentAppFeedback(limit: 120);
+
+    final counts = <int, int>{1: 0, 2: 0, 3: 0, 4: 0, 5: 0};
+    final comments = <Map<String, dynamic>>[];
+    double sum = 0;
+    var total = 0;
+
+    for (final row in rows) {
+      final stars = (row['stars'] as num?)?.toInt() ?? 0;
+      if (stars < 1 || stars > 5) continue;
+
+      total += 1;
+      sum += stars;
+      counts[stars] = (counts[stars] ?? 0) + 1;
+
+      final comment = row['comment']?.toString().trim() ?? '';
+      if (comment.isNotEmpty) {
+        comments.add(row);
+      }
+    }
+
+    return _AdminFeedbackSummary(
+      average: total == 0 ? 0 : sum / total,
+      total: total,
+      counts: counts,
+      comments: comments.take(60).toList(growable: false),
+    );
+  }
+
+  String _nameForRow(Map<String, dynamic> row) {
+    final userName = row['user_name']?.toString().trim() ?? '';
+    if (userName.isNotEmpty) return userName;
+    final email = row['user_email']?.toString().trim() ?? '';
+    final local = email.split('@').first.trim();
+    if (local.isNotEmpty) return _titleCaseWords(local.replaceAll(RegExp(r'[_\-.]+'), ' '));
+    final userId = row['user_id']?.toString().trim() ?? '';
+    if (userId.isEmpty) return 'Member';
+    return userId.length > 8 ? '${userId.substring(0, 8)}…' : userId;
+  }
+
+  String _ago(Map<String, dynamic> row) {
+    final raw = row['created_at']?.toString() ?? '';
+    final at = DateTime.tryParse(raw)?.toLocal();
+    if (at == null) return 'recent';
+    final diff = DateTime.now().difference(at);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${at.day}/${at.month}/${at.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<_AdminFeedbackSummary>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snap.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text('Failed to load app feedback: ${snap.error}'),
+            ),
+          );
+        }
+
+        final data = snap.data ?? const _AdminFeedbackSummary.empty();
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: _SummaryCard(
+                    icon: Icons.star_rounded,
+                    iconColor: AppColors.warning,
+                    value: data.average.toStringAsFixed(2),
+                    label: 'Avg App Rating',
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _SummaryCard(
+                    icon: Icons.rate_review_rounded,
+                    iconColor: AppColors.primary,
+                    value: data.total.toString(),
+                    label: 'Total Responses',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+                border: Border.all(color: AppColors.borderLight),
+              ),
+              child: Column(
+                children: [
+                  for (var star = 5; star >= 1; star--)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 28,
+                            child: Text(
+                              '$star★',
+                              style: GoogleFonts.plusJakartaSans(fontSize: 11),
+                            ),
+                          ),
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(999),
+                              child: LinearProgressIndicator(
+                                value: data.total == 0
+                                    ? 0
+                                    : (data.counts[star] ?? 0) / data.total,
+                                minHeight: 7,
+                                backgroundColor: AppColors.borderLight,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${data.counts[star] ?? 0}',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11,
+                              color: AppColors.textSecondaryLight,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Text(
+                  'Member Comments',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondaryLight,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  tooltip: 'Refresh',
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  onPressed: () => setState(() => _future = _load()),
+                ),
+              ],
+            ),
+            if (data.comments.isEmpty)
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    'No comments yet. Ratings are being collected.',
+                    style: GoogleFonts.plusJakartaSans(fontSize: 12),
+                  ),
+                ),
+              ),
+            ...data.comments.map((row) {
+              final stars = (row['stars'] as num?)?.toInt() ?? 0;
+              final comment = row['comment']?.toString().trim() ?? '';
+              final userRole = row['user_role']?.toString().trim() ?? 'member';
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+                  border: Border.all(color: AppColors.borderLight),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _nameForRow(row),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _ago(row),
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 10,
+                            color: AppColors.textSecondaryLight,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.warning.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            '$stars★',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.warning,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryTint10,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            userRole,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (comment.isNotEmpty) ...[
+                      const SizedBox(height: 7),
+                      Text(
+                        comment,
+                        style: GoogleFonts.plusJakartaSans(fontSize: 12),
+                      ),
+                    ],
+                  ],
+                ),
+              );
+            }),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _AdminFeedbackSummary {
+  final double average;
+  final int total;
+  final Map<int, int> counts;
+  final List<Map<String, dynamic>> comments;
+
+  const _AdminFeedbackSummary({
+    required this.average,
+    required this.total,
+    required this.counts,
+    required this.comments,
+  });
+
+  const _AdminFeedbackSummary.empty()
+      : average = 0,
+        total = 0,
+        counts = const {1: 0, 2: 0, 3: 0, 4: 0, 5: 0},
+        comments = const [];
+}
+
+class _AdminGroupsTab extends StatefulWidget {
+  const _AdminGroupsTab();
+
+  @override
+  State<_AdminGroupsTab> createState() => _AdminGroupsTabState();
+}
+
+class _AdminGroupsTabState extends State<_AdminGroupsTab> {
+  late Future<List<GroupModel>> _future;
+  final _groupDao = sl<GroupDao>();
+  final _postDao = sl<PostDao>();
+  final _syncQueue = sl<SyncQueueDao>();
+  final _syncService = sl<SyncService>();
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _groupDao.getAllGroups(includeDissolved: true, limit: 240);
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _future = _groupDao.getAllGroups(includeDissolved: true, limit: 240);
+    });
+  }
+
+  Future<void> _dissolve(GroupModel group) async {
+    await _groupDao.dissolveGroup(group.id);
+    await _syncQueue.enqueue(
+      operation: 'dissolve',
+      entity: 'groups',
+      entityId: group.id,
+      payload: {'group_id': group.id},
+    );
+    await _syncService.processPendingSync();
+    await _refresh();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<GroupModel>>(
+      future: _future,
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snap.hasError) {
+          return Center(child: Text('Failed to load groups: ${snap.error}'));
+        }
+
+        final groups = snap.data ?? const <GroupModel>[];
+        final active = groups.where((group) => !group.isDissolved).toList();
+        final dissolved = groups.where((group) => group.isDissolved).toList();
+
+        return FutureBuilder<List<PostModel>>(
+          future: _postDao.getRecentGroupProjects(limit: 200),
+          builder: (context, postsSnap) {
+            final groupPosts = postsSnap.data ?? const <PostModel>[];
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: _SummaryCard(
+                        icon: Icons.groups_rounded,
+                        iconColor: AppColors.primary,
+                        value: active.length.toString(),
+                        label: 'Active Groups',
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _SummaryCard(
+                        icon: Icons.folder_copy_rounded,
+                        iconColor: AppColors.success,
+                        value: groupPosts.length.toString(),
+                        label: 'Group Projects',
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _SummaryCard(
+                        icon: Icons.archive_rounded,
+                        iconColor: AppColors.warning,
+                        value: dissolved.length.toString(),
+                        label: 'Dissolved',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Text(
+                      'Groups Registry',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textSecondaryLight,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: _refresh,
+                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                    ),
+                  ],
+                ),
+                if (groups.isEmpty)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(
+                        'No groups created yet.',
+                        style: GoogleFonts.plusJakartaSans(fontSize: 12),
+                      ),
+                    ),
+                  ),
+                ...groups.map(
+                  (group) => Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      title: Text(
+                        group.name,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      subtitle: Text(
+                        '${group.memberCount} members • ${group.visiblePostCount} posts',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11,
+                          color: AppColors.textSecondaryLight,
+                        ),
+                      ),
+                      trailing: group.isDissolved
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppColors.warning.withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                'Dissolved',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.warning,
+                                ),
+                              ),
+                            )
+                          : TextButton.icon(
+                              onPressed: () => _dissolve(group),
+                              icon: const Icon(Icons.block_rounded, size: 16),
+                              label: const Text('Dissolve'),
+                            ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
 // ── AI Recommendations tab ────────────────────────────────────────────────────
 
 class _AdminRecommendationsTab extends StatefulWidget {
@@ -1222,6 +1953,7 @@ class _AdminRecommendationsTab extends StatefulWidget {
 class _AdminRecommendationsTabState extends State<_AdminRecommendationsTab> {
   late Future<_RecSummary> _future;
   String? _filterAlgo;
+  String? _filterTask;
 
   @override
   void initState() {
@@ -1235,7 +1967,8 @@ class _AdminRecommendationsTabState extends State<_AdminRecommendationsTab> {
     final stats = await dao.getAlgorithmSummary();
     final total = await dao.getTotalCount();
     final unique = await dao.getDistinctUserIds();
-    final recent = await dao.getRecentLogs(pageSize: 50);
+    final recent = await dao.getRecentLogs(pageSize: 400);
+    final topVolumes = await dao.getTopUsersByLogCount(limit: 8);
     final userNames = <String, String>{};
 
     for (final row in recent) {
@@ -1252,13 +1985,237 @@ class _AdminRecommendationsTabState extends State<_AdminRecommendationsTab> {
       userNames[userId] = displayName;
     }
 
+    for (final volume in topVolumes) {
+      final userId = volume.userId;
+      if (userNames.containsKey(userId)) continue;
+      final user = await userDao.getUserById(userId);
+      final displayName = _bestUserLabel(
+        displayName: user?.displayName,
+        email: user?.email,
+        userId: userId,
+      );
+      userNames[userId] = displayName;
+    }
+
+    final taskBreakdown = _buildTaskBreakdown(recent);
+    final memberComparisons = _buildMemberComparisons(recent);
+    final reasonWeights = _buildReasonWeights(recent);
+    final avgLogsPerUser =
+      unique.isEmpty ? 0.0 : (total.toDouble() / unique.length);
+
     return _RecSummary(
       stats: stats,
       total: total,
       uniqueUsers: unique.length,
       recent: recent,
       userNames: userNames,
+      topVolumes: topVolumes,
+      taskBreakdown: taskBreakdown,
+      memberComparisons: memberComparisons,
+      reasonWeights: reasonWeights,
+      avgLogsPerUser: avgLogsPerUser,
+      projectedLogsFor100Members: (avgLogsPerUser * 100).round(),
     );
+  }
+
+  List<_TaskAlgorithmMetric> _buildTaskBreakdown(
+    List<Map<String, dynamic>> rows,
+  ) {
+    final buckets = <String, _TaskAlgorithmAccumulator>{};
+    for (final row in rows) {
+      final task = _taskBucketFromRecRow(row);
+      final algorithm = (row['algorithm'] as String? ?? 'unknown').trim();
+      final key = '$task|$algorithm';
+      final score = (row['score'] as num?)?.toDouble() ?? 0.0;
+      final interacted = (row['was_interacted'] as int? ?? 0) == 1;
+
+      final item = buckets.putIfAbsent(key, () {
+        return _TaskAlgorithmAccumulator(task: task, algorithm: algorithm);
+      });
+      item.shown += 1;
+      item.scoreTotal += score;
+      if (interacted) item.interacted += 1;
+    }
+
+    final metrics = buckets.values
+        .map(
+          (item) => _TaskAlgorithmMetric(
+            task: item.task,
+            algorithm: item.algorithm,
+            shown: item.shown,
+            interacted: item.interacted,
+            avgScore: item.shown == 0 ? 0 : item.scoreTotal / item.shown,
+          ),
+        )
+        .toList();
+
+    metrics.sort((a, b) {
+      final taskCompare = a.task.compareTo(b.task);
+      if (taskCompare != 0) return taskCompare;
+      return b.shown.compareTo(a.shown);
+    });
+    return metrics;
+  }
+
+  List<_MemberTaskDecision> _buildMemberComparisons(
+    List<Map<String, dynamic>> rows,
+  ) {
+    final local = <String, _AlgoAccumulator>{};
+    final hybrid = <String, _AlgoAccumulator>{};
+
+    for (final row in rows) {
+      final algo = (row['algorithm'] as String? ?? '').trim().toLowerCase();
+      if (algo != 'local' && algo != 'hybrid') continue;
+
+      final userId = (row['user_id'] as String? ?? '').trim();
+      if (userId.isEmpty) continue;
+      final task = _taskBucketFromRecRow(row);
+      final key = '$userId|$task';
+
+      final score = (row['score'] as num?)?.toDouble() ?? 0.0;
+      final interacted = (row['was_interacted'] as int? ?? 0) == 1;
+      final target = algo == 'local' ? local : hybrid;
+
+      final bucket = target.putIfAbsent(key, _AlgoAccumulator.new);
+      bucket.count += 1;
+      bucket.scoreTotal += score;
+      if (interacted) bucket.interacted += 1;
+    }
+
+    final allKeys = <String>{...local.keys, ...hybrid.keys};
+    final decisions = <_MemberTaskDecision>[];
+
+    for (final key in allKeys) {
+      final parts = key.split('|');
+      if (parts.length != 2) continue;
+      final userId = parts.first;
+      final task = parts.last;
+
+      final localItem = local[key] ?? _AlgoAccumulator();
+      final hybridItem = hybrid[key] ?? _AlgoAccumulator();
+      if (localItem.count == 0 && hybridItem.count == 0) continue;
+
+      final localAvg = localItem.count == 0 ? 0.0 : localItem.scoreTotal / localItem.count;
+      final hybridAvg =
+          hybridItem.count == 0 ? 0.0 : hybridItem.scoreTotal / hybridItem.count;
+      final chosen = _chooseAlgorithm(localItem, hybridItem, localAvg, hybridAvg);
+
+      decisions.add(
+        _MemberTaskDecision(
+          userId: userId,
+          task: task,
+          localCount: localItem.count,
+          hybridCount: hybridItem.count,
+          localAvgScore: localAvg,
+          hybridAvgScore: hybridAvg,
+          selectedAlgorithm: chosen,
+          scoreGap: (hybridAvg - localAvg).abs(),
+        ),
+      );
+    }
+
+    decisions.sort((a, b) {
+      final usesCompare = b.totalLogs.compareTo(a.totalLogs);
+      if (usesCompare != 0) return usesCompare;
+      return b.scoreGap.compareTo(a.scoreGap);
+    });
+    return decisions;
+  }
+
+  String _chooseAlgorithm(
+    _AlgoAccumulator local,
+    _AlgoAccumulator hybrid,
+    double localAvg,
+    double hybridAvg,
+  ) {
+    if (hybrid.count == 0 && local.count > 0) return 'local';
+    if (local.count == 0 && hybrid.count > 0) return 'hybrid';
+
+    final localInteraction = local.count == 0 ? 0.0 : local.interacted / local.count;
+    final hybridInteraction =
+        hybrid.count == 0 ? 0.0 : hybrid.interacted / hybrid.count;
+    final localComposite = localAvg + (localInteraction * 0.10);
+    final hybridComposite = hybridAvg + (hybridInteraction * 0.10);
+    return hybridComposite >= localComposite ? 'hybrid' : 'local';
+  }
+
+  List<_ReasonWeightMetric> _buildReasonWeights(
+    List<Map<String, dynamic>> rows,
+  ) {
+    final acc = <String, _ReasonAccumulator>{};
+    final totalsByTask = <String, int>{};
+
+    for (final row in rows) {
+      final algorithm = (row['algorithm'] as String? ?? '').trim().toLowerCase();
+      if (algorithm != 'local' && algorithm != 'hybrid') continue;
+
+      final task = _taskBucketFromRecRow(row);
+      final score = (row['score'] as num?)?.toDouble() ?? 0.0;
+      final interacted = (row['was_interacted'] as int? ?? 0) == 1;
+      final reasons = _parseReasons(row['reasons']);
+      if (reasons.isEmpty) continue;
+
+      for (final reason in reasons) {
+        final reasonKey = reason.trim();
+        if (reasonKey.isEmpty) continue;
+        final key = '$task|$reasonKey';
+        final item = acc.putIfAbsent(
+          key,
+          () => _ReasonAccumulator(task: task, reason: reasonKey),
+        );
+        item.count += 1;
+        item.scoreTotal += score;
+        if (interacted) item.interacted += 1;
+        totalsByTask[task] = (totalsByTask[task] ?? 0) + 1;
+      }
+    }
+
+    final metrics = acc.values.map((item) {
+      final taskTotal = totalsByTask[item.task] ?? 1;
+      final frequencyShare = item.count / taskTotal;
+      final avgScore = item.count == 0 ? 0.0 : item.scoreTotal / item.count;
+      final interactionRate = item.count == 0 ? 0.0 : item.interacted / item.count;
+      final weight = (frequencyShare * 0.60) + (avgScore * 0.30) + (interactionRate * 0.10);
+
+      return _ReasonWeightMetric(
+        task: item.task,
+        reason: item.reason,
+        count: item.count,
+        avgScore: avgScore,
+        interactionRate: interactionRate,
+        weight: weight,
+      );
+    }).toList();
+
+    metrics.sort((a, b) => b.weight.compareTo(a.weight));
+    return metrics.take(12).toList();
+  }
+
+  List<String> _parseReasons(dynamic raw) {
+    if (raw == null) return const [];
+    if (raw is List) {
+      return raw.map((e) => e.toString()).where((e) => e.trim().isNotEmpty).toList();
+    }
+    final text = raw.toString().trim();
+    if (text.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is List) {
+        return decoded
+            .map((e) => e.toString())
+            .where((e) => e.trim().isNotEmpty)
+            .toList();
+      }
+    } catch (_) {
+      // Ignore malformed JSON and fall back to comma split.
+    }
+    return text
+        .replaceAll('[', '')
+        .replaceAll(']', '')
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
   }
 
   @override
@@ -1344,6 +2301,163 @@ class _AdminRecommendationsTabState extends State<_AdminRecommendationsTab> {
             ),
             ...data.stats.map((s) => _AlgoStatCard(stat: s)),
 
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+              child: Text(
+                'Scale Watch',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textSecondaryLight,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _SummaryCard(
+                      icon: Icons.analytics_rounded,
+                      iconColor: AppColors.primary,
+                      value: data.avgLogsPerUser.toStringAsFixed(1),
+                      label: 'Avg logs/member',
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _SummaryCard(
+                      icon: Icons.groups_rounded,
+                      iconColor: AppColors.roleLecturer,
+                      value: data.projectedLogsFor100Members.toString(),
+                      label: 'Projected @100 members',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (data.topVolumes.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+                  border: Border.all(color: AppColors.borderLight),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'High-volume members',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    ...data.topVolumes.take(5).map((item) {
+                      final label = data.userNames[item.userId] ?? item.userId;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.plusJakartaSans(fontSize: 11),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.warning.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '${item.total} logs',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.warning,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Text(
+                'AI vs Local by Member and Task',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textSecondaryLight,
+                ),
+              ),
+            ),
+            SizedBox(
+              height: 36,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: [
+                  _RecentFilterChip(
+                    label: 'All tasks',
+                    selected: _filterTask == null,
+                    onTap: () => setState(() => _filterTask = null),
+                  ),
+                  for (final task in ['projects', 'opportunities', 'streaming', 'members'])
+                    _RecentFilterChip(
+                      label: _taskBucketLabel(task),
+                      selected: _filterTask == task,
+                      onTap: () => setState(() => _filterTask = task),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+            ...data.memberComparisons
+                .where((item) => _filterTask == null || item.task == _filterTask)
+                .take(30)
+                .map(
+                  (item) => _MemberAlgoComparisonCard(
+                    item: item,
+                    userName: data.userNames[item.userId],
+                  ),
+                ),
+
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Text(
+                'Signal Weights (Transparent Formula)',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textSecondaryLight,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                'weight = 0.60 × frequencyShare + 0.30 × averageScore + 0.10 × interactionRate',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 10,
+                  color: AppColors.textSecondaryLight,
+                ),
+              ),
+            ),
+            ...data.reasonWeights.map((item) => _ReasonWeightCard(item: item)),
+
             // ── Filter & recent log table ───────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -1397,6 +2511,7 @@ class _AdminRecommendationsTabState extends State<_AdminRecommendationsTab> {
               child: Row(
                 children: [
                   Expanded(flex: 3, child: _TableHeader('User')),
+                  Expanded(flex: 2, child: _TableHeader('Task')),
                   Expanded(flex: 2, child: _TableHeader('Algorithm')),
                   Expanded(flex: 2, child: _TableHeader('Score')),
                   Expanded(flex: 1, child: _TableHeader('✓')),
@@ -1410,7 +2525,7 @@ class _AdminRecommendationsTabState extends State<_AdminRecommendationsTab> {
                   if (_filterAlgo == null) return true;
                   return (r['algorithm'] as String?) == _filterAlgo;
                 })
-                .take(50)
+                .take(80)
                 .map(
                   (r) => _RecentLogRow(
                     row: r,
@@ -1432,6 +2547,15 @@ class _RecSummary {
   final int uniqueUsers;
   final List<Map<String, dynamic>> recent;
   final Map<String, String> userNames;
+  final List<UserLogVolume> topVolumes;
+  final List<_TaskAlgorithmMetric> taskBreakdown;
+  final List<_MemberTaskDecision> memberComparisons;
+  final List<_ReasonWeightMetric> reasonWeights;
+  final double? _avgLogsPerUser;
+  final int? _projectedLogsFor100Members;
+
+  double get avgLogsPerUser => _avgLogsPerUser ?? 0.0;
+  int get projectedLogsFor100Members => _projectedLogsFor100Members ?? 0;
 
   const _RecSummary({
     required this.stats,
@@ -1439,6 +2563,100 @@ class _RecSummary {
     required this.uniqueUsers,
     required this.recent,
     required this.userNames,
+    required this.topVolumes,
+    required this.taskBreakdown,
+    required this.memberComparisons,
+    required this.reasonWeights,
+    double? avgLogsPerUser,
+    int? projectedLogsFor100Members,
+  })  : _avgLogsPerUser = avgLogsPerUser,
+        _projectedLogsFor100Members = projectedLogsFor100Members;
+}
+
+class _TaskAlgorithmMetric {
+  final String task;
+  final String algorithm;
+  final int shown;
+  final int interacted;
+  final double avgScore;
+
+  const _TaskAlgorithmMetric({
+    required this.task,
+    required this.algorithm,
+    required this.shown,
+    required this.interacted,
+    required this.avgScore,
+  });
+}
+
+class _TaskAlgorithmAccumulator {
+  final String task;
+  final String algorithm;
+  int shown = 0;
+  int interacted = 0;
+  double scoreTotal = 0;
+
+  _TaskAlgorithmAccumulator({
+    required this.task,
+    required this.algorithm,
+  });
+}
+
+class _AlgoAccumulator {
+  int count = 0;
+  int interacted = 0;
+  double scoreTotal = 0;
+}
+
+class _MemberTaskDecision {
+  final String userId;
+  final String task;
+  final int localCount;
+  final int hybridCount;
+  final double localAvgScore;
+  final double hybridAvgScore;
+  final String selectedAlgorithm;
+  final double scoreGap;
+
+  const _MemberTaskDecision({
+    required this.userId,
+    required this.task,
+    required this.localCount,
+    required this.hybridCount,
+    required this.localAvgScore,
+    required this.hybridAvgScore,
+    required this.selectedAlgorithm,
+    required this.scoreGap,
+  });
+
+  int get totalLogs => localCount + hybridCount;
+}
+
+class _ReasonAccumulator {
+  final String task;
+  final String reason;
+  int count = 0;
+  int interacted = 0;
+  double scoreTotal = 0;
+
+  _ReasonAccumulator({required this.task, required this.reason});
+}
+
+class _ReasonWeightMetric {
+  final String task;
+  final String reason;
+  final int count;
+  final double avgScore;
+  final double interactionRate;
+  final double weight;
+
+  const _ReasonWeightMetric({
+    required this.task,
+    required this.reason,
+    required this.count,
+    required this.avgScore,
+    required this.interactionRate,
+    required this.weight,
   });
 }
 
@@ -1521,6 +2739,149 @@ class _AlgoStatCard extends StatelessWidget {
   }
 }
 
+class _MemberAlgoComparisonCard extends StatelessWidget {
+  final _MemberTaskDecision item;
+  final String? userName;
+
+  const _MemberAlgoComparisonCard({required this.item, this.userName});
+
+  @override
+  Widget build(BuildContext context) {
+    final userLabel = _bestUserLabel(displayName: userName, userId: item.userId);
+    final pickedColor = item.selectedAlgorithm == 'hybrid'
+        ? AppColors.primary
+        : AppColors.success;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  userLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: pickedColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  'Pick: ${item.selectedAlgorithm}',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: pickedColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Task: ${_taskBucketLabel(item.task)} · Logs: ${item.totalLogs}',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 10,
+              color: AppColors.textSecondaryLight,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Local ${item.localCount} · ${(item.localAvgScore * 100).toStringAsFixed(1)}%',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 11),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  'Hybrid ${item.hybridCount} · ${(item.hybridAvgScore * 100).toStringAsFixed(1)}%',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 11),
+                  textAlign: TextAlign.right,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReasonWeightCard extends StatelessWidget {
+  final _ReasonWeightMetric item;
+
+  const _ReasonWeightCard({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  item.reason,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                (item.weight * 100).toStringAsFixed(1),
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${_taskBucketLabel(item.task)} · freq ${item.count} · avg ${(item.avgScore * 100).toStringAsFixed(1)}% · interact ${(item.interactionRate * 100).toStringAsFixed(1)}%',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 10,
+              color: AppColors.textSecondaryLight,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _RecentFilterChip extends StatelessWidget {
   final String label;
   final bool selected;
@@ -1593,6 +2954,7 @@ class _RecentLogRow extends StatelessWidget {
       displayName: userName,
       userId: rawUserId,
     );
+    final task = _taskBucketFromRecRow(row);
     final algo = row['algorithm'] as String? ?? '?';
     final score = (row['score'] as num?)?.toDouble() ?? 0.0;
     final interacted = (row['was_interacted'] as int? ?? 0) == 1;
@@ -1621,6 +2983,16 @@ class _RecentLogRow extends StatelessWidget {
                 fontSize: 11,
                 color: AppColors.textSecondaryLight,
                 fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              _taskBucketLabel(task),
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 10,
+                color: AppColors.textSecondaryLight,
               ),
             ),
           ),

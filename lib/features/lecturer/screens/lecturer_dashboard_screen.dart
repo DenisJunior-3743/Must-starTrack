@@ -468,6 +468,110 @@ class _DashboardBody extends StatelessWidget {
             ),
           ),
 
+          // Recent group projects visibility for lecturers
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 18, 16, 6),
+              child: Text(
+                'Recent Group Projects',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: isDark
+                      ? AppColors.textPrimaryDark
+                      : AppColors.textPrimaryLight,
+                ),
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: FutureBuilder<List<PostModel>>(
+              future: sl<PostDao>().getRecentGroupProjects(limit: 6),
+              builder: (context, snapshot) {
+                final posts = snapshot.data ?? const <PostModel>[];
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                if (posts.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                    child: Text(
+                      'No group projects published yet.',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        color: AppColors.textSecondaryLight,
+                      ),
+                    ),
+                  );
+                }
+                return SizedBox(
+                  height: 126,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                    itemCount: posts.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 10),
+                    itemBuilder: (context, index) {
+                      final post = posts[index];
+                      return GestureDetector(
+                        onTap: () => context.push(
+                          RouteNames.projectDetail.replaceFirst(':postId', post.id),
+                        ),
+                        child: Container(
+                          width: 244,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.surfaceDark : Colors.white,
+                            borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+                            border: Border.all(
+                              color: isDark ? AppColors.borderDark : AppColors.borderLight,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                post.groupName ?? 'Group Project',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.success,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                post.title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const Spacer(),
+                              Text(
+                                'By ${post.authorName ?? 'Unknown'}',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondaryLight,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+
           // â”€â”€ Section header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           SliverToBoxAdapter(
             child: Padding(

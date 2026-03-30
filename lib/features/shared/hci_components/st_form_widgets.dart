@@ -56,6 +56,7 @@ class StTextField extends StatelessWidget {
   final bool autofocus;
   final String? initialValue;
   final List<TextInputFormatter> inputFormatters;
+  final AutovalidateMode autovalidateMode;
 
   const StTextField({
     super.key,
@@ -77,6 +78,7 @@ class StTextField extends StatelessWidget {
     this.autofocus = false,
     this.initialValue,
     this.inputFormatters = const [],
+    this.autovalidateMode = AutovalidateMode.disabled,
   });
 
   @override
@@ -111,6 +113,7 @@ class StTextField extends StatelessWidget {
           controller: controller,
           initialValue: initialValue,
           validator: validator,
+          autovalidateMode: autovalidateMode,
           keyboardType: effectiveKeyboardType,
           obscureText: obscureText,
           maxLines: effectiveMaxLines,
@@ -160,6 +163,8 @@ class StDropdown<T> extends StatelessWidget {
   final void Function(T?) onChanged;
   final String? hint;
   final String? Function(T?)? validator;
+  final bool enabled;
+  final String? helperText;
 
   const StDropdown({
     super.key,
@@ -169,6 +174,8 @@ class StDropdown<T> extends StatelessWidget {
     required this.onChanged,
     this.hint,
     this.validator,
+    this.enabled = true,
+    this.helperText,
   });
 
   @override
@@ -195,8 +202,8 @@ class StDropdown<T> extends StatelessWidget {
           initialValue: value,
           isExpanded: true,
           items: items,
-          onChanged: onChanged,
-          validator: validator,
+          onChanged: enabled ? onChanged : null,
+          validator: enabled ? validator : null,
           hint: hint != null
               ? Text(hint!, style: GoogleFonts.plusJakartaSans(fontSize: 14, color: AppColors.textHintLight))
               : null,
@@ -206,8 +213,9 @@ class StDropdown<T> extends StatelessWidget {
             fontSize: 14,
             color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
           ),
-          decoration: const InputDecoration(
-            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          decoration: InputDecoration(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+            helperText: helperText,
           ),
           dropdownColor: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
           borderRadius: BorderRadius.circular(AppDimensions.radiusMd),

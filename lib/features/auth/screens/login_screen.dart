@@ -299,7 +299,7 @@ class _RegisterLinks extends StatelessWidget {
         ),
         TextButton(
           onPressed: () => context.push(RouteNames.lecturerRegister),
-          child: Text('Staff / Lecturer Registration â†’',
+          child: Text('Staff / Lecturer Registration',
             style: GoogleFonts.plusJakartaSans(
               fontSize: 13, fontWeight: FontWeight.w600,
               color: AppColors.textSecondaryLight, decoration: TextDecoration.underline,

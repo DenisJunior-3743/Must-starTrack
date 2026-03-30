@@ -9,6 +9,10 @@ class PostModel extends Equatable {
   final String? authorPhotoUrl;
   final String? authorRole;
 
+  final String? groupId;
+  final String? groupName;
+  final String? groupAvatarUrl;
+
   final String type;
   final String title;
   final String? description;
@@ -60,6 +64,9 @@ class PostModel extends Equatable {
     this.authorName,
     this.authorPhotoUrl,
     this.authorRole,
+    this.groupId,
+    this.groupName,
+    this.groupAvatarUrl,
     this.type = 'project',
     required this.title,
     this.description,
@@ -162,6 +169,9 @@ class PostModel extends Equatable {
       authorName: toNullableString(j['authorName'] ?? j['author_name']),
       authorPhotoUrl: toNullableString(j['authorPhotoUrl'] ?? j['author_photo_url']),
       authorRole: toNullableString(j['authorRole'] ?? j['author_role']),
+      groupId: toNullableString(j['groupId'] ?? j['group_id']),
+      groupName: toNullableString(j['groupName'] ?? j['group_name']),
+      groupAvatarUrl: toNullableString(j['groupAvatarUrl'] ?? j['group_avatar_url']),
       type: toRequiredString(j['type'], fallback: 'project'),
       title: toRequiredString(j['title']),
       description: toNullableString(j['description']),
@@ -211,6 +221,9 @@ class PostModel extends Equatable {
         'authorName': authorName,
         'authorPhotoUrl': authorPhotoUrl,
         'authorRole': authorRole,
+        'groupId': groupId,
+        'groupName': groupName,
+        'groupAvatarUrl': groupAvatarUrl,
         'type': type,
         'title': title,
         'description': description,
@@ -252,6 +265,9 @@ class PostModel extends Equatable {
         'author_name': authorName,
         'author_photo_url': authorPhotoUrl,
         'author_role': authorRole,
+        'group_id': groupId,
+        'group_name': groupName,
+        'group_avatar_url': groupAvatarUrl,
         'type': type,
         'title': title,
         'description': description,
@@ -290,6 +306,9 @@ class PostModel extends Equatable {
     String? authorName,
     String? authorPhotoUrl,
     String? authorRole,
+    String? groupId,
+    String? groupName,
+    String? groupAvatarUrl,
     String? type,
     String? title,
     String? description,
@@ -327,6 +346,9 @@ class PostModel extends Equatable {
       authorName: authorName ?? this.authorName,
       authorPhotoUrl: authorPhotoUrl ?? this.authorPhotoUrl,
       authorRole: authorRole ?? this.authorRole,
+      groupId: groupId ?? this.groupId,
+      groupName: groupName ?? this.groupName,
+      groupAvatarUrl: groupAvatarUrl ?? this.groupAvatarUrl,
       type: type ?? this.type,
       title: title ?? this.title,
       description: description ?? this.description,
@@ -364,6 +386,8 @@ class PostModel extends Equatable {
   List<Object?> get props => [
         id,
         authorId,
+        groupId,
+        groupName,
         title,
         category,
         likeCount,

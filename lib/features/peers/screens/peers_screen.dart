@@ -11,6 +11,8 @@ import '../../../core/router/route_names.dart';
 import '../../../core/utils/media_path_utils.dart';
 import '../../../data/local/dao/message_dao.dart';
 import '../../auth/bloc/auth_cubit.dart';
+import '../../groups/screens/create_group_screen.dart';
+import '../../groups/screens/groups_overview_tab.dart';
 import '../../shared/screens/offline_video_player_screen.dart';
 
 class PeersScreen extends StatefulWidget {
@@ -51,6 +53,13 @@ class _PeersScreenState extends State<PeersScreen> {
     });
   }
 
+  Future<void> _openCreateGroup() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const CreateGroupScreen()),
+    );
+    await _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -59,53 +68,74 @@ class _PeersScreenState extends State<PeersScreen> {
       );
     }
 
-    return Scaffold(
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
       appBar: AppBar(
         title: Text(
           'Peers',
           style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
         ),
+        actions: [
+          IconButton(
+            onPressed: _openCreateGroup,
+            icon: const Icon(Icons.group_add_rounded),
+            tooltip: 'Create group',
+          ),
+        ],
+        bottom: const TabBar(
+          tabs: [
+            Tab(text: 'Collaborators'),
+            Tab(text: 'Groups'),
+          ],
+        ),
       ),
-      body: RefreshIndicator(
-        color: AppColors.primary,
-        onRefresh: _load,
-        child: _collaborators.isEmpty
-            ? ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(24),
-                children: [
-                  const SizedBox(height: 80),
-                  const Icon(
-                    Icons.group_off_rounded,
-                    size: 64,
-                    color: AppColors.primary,
+      body: TabBarView(
+        children: [
+          RefreshIndicator(
+            color: AppColors.primary,
+            onRefresh: _load,
+            child: _collaborators.isEmpty
+                ? ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(24),
+                    children: [
+                      const SizedBox(height: 80),
+                      const Icon(
+                        Icons.group_off_rounded,
+                        size: 64,
+                        color: AppColors.primary,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No accepted collaborators yet',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Once a collaboration request is accepted, the collaborator and the agreed project will appear here.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13,
+                          color: AppColors.textSecondaryLight,
+                        ),
+                      ),
+                    ],
+                  )
+                : ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+                    children: [
+                      _PeersSummary(count: _collaborators.length),
+                      const SizedBox(height: 16),
+                      ..._collaborators.map((item) => _PeerCollaborationCard(item: item)),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No accepted collaborators yet',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Once a collaboration request is accepted, the collaborator and the agreed project will appear here.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13,
-                      color: AppColors.textSecondaryLight,
-                    ),
-                  ),
-                ],
-              )
-            : ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-                children: [
-                  _PeersSummary(count: _collaborators.length),
-                  const SizedBox(height: 16),
-                  ..._collaborators.map((item) => _PeerCollaborationCard(item: item)),
-                ],
-              ),
+          ),
+          GroupsOverviewTab(onChanged: _load),
+        ],
       ),
+    ),
     );
   }
 }
@@ -303,7 +333,12 @@ class _PeerCollaborationCard extends StatelessWidget {
                         ? null
                         : () => context.push('/project/${item.postId}'),
                     icon: const Icon(Icons.folder_open_rounded, size: 18),
-                    label: const Text('Project'),
+                    label: const Text(
+                      'Project',
+                      maxLines: 1,
+                      overflow: TextOverflow.fade,
+                      softWrap: false,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -320,7 +355,12 @@ class _PeerCollaborationCard extends StatelessWidget {
                               },
                             ),
                     icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
-                    label: const Text('Message'),
+                      label: const Text(
+                        'Message',
+                        maxLines: 1,
+                        overflow: TextOverflow.fade,
+                        softWrap: false,
+                      ),
                   ),
                 ),
                 const SizedBox(width: 10),

@@ -109,36 +109,41 @@ class FeedFilter extends Equatable {
   final String? category;
   final String? type; // 'project' | 'opportunity' | null = all
   final String? recency;
+  final bool groupsOnly;
 
   const FeedFilter({
     this.faculty,
     this.category,
     this.type,
     this.recency,
+    this.groupsOnly = false,
   });
 
   bool get isActive =>
-      faculty != null || category != null || type != null || recency != null;
+      faculty != null || category != null || type != null || recency != null || groupsOnly;
 
   FeedFilter copyWith({
     String? faculty,
     String? category,
     String? type,
     String? recency,
+    bool? groupsOnly,
     bool clearFaculty = false,
     bool clearCategory = false,
     bool clearType = false,
     bool clearRecency = false,
+    bool clearGroupsOnly = false,
   }) =>
       FeedFilter(
         faculty: clearFaculty ? null : faculty ?? this.faculty,
         category: clearCategory ? null : category ?? this.category,
         type: clearType ? null : type ?? this.type,
         recency: clearRecency ? null : recency ?? this.recency,
+        groupsOnly: clearGroupsOnly ? false : groupsOnly ?? this.groupsOnly,
       );
 
   @override
-  List<Object?> get props => [faculty, category, type, recency];
+  List<Object?> get props => [faculty, category, type, recency, groupsOnly];
 }
 
 // ── Cubit ─────────────────────────────────────────────────────────────────────
@@ -301,6 +306,7 @@ class FeedCubit extends Cubit<FeedState> {
         filterFaculty: filter.faculty,
         filterCategory: filter.category,
         filterType: filter.type,
+        groupsOnly: filter.groupsOnly,
         currentUserId: _activeUserId,
       );
 
