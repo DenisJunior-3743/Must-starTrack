@@ -312,8 +312,12 @@ class SyncService {
       });
 
       final currentUid = FirebaseAuth.instance.currentUser?.uid;
-      await _runHydrationStep('groups', () => _syncRemoteGroups(currentUid));
-      if (currentUid != null) {
+      if (currentUid != null && currentUid.isNotEmpty) {
+        await _runHydrationStep('groups', () => _syncRemoteGroups(currentUid));
+      } else {
+        debugPrint('[SyncService] skipping groups hydration (no authenticated user)');
+      }
+      if (currentUid != null && currentUid.isNotEmpty) {
         await _runHydrationStep(
             'messages', () => _syncRemoteMessages(currentUid));
         await _runHydrationStep('notifications', () async {
@@ -438,10 +442,14 @@ class SyncService {
   }
 
   Future<void> _syncRemoteGroups(String? currentUid) async {
+    if (currentUid == null || currentUid.isEmpty) {
+      debugPrint('[SyncService] skipping _syncRemoteGroups (empty user id)');
+      return;
+    }
+
     final recentGroups = await _firestore.getRecentGroups(limit: 120);
-    final personalMemberships = currentUid == null || currentUid.isEmpty
-        ? const <GroupMemberModel>[]
-        : await _firestore.getGroupMembersForUser(currentUid);
+    final personalMemberships =
+        await _firestore.getGroupMembersForUser(currentUid);
 
     final allGroupIds = <String>{
       ...recentGroups.map((group) => group.id),

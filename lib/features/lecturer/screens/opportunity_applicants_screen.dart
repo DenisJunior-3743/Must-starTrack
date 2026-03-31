@@ -16,6 +16,7 @@ import '../../../core/router/route_names.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/models/user_model.dart';
 import '../../../data/remote/recommender_service.dart';
+import '../../shared/widgets/settings_drawer.dart';
 import '../bloc/lecturer_cubit.dart';
 
 class OpportunityApplicantsScreen extends StatefulWidget {
@@ -41,6 +42,7 @@ class _OpportunityApplicantsScreenState
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      endDrawer: const SettingsDrawer(),
       backgroundColor:
           isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
       appBar: AppBar(
@@ -48,6 +50,15 @@ class _OpportunityApplicantsScreenState
           'Applicants',
           style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
         ),
+        actions: [
+          Builder(
+            builder: (ctx) => IconButton(
+              icon: const Icon(Icons.menu_rounded),
+              tooltip: 'Settings',
+              onPressed: () => Scaffold.of(ctx).openEndDrawer(),
+            ),
+          ),
+        ],
       ),
       body: BlocBuilder<LecturerCubit, LecturerState>(
         builder: (context, state) {

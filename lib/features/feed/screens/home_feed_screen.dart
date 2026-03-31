@@ -30,6 +30,7 @@ import 'package:video_player/video_player.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/di/injection_container.dart';
+import '../../../core/router/app_route_observer.dart';
 import '../../../core/router/route_guards.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/utils/media_path_utils.dart';
@@ -564,11 +565,14 @@ class _VideoPage extends StatefulWidget {
   State<_VideoPage> createState() => _VideoPageState();
 }
 
-class _VideoPageState extends State<_VideoPage> {
+class _VideoPageState extends State<_VideoPage>
+    with RouteAware, WidgetsBindingObserver {
   VideoPlayerController? _ctrl;
+  ModalRoute<dynamic>? _modalRoute;
   bool _ready = false;
   bool _error = false;
   bool _isMuted = false;
+  bool _resumeOnForeground = false;
   double? _downloadProgress;   // null = not downloading; 0-1 = in progress
   int? _myRating;
 
@@ -586,18 +590,29 @@ class _VideoPageState extends State<_VideoPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initController();
     _loadMyRating();
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != _modalRoute && route is PageRoute<dynamic>) {
+      if (_modalRoute is PageRoute<dynamic>) {
+        appRouteObserver.unsubscribe(this);
+      }
+      _modalRoute = route;
+      appRouteObserver.subscribe(this, route);
+      _syncPlayback();
+    }
+  }
+
+  @override
   void didUpdateWidget(_VideoPage old) {
     super.didUpdateWidget(old);
-    if (widget.isActive && !old.isActive) {
-      _ctrl?.play();
-    } else if (!widget.isActive && old.isActive) {
-      _ctrl?.pause();
-    }
+    _syncPlayback();
     if (widget.post.id != old.post.id) {
       _ctrl?.dispose();
       _ctrl = null;
@@ -607,6 +622,59 @@ class _VideoPageState extends State<_VideoPage> {
       _initController();
       _myRating = null;
       _loadMyRating();
+    }
+  }
+
+  bool get _isCurrentRoute {
+    final route = ModalRoute.of(context);
+    return route?.isCurrent ?? true;
+  }
+
+  void _syncPlayback() {
+    if (!_ready || _ctrl == null) return;
+    if (widget.isActive && _isCurrentRoute) {
+      _ctrl!.play();
+    } else {
+      _ctrl!.pause();
+    }
+  }
+
+  @override
+  void didPush() {
+    _syncPlayback();
+  }
+
+  @override
+  void didPushNext() {
+    _ctrl?.pause();
+  }
+
+  @override
+  void didPopNext() {
+    _syncPlayback();
+  }
+
+  @override
+  void didPop() {
+    _ctrl?.pause();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (_resumeOnForeground) {
+        _resumeOnForeground = false;
+        _syncPlayback();
+      }
+      return;
+    }
+
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _resumeOnForeground = widget.isActive && (_ctrl?.value.isPlaying ?? false);
+      _ctrl?.pause();
     }
   }
 
@@ -665,11 +733,12 @@ class _VideoPageState extends State<_VideoPage> {
         return;
       }
       ctrl.setLooping(true);
-      if (widget.isActive) ctrl.play();
+      ctrl.setVolume(_isMuted ? 0 : 1);
       setState(() {
         _ctrl = ctrl;
         _ready = true;
       });
+      _syncPlayback();
     } catch (e) {
       debugPrint('[VideoPage] init error url=$url: $e');
       if (mounted) setState(() => _error = true);
@@ -714,8 +783,8 @@ class _VideoPageState extends State<_VideoPage> {
           label: 'Sign In',
           onPressed: () async {
             await context.push(RouteNames.login);
-            if (mounted && widget.isActive) {
-              _ctrl?.play();
+            if (mounted) {
+              _syncPlayback();
               setState(() {});
             }
           },
@@ -726,6 +795,10 @@ class _VideoPageState extends State<_VideoPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    if (_modalRoute is PageRoute<dynamic>) {
+      appRouteObserver.unsubscribe(this);
+    }
     _ctrl?.dispose();
     super.dispose();
   }
@@ -737,6 +810,7 @@ class _VideoPageState extends State<_VideoPage> {
       onTap: () {
         // Toggle play/pause on tap
         if (_ctrl == null) return;
+        if (!_isCurrentRoute || !widget.isActive) return;
         if (_ctrl!.value.isPlaying) {
           _ctrl!.pause();
         } else {
@@ -951,8 +1025,8 @@ class _VideoPageState extends State<_VideoPage> {
                     _ctrl?.pause();
                     if (mounted) setState(() {});
                     await context.push('/project/${post.id}');
-                    if (mounted && widget.isActive) {
-                      _ctrl?.play();
+                    if (mounted) {
+                      _syncPlayback();
                       setState(() {});
                     }
                   },

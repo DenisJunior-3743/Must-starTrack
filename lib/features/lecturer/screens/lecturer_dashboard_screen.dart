@@ -21,6 +21,7 @@ import '../../../data/local/dao/sync_queue_dao.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/remote/sync_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
+import '../../shared/widgets/settings_drawer.dart';
 import '../bloc/lecturer_cubit.dart';
 
 class LecturerDashboardScreen extends StatefulWidget {
@@ -308,6 +309,7 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      endDrawer: const SettingsDrawer(),
       backgroundColor:
           isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
       appBar: AppBar(
@@ -320,6 +322,13 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             onPressed: _loadData,
+          ),
+          Builder(
+            builder: (ctx) => IconButton(
+              icon: const Icon(Icons.menu_rounded),
+              tooltip: 'Settings',
+              onPressed: () => Scaffold.of(ctx).openEndDrawer(),
+            ),
           ),
         ],
       ),

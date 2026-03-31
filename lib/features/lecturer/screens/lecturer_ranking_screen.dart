@@ -18,6 +18,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/router/route_names.dart';
 import '../../../data/models/user_model.dart';
+import '../../shared/widgets/settings_drawer.dart';
 import '../bloc/lecturer_cubit.dart';
 
 class LecturerRankingScreen extends StatefulWidget {
@@ -55,6 +56,7 @@ class _LecturerRankingScreenState extends State<LecturerRankingScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      endDrawer: const SettingsDrawer(),
       backgroundColor:
           isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
       appBar: AppBar(
@@ -62,6 +64,15 @@ class _LecturerRankingScreenState extends State<LecturerRankingScreen> {
           'Student Rankings',
           style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
         ),
+        actions: [
+          Builder(
+            builder: (ctx) => IconButton(
+              icon: const Icon(Icons.menu_rounded),
+              tooltip: 'Settings',
+              onPressed: () => Scaffold.of(ctx).openEndDrawer(),
+            ),
+          ),
+        ],
       ),
       body: Column(
         children: [

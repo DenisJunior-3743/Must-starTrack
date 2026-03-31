@@ -34,6 +34,7 @@ class SettingsDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isGuest = sl<AuthCubit>().currentUser == null;
+    final isAdmin = sl<AuthCubit>().isAdmin;
 
     return Drawer(
       width: 300,
@@ -108,6 +109,23 @@ class SettingsDrawer extends StatelessWidget {
                     });
                   },
                 ),
+                _DrawerTile(
+                  icon: Icons.support_agent_rounded,
+                  label: 'App Assistant',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    context.push(RouteNames.chatbot);
+                  },
+                ),
+                if (isAdmin)
+                  _DrawerTile(
+                    icon: Icons.query_stats_rounded,
+                    label: 'Chatbot Accuracy',
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      context.push(RouteNames.adminChatbotAnalytics);
+                    },
+                  ),
                 const SizedBox(height: 8),
                 const Divider(indent: 16, endIndent: 16),
                 const SizedBox(height: 8),

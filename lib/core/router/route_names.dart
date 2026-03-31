@@ -33,6 +33,7 @@ abstract final class RouteNames {
   static const String chat               = '/chat/:threadId';
   static const String chatDetail         = '/chat/:threadId';
   static const String createPost         = '/create-post';
+  static const String chatbot            = '/assistant';
   static const String projects           = '/my-projects';
   static const String adminDashboard     = '/admin';
   static const String adminModeration    = '/admin/moderation';
@@ -41,6 +42,7 @@ abstract final class RouteNames {
   static const String adminReports       = '/admin/reports';
   static const String adminSync          = '/admin/sync';
   static const String activityLogs       = '/admin/activity-logs';
+  static const String adminChatbotAnalytics = '/admin/chatbot-analytics';
   static const String superAdminDashboard = '/super-admin';
   static const String superAdminSettings = '/super-admin/settings';
   static const String superAdminUsers    = '/super-admin/users';
@@ -74,7 +76,9 @@ abstract final class RouteNames {
   static const String editProfileName         = 'editProfile';
   static const String chatName                = 'chat';
   static const String createPostName          = 'createPost';
+  static const String chatbotName             = 'chatbot';
   static const String adminDashboardName      = 'adminDashboard';
+  static const String adminChatbotAnalyticsName = 'adminChatbotAnalytics';
   static const String superAdminDashboardName = 'superAdminDashboard';
 
   // Lecturer named routes
@@ -104,6 +108,7 @@ abstract final class Routes {
   static const String screenHub = RouteNames.screenHub;
   static const String postDetail = RouteNames.postDetail;
   static const String createPost = RouteNames.createPost;
+  static const String chatbot = RouteNames.chatbot;
   static const String myProfile = RouteNames.myProfile;
   static const String profile = RouteNames.profile;
   static const String editProfile = RouteNames.editProfile;
@@ -115,6 +120,7 @@ abstract final class Routes {
   static const String adminReports = RouteNames.adminReports;
   static const String adminSync = RouteNames.adminSync;
   static const String activityLogs = RouteNames.activityLogs;
+  static const String adminChatbotAnalytics = RouteNames.adminChatbotAnalytics;
   static const String superAdminDashboard = RouteNames.superAdminDashboard;
   static const String superAdminSettings = RouteNames.superAdminSettings;
   static const String superAdminUsers = RouteNames.superAdminUsers;
