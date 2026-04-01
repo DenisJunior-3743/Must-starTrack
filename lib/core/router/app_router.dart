@@ -35,6 +35,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../di/injection_container.dart';
+import 'app_route_observer.dart';
 import 'route_names.dart';
 import 'route_guards.dart';
 
@@ -73,6 +74,7 @@ import '../../features/messaging/screens/chat_detail_screen.dart';
 import '../../features/notifications/screens/notification_center_screen.dart';
 import '../../features/notifications/screens/notification_settings_screen.dart';
 import '../../features/shared/screens/screen_hub_screen.dart';
+import '../../features/chatbot/chatbot_module.dart';
 
 // ── Admin screens ─────────────────────────────────────────────────────────────
 import '../../features/admin/screens/admin_dashboard_screen.dart';
@@ -82,6 +84,7 @@ import '../../features/admin/screens/system_reports_screen.dart';
 import '../../features/admin/screens/suspicion_score_screen.dart';
 import '../../features/admin/screens/user_activity_analytics_screen.dart';
 import '../../features/admin/screens/user_management_screen.dart';
+import '../../features/admin/screens/chatbot_analytics_screen.dart';
 import '../../features/super_admin/screens/super_admin_dashboard_screen.dart';
 // ── Lecturer screens ──────────────────────────────────────────────────────
 import '../../features/lecturer/screens/lecturer_dashboard_screen.dart';
@@ -116,6 +119,7 @@ class AppRouter {
       initialLocation: Routes.splash,
       debugLogDiagnostics: false,
       refreshListenable: listenable,
+      observers: [appRouteObserver],
 
       // ── Global redirect (RBAC) ───────────────────────────────────────────
       redirect: (BuildContext context, GoRouterState state) {
@@ -134,6 +138,7 @@ class AppRouter {
           Routes.forgotPassword,
           Routes.passwordReset,
           Routes.guestDiscover,
+          Routes.chatbot,
         ];
 
         final isPublic = publicRoutes.any(
@@ -160,6 +165,7 @@ class AppRouter {
           Routes.adminReports,
           Routes.adminSync,
           Routes.activityLogs,
+          Routes.adminChatbotAnalytics,
         ];
         final isAdminRoute = adminOnly.any(
           (r) => location.startsWith(r.split(':').first),
@@ -436,6 +442,12 @@ class AppRouter {
           builder: (_, __) => const NotificationSettingsScreen(),
         ),
 
+        // ── Chatbot assistant ─────────────────────────────────────────────
+        GoRoute(
+          path: Routes.chatbot,
+          builder: (_, __) => ChatbotModule.buildScreen(),
+        ),
+
         // ── Screen hub (newly added module screens) ──────────────────────
         GoRoute(
           path: Routes.screenHub,
@@ -475,6 +487,10 @@ class AppRouter {
         GoRoute(
           path: Routes.activityLogs,
           builder: (_, __) => const ActivityLogsScreen(),
+        ),
+        GoRoute(
+          path: Routes.adminChatbotAnalytics,
+          builder: (_, __) => const ChatbotAnalyticsScreen(),
         ),
 
         // ── Super Admin ────────────────────────────────────────────────────

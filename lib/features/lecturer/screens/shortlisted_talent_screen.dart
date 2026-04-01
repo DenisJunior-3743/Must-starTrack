@@ -29,6 +29,7 @@ import '../../../data/local/dao/recommendation_log_dao.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/remote/recommender_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
+import '../../shared/widgets/settings_drawer.dart';
 
 // ── Data models ───────────────────────────────────────────────────────────────
 
@@ -134,6 +135,7 @@ class _ShortlistedTalentScreenState extends State<ShortlistedTalentScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      endDrawer: const SettingsDrawer(),
       backgroundColor:
           isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
       appBar: AppBar(
@@ -146,6 +148,13 @@ class _ShortlistedTalentScreenState extends State<ShortlistedTalentScreen> {
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'Refresh rankings',
             onPressed: () => setState(() => _future = _loadAll()),
+          ),
+          Builder(
+            builder: (ctx) => IconButton(
+              icon: const Icon(Icons.menu_rounded),
+              tooltip: 'Settings',
+              onPressed: () => Scaffold.of(ctx).openEndDrawer(),
+            ),
           ),
         ],
       ),

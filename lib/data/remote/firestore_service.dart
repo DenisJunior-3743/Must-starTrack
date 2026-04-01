@@ -71,6 +71,8 @@ class FirestoreService {
       _db.collection('app_feedback');
   CollectionReference<Map<String, dynamic>> get _accountDeletionRequests =>
       _db.collection('account_deletion_requests');
+  CollectionReference<Map<String, dynamic>> get _chatbotInteractions =>
+      _db.collection('chatbot_interactions');
 
   // ── Recommendation log operations ─────────────────────────────────────────
 
@@ -188,6 +190,51 @@ class FirestoreService {
   }) async {
     final safeLimit = limit <= 0 ? 60 : limit;
     final snapshot = await _appFeedback
+        .orderBy('created_at', descending: true)
+        .limit(safeLimit)
+        .get(const GetOptions(source: Source.serverAndCache));
+
+    return snapshot.docs
+        .map((doc) => {'id': doc.id, ...doc.data()})
+        .toList(growable: false);
+  }
+
+  Future<void> setChatbotInteraction({
+    required String interactionId,
+    required Map<String, dynamic> payload,
+  }) async {
+    await _chatbotInteractions.doc(interactionId).set(
+      {
+        ...payload,
+        'server_ts': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+  }
+
+  Future<void> setChatbotInteractionFeedback({
+    required String interactionId,
+    required bool isHelpful,
+    String? feedbackNote,
+    String? feedbackBy,
+  }) async {
+    await _chatbotInteractions.doc(interactionId).set(
+      {
+        'is_helpful': isHelpful,
+        'feedback_note': feedbackNote ?? '',
+        'feedback_by': feedbackBy ?? '',
+        'feedback_at': DateTime.now().toIso8601String(),
+        'server_ts': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getRecentChatbotInteractions({
+    int limit = 200,
+  }) async {
+    final safeLimit = limit <= 0 ? 200 : limit;
+    final snapshot = await _chatbotInteractions
         .orderBy('created_at', descending: true)
         .limit(safeLimit)
         .get(const GetOptions(source: Source.serverAndCache));
@@ -380,34 +427,50 @@ class FirestoreService {
     }
 
     final groups = <GroupModel>[];
-    for (var index = 0; index < uniqueIds.length; index += 10) {
-      final batch = uniqueIds.sublist(
-        index,
-        index + 10 > uniqueIds.length ? uniqueIds.length : index + 10,
-      );
-      final snapshot =
-          await _groups.where(FieldPath.documentId, whereIn: batch).get();
-      for (final doc in snapshot.docs) {
-        final data = doc.data();
-        try {
-          groups.add(GroupModel.fromJson({'id': doc.id, ...data}));
-        } catch (error) {
-          debugPrint('[FirestoreService] Skipping unreadable group ${doc.id}: $error');
+    try {
+      for (var index = 0; index < uniqueIds.length; index += 10) {
+        final batch = uniqueIds.sublist(
+          index,
+          index + 10 > uniqueIds.length ? uniqueIds.length : index + 10,
+        );
+        final snapshot =
+            await _groups.where(FieldPath.documentId, whereIn: batch).get();
+        for (final doc in snapshot.docs) {
+          final data = doc.data();
+          try {
+            groups.add(GroupModel.fromJson({'id': doc.id, ...data}));
+          } catch (error) {
+            debugPrint('[FirestoreService] Skipping unreadable group ${doc.id}: $error');
+          }
         }
       }
+    } on FirebaseException catch (error) {
+      if (error.code == 'permission-denied') {
+        debugPrint('[FirestoreService] getGroupsByIds denied by security rules');
+        return const [];
+      }
+      rethrow;
     }
     return groups;
   }
 
   Future<List<GroupModel>> getRecentGroups({int limit = 80}) async {
-    final snapshot = await _groups
-        .where('is_dissolved', isEqualTo: false)
-        .orderBy('updated_at', descending: true)
-        .limit(limit)
-        .get(const GetOptions(source: Source.serverAndCache));
-    return snapshot.docs
-        .map((doc) => GroupModel.fromJson({'id': doc.id, ...doc.data()}))
-        .toList();
+    try {
+      final snapshot = await _groups
+          .where('is_dissolved', isEqualTo: false)
+          .orderBy('updated_at', descending: true)
+          .limit(limit)
+          .get(const GetOptions(source: Source.serverAndCache));
+      return snapshot.docs
+          .map((doc) => GroupModel.fromJson({'id': doc.id, ...doc.data()}))
+          .toList();
+    } on FirebaseException catch (error) {
+      if (error.code == 'permission-denied') {
+        debugPrint('[FirestoreService] getRecentGroups denied by security rules');
+        return const [];
+      }
+      rethrow;
+    }
   }
 
   Future<List<GroupMemberModel>> getGroupMembersByGroupIds(
@@ -419,22 +482,30 @@ class FirestoreService {
     }
 
     final members = <GroupMemberModel>[];
-    for (var index = 0; index < uniqueIds.length; index += 10) {
-      final batch = uniqueIds.sublist(
-        index,
-        index + 10 > uniqueIds.length ? uniqueIds.length : index + 10,
-      );
-      final snapshot = await _groupMembers
-          .where('group_id', whereIn: batch)
-          .get(const GetOptions(source: Source.serverAndCache));
-      for (final doc in snapshot.docs) {
-        final data = doc.data();
-        try {
-          members.add(GroupMemberModel.fromJson({'id': doc.id, ...data}));
-        } catch (error) {
-          debugPrint('[FirestoreService] Skipping unreadable group member ${doc.id}: $error');
+    try {
+      for (var index = 0; index < uniqueIds.length; index += 10) {
+        final batch = uniqueIds.sublist(
+          index,
+          index + 10 > uniqueIds.length ? uniqueIds.length : index + 10,
+        );
+        final snapshot = await _groupMembers
+            .where('group_id', whereIn: batch)
+            .get(const GetOptions(source: Source.serverAndCache));
+        for (final doc in snapshot.docs) {
+          final data = doc.data();
+          try {
+            members.add(GroupMemberModel.fromJson({'id': doc.id, ...data}));
+          } catch (error) {
+            debugPrint('[FirestoreService] Skipping unreadable group member ${doc.id}: $error');
+          }
         }
       }
+    } on FirebaseException catch (error) {
+      if (error.code == 'permission-denied') {
+        debugPrint('[FirestoreService] getGroupMembersByGroupIds denied by security rules');
+        return const [];
+      }
+      rethrow;
     }
     return members;
   }
@@ -442,12 +513,20 @@ class FirestoreService {
   Future<List<GroupMemberModel>> getGroupMembersForUser(
     String userId,
   ) async {
-    final snapshot = await _groupMembers
-        .where('user_id', isEqualTo: userId)
-        .get(const GetOptions(source: Source.serverAndCache));
-    return snapshot.docs
-        .map((doc) => GroupMemberModel.fromJson({'id': doc.id, ...doc.data()}))
-        .toList();
+    try {
+      final snapshot = await _groupMembers
+          .where('user_id', isEqualTo: userId)
+          .get(const GetOptions(source: Source.serverAndCache));
+      return snapshot.docs
+          .map((doc) => GroupMemberModel.fromJson({'id': doc.id, ...doc.data()}))
+          .toList();
+    } on FirebaseException catch (error) {
+      if (error.code == 'permission-denied') {
+        debugPrint('[FirestoreService] getGroupMembersForUser denied by security rules');
+        return const [];
+      }
+      rethrow;
+    }
   }
 
   // ── Messaging operations ──────────────────────────────────────────────────

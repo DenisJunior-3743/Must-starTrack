@@ -31,6 +31,7 @@ import 'sync_queue_details_screen.dart';
 import 'user_behavior_analytics_detailed_screen.dart';
 import 'moderation_analytics_screen.dart';
 import 'sync_consistency_screen.dart';
+import 'chatbot_analytics_screen.dart';
 
 enum _Risk { high, medium, low }
 
@@ -616,7 +617,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
               ),
               initiallyExpanded:
-                  _selectedTab == 5 || _selectedTab == 6 || _selectedTab == 13 || _selectedTab == 14,
+                  _selectedTab == 5 ||
+                  _selectedTab == 6 ||
+                  _selectedTab == 13 ||
+                  _selectedTab == 14 ||
+                  _selectedTab == 15,
               children: [
                 navTile(
                   tab: 5,
@@ -638,6 +643,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   tab: 14,
                   icon: Icons.groups_rounded,
                   title: 'Groups',
+                ),
+                navTile(
+                  tab: 15,
+                  icon: Icons.query_stats_rounded,
+                  title: 'Chatbot Accuracy',
                 ),
               ],
             ),
@@ -1079,6 +1089,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
     if (_selectedTab == 14) {
       return const _AdminGroupsTab();
+    }
+
+    if (_selectedTab == 15) {
+      return const ChatbotAnalyticsScreen();
     }
 
     if (_selectedTab == 8) {
