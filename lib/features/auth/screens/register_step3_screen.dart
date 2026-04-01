@@ -214,11 +214,29 @@ class _RegisterStep3ScreenState extends State<RegisterStep3Screen> {
                           const OrDivider(),
                           const SizedBox(height: AppDimensions.spacingMd),
 
-                          // â”€â”€ Google signup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-                          GoogleSignInButton(
-                            label: 'Sign up with Google',
-                            isLoading: loading,
-                            onPressed: () => ctx.read<AuthCubit>().signInWithGoogle(),
+                          // ── Google signup (greyed out – uni info required) ────────
+                          GestureDetector(
+                            onTap: () {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Google sign-up is not available. Please complete the form above so your university details can be captured.',
+                                    style: GoogleFonts.plusJakartaSans(fontSize: 13),
+                                  ),
+                                  backgroundColor: AppColors.warning,
+                                  behavior: SnackBarBehavior.floating,
+                                  duration: const Duration(seconds: 4),
+                                ),
+                              );
+                            },
+                            child: const Opacity(
+                              opacity: 0.4,
+                              child: GoogleSignInButton(
+                                label: 'Sign up with Google',
+                                isLoading: false,
+                                onPressed: null,
+                              ),
+                            ),
                           ),
                           const SizedBox(height: 40),
                         ],

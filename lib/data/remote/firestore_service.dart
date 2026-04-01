@@ -345,16 +345,24 @@ class FirestoreService {
   }
 
   /// Pull a recent batch of posts from Firestore for local cache hydration.
-  Future<List<PostModel>> getRecentPosts({int limit = 50}) async {
+  Future<List<PostModel>> getRecentPosts({
+    int limit = 50,
+    bool includePendingForAdmin = false,
+  }) async {
     debugPrint('[FirestoreService] getRecentPosts(limit=$limit) starting');
 
     // The security rules require is_archived == false.
     // If we don't include this filter, the entire query is rejected.
-    final snapshot = await _posts
+    Query<Map<String, dynamic>> query = _posts
         .where('is_archived', isEqualTo: false)
         .orderBy('created_at', descending: true)
-        .limit(limit)
-        .get(const GetOptions(source: Source.serverAndCache));
+        .limit(limit);
+
+    if (!includePendingForAdmin) {
+      query = query.where('moderation_status', whereIn: [null, 'approved']);
+    }
+
+    final snapshot = await query.get(const GetOptions(source: Source.serverAndCache));
 
     debugPrint(
       '[FirestoreService] getRecentPosts fetched ${snapshot.docs.length} raw docs '
@@ -468,6 +476,19 @@ class FirestoreService {
       if (error.code == 'permission-denied') {
         debugPrint('[FirestoreService] getRecentGroups denied by security rules');
         return const [];
+      }
+      if (error.code == 'failed-precondition') {
+        debugPrint(
+          '[FirestoreService] getRecentGroups missing composite index, falling back to updated_at query and client-side filtering',
+        );
+        final snapshot = await _groups
+            .orderBy('updated_at', descending: true)
+            .limit(limit)
+            .get(const GetOptions(source: Source.serverAndCache));
+        return snapshot.docs
+            .where((doc) => (doc.data()['is_dissolved'] as bool?) != true)
+            .map((doc) => GroupModel.fromJson({'id': doc.id, ...doc.data()}))
+            .toList();
       }
       rethrow;
     }

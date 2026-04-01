@@ -35,6 +35,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../../core/constants/app_enums.dart';
 import '../../core/utils/media_path_utils.dart';
 import '../local/dao/comment_dao.dart';
 import '../local/dao/sync_queue_dao.dart';
@@ -252,7 +253,11 @@ class SyncService {
         debugPrint(
             '[SyncService] posts hydration starting, postLimit=$postLimit');
 
-        final posts = await _firestore.getRecentPosts(limit: postLimit);
+        final includePendingForAdmin = await _currentUserCanReviewPendingPosts();
+        final posts = await _firestore.getRecentPosts(
+          limit: postLimit,
+          includePendingForAdmin: includePendingForAdmin,
+        );
 
         debugPrint(
             '[SyncService] posts hydration fetched ${posts.length} posts');
@@ -571,6 +576,7 @@ class SyncService {
     switch (job.operation) {
       case 'create':
       case 'update':
+        final previousRemote = await _firestore.getPostById(job.entityId);
         final payload = job.payloadJson;
         PostModel? postFromPayload;
         if (payload.isNotEmpty) {
@@ -598,6 +604,11 @@ class SyncService {
         if (post == null) return true;
         final syncedPost = await _uploadPendingPostMedia(post);
         await _firestore.setPost(syncedPost);
+        await _fanoutModerationNotifications(
+          post: syncedPost,
+          operation: job.operation,
+          previousRemoteStatus: previousRemote?.moderationStatus,
+        );
         return true;
       case 'archive':
         await _firestore.archivePost(job.entityId);
@@ -1337,6 +1348,92 @@ class SyncService {
         'receiver=$receiverId due to unexpected error: $error',
       );
       debugPrint('[SyncNotification] Fan-out stacktrace: $stackTrace');
+    }
+  }
+
+  Future<bool> _currentUserCanReviewPendingPosts() async {
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUid == null || currentUid.isEmpty) {
+      return false;
+    }
+    try {
+      final profileDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUid)
+          .get(const GetOptions(source: Source.serverAndCache));
+      final role = (profileDoc.data()?['role'] as String?)?.trim().toLowerCase();
+        return role == 'admin' || role == 'super_admin';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<List<String>> _getAdminUserIds() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('role', whereIn: ['admin', 'super_admin'])
+          .get(const GetOptions(source: Source.serverAndCache));
+      return snapshot.docs.map((doc) => doc.id).toList(growable: false);
+    } catch (_) {
+      return const <String>[];
+    }
+  }
+
+  Future<void> _fanoutModerationNotifications({
+    required PostModel post,
+    required String operation,
+    ModerationStatus? previousRemoteStatus,
+  }) async {
+    if (post.id.isEmpty) return;
+
+    final nowPending = post.moderationStatus == ModerationStatus.pending;
+    final nowReviewed = post.moderationStatus == ModerationStatus.approved ||
+        post.moderationStatus == ModerationStatus.rejected;
+
+    final becamePending = nowPending &&
+        (operation == 'create' || previousRemoteStatus != ModerationStatus.pending);
+    final moderationChanged = nowReviewed &&
+        previousRemoteStatus != null &&
+        previousRemoteStatus != post.moderationStatus;
+
+    if (becamePending) {
+      final adminIds = await _getAdminUserIds();
+      for (final adminId in adminIds) {
+        if (adminId.isEmpty) continue;
+        await _bestEffortUserNotification(
+          source: 'moderation_pending',
+          notificationId: 'post_pending_${post.id}_$adminId',
+          receiverId: adminId,
+          senderId: post.authorId.isNotEmpty ? post.authorId : 'system',
+          senderName: post.authorName ?? 'A student',
+          type: 'moderation',
+          body: 'New post pending review: "${post.title}"',
+          detail: 'Open moderation queue to review and approve or reject.',
+          entityId: post.id,
+        );
+      }
+    }
+
+    if (moderationChanged && post.authorId.isNotEmpty) {
+      final approved = post.moderationStatus == ModerationStatus.approved;
+      final actorId = FirebaseAuth.instance.currentUser?.uid ?? 'system';
+      final actorName = FirebaseAuth.instance.currentUser?.displayName ?? 'Admin';
+      await _bestEffortUserNotification(
+        source: 'moderation_result',
+        notificationId: 'post_review_${post.id}_${post.moderationStatus.name}',
+        receiverId: post.authorId,
+        senderId: actorId,
+        senderName: actorName,
+        type: 'moderation',
+        body: approved
+            ? 'Your post "${post.title}" has been approved and is now live.'
+            : 'Your post "${post.title}" was not approved.',
+        detail: approved
+            ? 'Your content is now visible to viewers.'
+            : 'You can edit the post and resubmit for review.',
+        entityId: post.id,
+      );
     }
   }
 
