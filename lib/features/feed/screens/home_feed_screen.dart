@@ -3204,8 +3204,38 @@ String _compact(int n) {
 // Static header (non-scrollable)
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _StaticFeedHeader extends StatelessWidget {
+class _StaticFeedHeader extends StatefulWidget {
   const _StaticFeedHeader();
+
+  @override
+  State<_StaticFeedHeader> createState() => _StaticFeedHeaderState();
+}
+
+class _StaticFeedHeaderState extends State<_StaticFeedHeader>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _signInPulseController;
+  late final Animation<double> _signInPulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _signInPulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1050),
+    )..repeat(reverse: true);
+    _signInPulse = Tween<double>(begin: 1.0, end: 1.08).animate(
+      CurvedAnimation(
+        parent: _signInPulseController,
+        curve: Curves.easeInOut,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _signInPulseController.dispose();
+    super.dispose();
+  }
 
   String _greetingName() {
     final user = sl<AuthCubit>().currentUser;
@@ -3223,7 +3253,7 @@ class _StaticFeedHeader extends StatelessWidget {
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          padding: const EdgeInsets.fromLTRB(16, 8, 10, 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -3255,24 +3285,61 @@ class _StaticFeedHeader extends StatelessWidget {
                     builder: (_, authState) {
                       final isGuest = sl<AuthCubit>().currentUser == null;
                       if (!isGuest) return const SizedBox.shrink();
-                      return IconButton(
-                        constraints: const BoxConstraints.tightFor(
-                            width: 34, height: 34),
-                        padding: EdgeInsets.zero,
-                        iconSize: 22,
-                        icon: const Icon(Icons.account_circle_outlined,
-                            color: AppColors.primary),
-                        onPressed: () => context.push(RouteNames.login),
-                        tooltip: 'Sign in',
+                      return Transform.translate(
+                        offset: const Offset(4, 0),
+                        child: ScaleTransition(
+                          scale: _signInPulse,
+                          child: InkWell(
+                            borderRadius:
+                                BorderRadius.circular(AppDimensions.radiusFull),
+                            onTap: () => context.push(RouteNames.login),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryTint10,
+                                borderRadius: BorderRadius.circular(
+                                  AppDimensions.radiusFull,
+                                ),
+                                border: Border.all(
+                                  color: AppColors.primary.withValues(alpha: 0.35),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.account_circle_outlined,
+                                    color: AppColors.primary,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Sign in',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       );
                     },
                   ),
-                  IconButton(
-                    constraints:
-                        const BoxConstraints.tightFor(width: 34, height: 34),
-                    padding: EdgeInsets.zero,
-                    iconSize: 19,
-                    icon: BlocBuilder<NotificationCubit, NotificationState>(
+                  Transform.translate(
+                    offset: const Offset(5, 0),
+                    child: IconButton(
+                      constraints:
+                          const BoxConstraints.tightFor(width: 34, height: 34),
+                      padding: EdgeInsets.zero,
+                      iconSize: 19,
+                      icon: BlocBuilder<NotificationCubit, NotificationState>(
                       builder: (_, state) {
                         final unread =
                             state is NotificationsLoaded ? state.unreadCount : 0;
@@ -3308,8 +3375,9 @@ class _StaticFeedHeader extends StatelessWidget {
                         );
                       },
                     ),
-                    onPressed: () => context.push(RouteNames.notifications),
-                    tooltip: 'Notifications',
+                      onPressed: () => context.push(RouteNames.notifications),
+                      tooltip: 'Notifications',
+                    ),
                   ),
                   Builder(
                     builder: (ctx) => IconButton(
@@ -4056,8 +4124,35 @@ class _EndOfFeed extends StatelessWidget {
 // Guest CTA banner (unchanged from original)
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _GuestCtaBanner extends StatelessWidget {
+class _GuestCtaBanner extends StatefulWidget {
   const _GuestCtaBanner();
+
+  @override
+  State<_GuestCtaBanner> createState() => _GuestCtaBannerState();
+}
+
+class _GuestCtaBannerState extends State<_GuestCtaBanner>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _pulseAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+    _pulseAnim = Tween<double>(begin: 1.0, end: 1.055).animate(
+      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -4116,24 +4211,52 @@ class _GuestCtaBanner extends StatelessWidget {
                 color: Colors.white.withValues(alpha: 0.88),
               ),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
+            // ── Signifier label ──────────────────────────────────────────────
             Row(
               children: [
+                const Icon(Icons.touch_app_rounded,
+                    color: Colors.white70, size: 15),
+                const SizedBox(width: 5),
+                Text(
+                  'Tap a button below to get started',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11.5,
+                    color: Colors.white70,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                // ── Pulsing "Create Account" button ──────────────────────────
                 Expanded(
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: AppColors.primary,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                    ),
-                    onPressed: () =>
-                        context.push(RouteNames.registerStep1),
-                    child: Text(
-                      'Create Account',
-                      style: GoogleFonts.plusJakartaSans(
-                          fontWeight: FontWeight.w700, fontSize: 14),
+                  child: ScaleTransition(
+                    scale: _pulseAnim,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: AppColors.primary,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: () =>
+                          context.push(RouteNames.registerStep1),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.person_add_rounded, size: 16),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Create Account',
+                            style: GoogleFonts.plusJakartaSans(
+                                fontWeight: FontWeight.w700, fontSize: 14),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),

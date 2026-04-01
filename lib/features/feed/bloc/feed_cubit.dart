@@ -30,6 +30,7 @@ import '../../../data/local/dao/post_dao.dart';
 import '../../../data/local/dao/recommendation_log_dao.dart';
 import '../../../data/local/dao/sync_queue_dao.dart';
 import '../../../data/local/dao/user_dao.dart';
+import '../../../core/router/route_guards.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/remote/recommender_service.dart';
 import '../../../data/remote/sync_service.dart';
@@ -206,6 +207,12 @@ class FeedCubit extends Cubit<FeedState> {
 
   String? get _activeUserId => _authCubit?.currentUser?.id ?? _currentUserId;
 
+  bool get _canViewPendingModeration {
+    final user = _authCubit?.currentUser;
+    if (user == null) return false;
+    return user.role == UserRole.admin || user.role == UserRole.superAdmin;
+  }
+
   void _emitIfOpen(FeedState nextState) {
     if (!isClosed) {
       emit(nextState);
@@ -308,6 +315,7 @@ class FeedCubit extends Cubit<FeedState> {
         filterType: filter.type,
         groupsOnly: filter.groupsOnly,
         currentUserId: _activeUserId,
+        includePendingForAdmin: _canViewPendingModeration,
       );
 
       if (pagePosts.isEmpty) {
@@ -760,7 +768,7 @@ class FeedCubit extends Cubit<FeedState> {
           savedLocally: true,
           syncedRemotely: false,
           message: _hasPendingLocalMedia(post)
-              ? 'Post saved offline. Media will upload and sync automatically when network is available.'
+              ? 'Post saved locally. Media upload or remote sync is still pending and will retry automatically.'
               : 'Post saved locally, but Firebase sync is waiting for connection. It will retry automatically.',
         );
       }
@@ -769,7 +777,7 @@ class FeedCubit extends Cubit<FeedState> {
         savedLocally: true,
         syncedRemotely: false,
         message: _hasPendingLocalMedia(post)
-            ? 'Post saved locally. Media will upload automatically once you are back online.'
+            ? 'Post saved locally. Media upload is still pending and will continue automatically.'
             : 'Post saved locally. Firebase sync is still pending.',
       );
     } catch (e) {

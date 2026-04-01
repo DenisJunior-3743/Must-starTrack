@@ -73,6 +73,7 @@ import '../../features/messaging/screens/chat_detail_screen.dart';
 // ── Notifications screen ──────────────────────────────────────────────────────
 import '../../features/notifications/screens/notification_center_screen.dart';
 import '../../features/notifications/screens/notification_settings_screen.dart';
+import '../../features/shared/screens/about_startrack_screen.dart';
 import '../../features/shared/screens/screen_hub_screen.dart';
 import '../../features/chatbot/chatbot_module.dart';
 
@@ -85,6 +86,7 @@ import '../../features/admin/screens/suspicion_score_screen.dart';
 import '../../features/admin/screens/user_activity_analytics_screen.dart';
 import '../../features/admin/screens/user_management_screen.dart';
 import '../../features/admin/screens/chatbot_analytics_screen.dart';
+import '../../features/admin/screens/post_moderation_review_screen.dart';
 import '../../features/super_admin/screens/super_admin_dashboard_screen.dart';
 // ── Lecturer screens ──────────────────────────────────────────────────────
 import '../../features/lecturer/screens/lecturer_dashboard_screen.dart';
@@ -139,6 +141,7 @@ class AppRouter {
           Routes.passwordReset,
           Routes.guestDiscover,
           Routes.chatbot,
+          Routes.about,
         ];
 
         final isPublic = publicRoutes.any(
@@ -166,6 +169,7 @@ class AppRouter {
           Routes.adminSync,
           Routes.activityLogs,
           Routes.adminChatbotAnalytics,
+          RouteNames.adminPostReview.split('/:').first,
         ];
         final isAdminRoute = adminOnly.any(
           (r) => location.startsWith(r.split(':').first),
@@ -448,6 +452,12 @@ class AppRouter {
           builder: (_, __) => ChatbotModule.buildScreen(),
         ),
 
+        // ── About MUST StarTrack ─────────────────────────────────────────
+        GoRoute(
+          path: Routes.about,
+          builder: (_, __) => const AboutStarTrackScreen(),
+        ),
+
         // ── Screen hub (newly added module screens) ──────────────────────
         GoRoute(
           path: Routes.screenHub,
@@ -491,6 +501,12 @@ class AppRouter {
         GoRoute(
           path: Routes.adminChatbotAnalytics,
           builder: (_, __) => const ChatbotAnalyticsScreen(),
+        ),
+        GoRoute(
+          path: Routes.adminPostReview,
+          builder: (_, state) => PostModerationReviewScreen(
+            postId: state.pathParameters['postId'] ?? '',
+          ),
         ),
 
         // ── Super Admin ────────────────────────────────────────────────────

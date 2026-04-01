@@ -25,6 +25,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart' hide PickedFile;
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
+import 'dart:async';
 import 'dart:io';
 
 import '../../../core/constants/app_colors.dart';
@@ -40,6 +41,7 @@ import '../../../data/local/dao/sync_queue_dao.dart';
 import '../../../data/local/dao/user_dao.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/models/user_model.dart';
+import '../../../data/remote/cloudinary_service.dart';
 import '../../../data/remote/sync_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
 import '../../shared/hci_components/st_form_widgets.dart';
@@ -318,6 +320,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     if (!mounted) return;
     if (items.isNotEmpty) {
       setState(() => _uploads.addAll(items));
+      unawaited(_startImmediateUploads(items));
     }
     if (unsupported.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -338,6 +341,47 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           backgroundColor: AppColors.warning,
         ),
       );
+    }
+  }
+
+  Future<void> _startImmediateUploads(List<_UploadItem> items) async {
+    if (items.isEmpty || _type != 'project') return;
+
+    final wasOffline = await _isOffline();
+    if (wasOffline || !sl<CloudinaryService>().isConfigured) {
+      return;
+    }
+
+    final cloudinary = sl<CloudinaryService>();
+    for (final item in items) {
+      final localFile = item.file;
+      if (localFile == null || !await localFile.exists()) {
+        continue;
+      }
+
+      _setUploadState(item.id, isUploading: true, uploadFailed: false);
+      try {
+        final remoteUrl = await cloudinary.uploadFile(
+          localFile,
+          onProgress: (progress) => _setUploadProgress(item.id, progress),
+        );
+        _setUploadState(
+          item.id,
+          isUploading: false,
+          uploadFailed: false,
+          uploadedRemotely: true,
+          progress: 1.0,
+          source: remoteUrl,
+        );
+      } catch (error) {
+        debugPrint('[CreatePost] Immediate upload failed for ${item.name}: $error');
+        _setUploadState(
+          item.id,
+          isUploading: false,
+          uploadFailed: true,
+          progress: 0.0,
+        );
+      }
     }
   }
 
@@ -408,6 +452,102 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         item == ConnectivityResult.ethernet);
   }
 
+  void _setUploadProgress(
+    String id,
+    double progress, {
+    String? source,
+    File? file,
+  }) {
+    if (!mounted) return;
+    setState(() {
+      final index = _uploads.indexWhere((upload) => upload.id == id);
+      if (index < 0) return;
+      final current = _uploads[index];
+      _uploads[index] = current.copyWith(
+        progress: progress.clamp(0.0, 1.0),
+        source: source,
+        file: file,
+      );
+    });
+  }
+
+  void _setUploadState(
+    String id, {
+    bool? isUploading,
+    bool? uploadFailed,
+    bool? uploadedRemotely,
+    double? progress,
+    String? source,
+  }) {
+    if (!mounted) return;
+    setState(() {
+      final index = _uploads.indexWhere((upload) => upload.id == id);
+      if (index < 0) return;
+      final current = _uploads[index];
+      _uploads[index] = current.copyWith(
+        isUploading: isUploading,
+        uploadFailed: uploadFailed,
+        uploadedRemotely: uploadedRemotely,
+        progress: progress,
+        source: source,
+      );
+    });
+  }
+
+  Future<List<String>> _resolveMediaUrlsForPublish({
+    required bool wasOffline,
+  }) async {
+    final initialUrls = _uploads.map((upload) => upload.source).toList();
+    if (_type != 'project' || _uploads.isEmpty) {
+      return initialUrls;
+    }
+    if (wasOffline || !sl<CloudinaryService>().isConfigured) {
+      return initialUrls;
+    }
+
+    final cloudinary = sl<CloudinaryService>();
+    final resolvedUrls = <String>[];
+
+    for (final upload in _uploads) {
+      if (upload.uploadedRemotely) {
+        _setUploadProgress(upload.id, 1.0);
+        resolvedUrls.add(upload.source);
+        continue;
+      }
+
+      if (!upload.hasLocalFile) {
+        _setUploadProgress(upload.id, 1.0);
+        resolvedUrls.add(upload.source);
+        continue;
+      }
+
+      final localPath = upload.file?.path ??
+          (upload.source.startsWith('file://')
+              ? Uri.parse(upload.source).toFilePath()
+              : upload.source);
+      final localFile = File(localPath);
+      if (!await localFile.exists()) {
+        resolvedUrls.add(upload.source);
+        continue;
+      }
+
+      try {
+        final remoteUrl = await cloudinary.uploadFile(
+          localFile,
+          onProgress: (progress) => _setUploadProgress(upload.id, progress),
+        );
+        _setUploadProgress(upload.id, 1.0, source: remoteUrl);
+        resolvedUrls.add(remoteUrl);
+      } catch (error) {
+        debugPrint('[CreatePost] Media upload failed for ${upload.name}: $error');
+        _setUploadProgress(upload.id, 0.0);
+        resolvedUrls.add(upload.source);
+      }
+    }
+
+    return resolvedUrls;
+  }
+
   Future<void> _publish() async {
     if (!_formKey.currentState!.validate()) return;
     final feedCubit = context.read<FeedCubit>();
@@ -427,7 +567,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     setState(() => _publishing = true);
 
     final wasOffline = await _isOffline();
-    final mediaUrls = _uploads.map((upload) => upload.source).toList();
+    final mediaUrls = await _resolveMediaUrlsForPublish(wasOffline: wasOffline);
     final now = DateTime.now();
     final normalizedTags = _normalizeSkillTokens(_tags);
     final normalizedOpportunitySkills =
@@ -922,6 +1062,9 @@ class _UploadItem {
   final String name;
   final double progress; // 0.0 â†’ 1.0
   final bool isVideo;
+  final bool isUploading;
+  final bool uploadFailed;
+  final bool uploadedRemotely;
 
   const _UploadItem({
     required this.id,
@@ -930,6 +1073,9 @@ class _UploadItem {
     required this.name,
     required this.progress,
     required this.isVideo,
+    this.isUploading = false,
+    this.uploadFailed = false,
+    this.uploadedRemotely = false,
   });
 
   bool get hasLocalFile => file != null || isLocalMediaPath(source);
@@ -941,6 +1087,9 @@ class _UploadItem {
     String? name,
     double? progress,
     bool? isVideo,
+    bool? isUploading,
+    bool? uploadFailed,
+    bool? uploadedRemotely,
   }) {
     return _UploadItem(
       id: id ?? this.id,
@@ -949,6 +1098,9 @@ class _UploadItem {
       name: name ?? this.name,
       progress: progress ?? this.progress,
       isVideo: isVideo ?? this.isVideo,
+      isUploading: isUploading ?? this.isUploading,
+      uploadFailed: uploadFailed ?? this.uploadFailed,
+      uploadedRemotely: uploadedRemotely ?? this.uploadedRemotely,
     );
   }
 }
@@ -963,8 +1115,9 @@ _UploadItem _uploadItemFromSource(String source) {
     file: localFile,
     source: source,
     name: _displayNameForMediaSource(source),
-    progress: 0,
+    progress: isLocalMediaPath(source) ? 0 : 1,
     isVideo: isVideoMediaPath(source),
+    uploadedRemotely: !isLocalMediaPath(source),
   );
 }
 
@@ -1077,21 +1230,34 @@ class _UploadRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isReady = item.progress <= 0;
-    final isDone = item.progress >= 1.0;
-    final previewPath = item.source.startsWith('file://')
-      ? Uri.parse(item.source).toFilePath()
-      : item.source;
-    final statusLabel = isDone
-      ? 'Uploaded'
-      : item.hasLocalFile
-        ? 'Ready to sync'
-        : 'Attached';
-    final statusColor = isDone
-      ? AppColors.success
-      : item.hasLocalFile
-        ? AppColors.info
-        : AppColors.primary;
+    final isDone = item.uploadedRemotely || item.progress >= 1.0;
+    final previewPath = item.file?.path ??
+        (item.source.startsWith('file://')
+            ? Uri.parse(item.source).toFilePath()
+            : item.source);
+    final statusLabel = item.isUploading
+        ? 'Uploading...'
+        : item.uploadFailed
+            ? 'Upload paused'
+            : isDone
+                ? 'Uploaded'
+                : item.hasLocalFile
+                    ? 'Ready to upload'
+                    : 'Attached';
+    final statusColor = item.isUploading
+        ? AppColors.warning
+        : item.uploadFailed
+            ? AppColors.danger
+            : isDone
+                ? AppColors.success
+                : item.hasLocalFile
+                    ? AppColors.info
+                    : AppColors.primary;
+    final progressValue = item.isUploading
+        ? item.progress.clamp(0.0, 1.0)
+        : isDone
+            ? 1.0
+            : 0.0;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -1137,10 +1303,10 @@ class _UploadRow extends StatelessWidget {
                         overflow: TextOverflow.ellipsis),
                     ),
                     Text(
-                      isReady ? statusLabel : 'Uploadingâ€¦',
+                      statusLabel,
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 10, fontWeight: FontWeight.w700,
-                        color: isReady ? statusColor : AppColors.warning),
+                        color: statusColor),
                     ),
                   ],
                 ),
@@ -1148,11 +1314,15 @@ class _UploadRow extends StatelessWidget {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
                   child: LinearProgressIndicator(
-                    value: item.progress,
+                    value: progressValue,
                     minHeight: 4,
                     backgroundColor: AppColors.borderLight,
                     valueColor: AlwaysStoppedAnimation(
-                      isDone ? AppColors.primary : AppColors.warning),
+                      item.uploadFailed
+                          ? AppColors.danger
+                          : isDone
+                              ? AppColors.success
+                              : AppColors.warning),
                   ),
                 ),
               ],

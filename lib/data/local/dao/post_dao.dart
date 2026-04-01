@@ -169,6 +169,7 @@ class PostDao {
     bool groupsOnly = false,
     String? filterGroupId,
     String? currentUserId,
+    bool includePendingForAdmin = false,
   }) async {
     final db = await _db.database;
     debugPrint('[PostDao] getFeedPage using database');
@@ -187,15 +188,16 @@ class PostDao {
     }
 
     // Public feed only serves approved/unmoderated posts.
-    // Authors can still see their own pending submissions.
+    // Pending items should only be visible to admins.
     if (postColumns.contains('moderation_status')) {
-      if (currentUserId != null && currentUserId.isNotEmpty) {
+      if (includePendingForAdmin) {
         conditions.add(
-          "(p.moderation_status IS NULL OR p.moderation_status = 'approved' OR p.author_id = ?)",
+          "(p.moderation_status IS NULL OR p.moderation_status IN ('approved', 'pending'))",
         );
-        args.add(currentUserId);
       } else {
-        conditions.add("(p.moderation_status IS NULL OR p.moderation_status = 'approved')");
+        conditions.add(
+          "(p.moderation_status IS NULL OR p.moderation_status = 'approved')",
+        );
       }
     }
 
@@ -381,11 +383,10 @@ class PostDao {
         }
 
         if (postColumns.contains('moderation_status')) {
-          if (currentUserId != null && currentUserId.isNotEmpty) {
+          if (includePendingForAdmin) {
             fallbackConditions.add(
-              "(p.moderation_status IS NULL OR p.moderation_status = 'approved' OR p.author_id = ?)",
+              "(p.moderation_status IS NULL OR p.moderation_status IN ('approved', 'pending'))",
             );
-            fallbackArgs.add(currentUserId);
           } else {
             fallbackConditions.add(
               "(p.moderation_status IS NULL OR p.moderation_status = 'approved')",

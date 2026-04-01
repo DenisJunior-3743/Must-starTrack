@@ -40,6 +40,27 @@ class ChatbotKnowledgeBase {
       ],
     ),
     ChatbotFaqEntry(
+      id: 'faq_developers_team',
+      group: 'Getting Started',
+      question: 'Who developed MUST StarTrack?',
+      answer: 'MUST StarTrack was developed as a third-year group mini project by five Software Engineering students at Mbarara University of Science and Technology (MUST): Denis Junior, Ainamaani Allan Mwesigye, Mwunvaneeza Godfrey, Murungi Kevin Tumaini, and Mbabazi Patience. The project was built to make student work more visible, strengthen collaboration, and connect skills to meaningful academic opportunities.',
+      keywords: [
+        'developers',
+        'developer',
+        'who built this app',
+        'who created startrack',
+        'team behind startrack',
+        'about team',
+      ],
+      actions: [
+        ChatbotAction(label: 'Open About MUST StarTrack', route: RouteNames.about),
+      ],
+      followUps: [
+        'What is the purpose of MUST StarTrack?',
+        'What are the main features of MUST StarTrack?',
+      ],
+    ),
+    ChatbotFaqEntry(
       id: 'faq_getting_started',
       group: 'Getting Started',
       question: 'How do I get started on the platform?',
@@ -619,6 +640,7 @@ class ChatbotKnowledgeBase {
     RouteNames.createPost,
     RouteNames.projects,
     RouteNames.notificationSettings,
+    RouteNames.about,
     RouteNames.forgotPassword,
     RouteNames.adminDashboard,
     RouteNames.lecturerDashboard,

@@ -113,8 +113,10 @@ service cloud.firestore {
       allow read: if isAdmin()
         || (
           resource.data.is_archived == false
-          && (request.auth != null
-              || resource.data.get('moderation_status', null) in [null, 'approved'])
+          && (
+            isAdmin()
+            || resource.data.get('moderation_status', null) in [null, 'approved']
+          )
         );
 
       allow create: if isMustUser()

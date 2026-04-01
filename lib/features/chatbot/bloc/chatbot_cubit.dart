@@ -153,21 +153,24 @@ class ChatbotCubit extends Cubit<ChatbotState> {
       ),
     );
 
+    final safeActorId = actorUserId?.trim();
+    if (safeActorId == null || safeActorId.isEmpty) {
+      return;
+    }
+
     try {
       await _firestore.setChatbotInteractionFeedback(
         interactionId: interactionId,
         isHelpful: isHelpful,
-        feedbackBy: actorUserId,
+        feedbackBy: safeActorId,
       );
-      if (actorUserId != null && actorUserId.trim().isNotEmpty) {
-        await _activityLogDao.logAction(
-          userId: actorUserId,
-          action: isHelpful ? 'chatbot_feedback_helpful' : 'chatbot_feedback_not_helpful',
-          entityType: 'chatbot_interaction',
-          entityId: interactionId,
-          metadata: {'is_helpful': isHelpful},
-        );
-      }
+      await _activityLogDao.logAction(
+        userId: safeActorId,
+        action: isHelpful ? 'chatbot_feedback_helpful' : 'chatbot_feedback_not_helpful',
+        entityType: 'chatbot_interaction',
+        entityId: interactionId,
+        metadata: {'is_helpful': isHelpful},
+      );
     } catch (_) {
       // Metrics failures should never break chat UX.
     }
@@ -205,6 +208,11 @@ class ChatbotCubit extends Cubit<ChatbotState> {
     String? role,
     String? userId,
   }) async {
+    final safeUserId = userId?.trim();
+    if (isGuest || safeUserId == null || safeUserId.isEmpty) {
+      return;
+    }
+
     try {
       await _firestore.setChatbotInteraction(
         interactionId: interactionId,
@@ -215,7 +223,7 @@ class ChatbotCubit extends Cubit<ChatbotState> {
           'source': response.source.name,
           'confidence': response.confidence,
           'is_guest': isGuest,
-          'user_id': userId ?? '',
+          'user_id': safeUserId,
           'role': role ?? 'unknown',
           'actions_count': response.actions.length,
           'followups_count': response.followUps.length,

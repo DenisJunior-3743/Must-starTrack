@@ -95,7 +95,7 @@ class SettingsDrawer extends StatelessWidget {
                   label: 'About MUST StarTrack',
                   onTap: () {
                     Navigator.of(context).pop();
-                    _showAbout(context);
+                    context.push(RouteNames.about);
                   },
                 ),
                 _DrawerTile(
@@ -156,16 +156,6 @@ class SettingsDrawer extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-
-  void _showAbout(BuildContext context) {
-    showAboutDialog(
-      context: context,
-      applicationName: 'MUST StarTrack',
-      applicationVersion: '1.0.0',
-      applicationLegalese:
-          '© 2024 Mbarara University of Science and Technology.\nAll rights reserved.',
     );
   }
 

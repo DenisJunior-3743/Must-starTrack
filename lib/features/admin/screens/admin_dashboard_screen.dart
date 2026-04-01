@@ -779,6 +779,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   spacing: 6,
                   children: [
                     IconButton(
+                      tooltip: 'View content',
+                      onPressed: () async {
+                        final changed = await context.push<bool>(
+                          RouteNames.adminPostReview
+                              .replaceFirst(':postId', post.id),
+                        );
+                        if (changed == true) {
+                          await _reloadDashboard();
+                        }
+                      },
+                      icon: const Icon(Icons.visibility_rounded),
+                    ),
+                    IconButton(
                       tooltip: 'Chat author',
                       onPressed: () => _openChatWithAuthor(post),
                       icon: const Icon(Icons.chat_bubble_outline_rounded),
