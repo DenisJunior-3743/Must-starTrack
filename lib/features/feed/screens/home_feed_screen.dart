@@ -3302,11 +3302,46 @@ class _StaticFeedHeaderState extends State<_StaticFeedHeader>
     super.dispose();
   }
 
-  String _greetingName() {
-    final user = sl<AuthCubit>().currentUser;
-    final displayName = user?.displayName?.trim();
-    if (displayName == null || displayName.isEmpty) return 'there';
-    return displayName.split(' ').first;
+  Future<void> _handleHeaderAuthAction(BuildContext context, bool isGuest) async {
+    if (isGuest) {
+      context.push(RouteNames.login);
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Log out?'),
+        content: const Text('You will continue in guest mode.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+            child: const Text('Log out'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    await sl<AuthCubit>().logout();
+    if (!context.mounted) return;
+    context.go(RouteNames.home);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Logged out successfully. You are now viewing in guest mode.',
+          style: GoogleFonts.plusJakartaSans(),
+        ),
+        backgroundColor: AppColors.success,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
@@ -3316,7 +3351,7 @@ class _StaticFeedHeaderState extends State<_StaticFeedHeader>
         final user = authState is AuthAuthenticated ? authState.user : null;
         final displayName = user?.displayName?.trim() ?? '';
         final greetingName = displayName.isEmpty
-            ? 'there'
+            ? 'Welcome dear user'
             : displayName.split(' ').first;
         final isGuest = user == null;
         final photoUrl = user?.photoUrl?.trim() ?? '';
@@ -3364,53 +3399,58 @@ class _StaticFeedHeaderState extends State<_StaticFeedHeader>
                           ],
                         ),
                       ),
-                      if (isGuest)
-                        Transform.translate(
-                          offset: const Offset(4, 0),
-                          child: ScaleTransition(
-                            scale: _signInPulse,
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(
-                                  AppDimensions.radiusFull),
-                              onTap: () => context.push(RouteNames.login),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 9,
-                                  vertical: 6,
+                      Transform.translate(
+                        offset: const Offset(4, 0),
+                        child: ScaleTransition(
+                          scale: isGuest ? _signInPulse : const AlwaysStoppedAnimation(1),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(
+                                AppDimensions.radiusFull),
+                            onTap: () => _handleHeaderAuthAction(context, isGuest),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isGuest
+                                    ? AppColors.primaryTint10
+                                    : AppColors.danger.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(
+                                  AppDimensions.radiusFull,
                                 ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primaryTint10,
-                                  borderRadius: BorderRadius.circular(
-                                    AppDimensions.radiusFull,
+                                border: Border.all(
+                                  color: isGuest
+                                      ? AppColors.primary.withValues(alpha: 0.35)
+                                      : AppColors.danger.withValues(alpha: 0.45),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    isGuest
+                                        ? Icons.account_circle_outlined
+                                        : Icons.logout_rounded,
+                                    color: isGuest ? AppColors.primary : AppColors.danger,
+                                    size: 16,
                                   ),
-                                  border: Border.all(
-                                    color: AppColors.primary
-                                        .withValues(alpha: 0.35),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    isGuest ? 'Sign in' : 'Logout',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: isGuest ? 11 : 10,
+                                      fontWeight: FontWeight.w700,
+                                      color:
+                                          isGuest ? AppColors.primary : AppColors.danger,
+                                    ),
                                   ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.account_circle_outlined,
-                                      color: AppColors.primary,
-                                      size: 18,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Sign in',
-                                      style: GoogleFonts.plusJakartaSans(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                        color: AppColors.primary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                ],
                               ),
                             ),
                           ),
                         ),
+                      ),
                       Transform.translate(
                         offset: const Offset(5, 0),
                         child: IconButton(
@@ -3477,7 +3517,7 @@ class _StaticFeedHeaderState extends State<_StaticFeedHeader>
                   InkWell(
                     borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
                     onTap: () {
-                      if (isGuest || user == null) {
+                      if (isGuest) {
                         context.push(RouteNames.login);
                         return;
                       }
