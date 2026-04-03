@@ -86,6 +86,7 @@ import '../../features/admin/screens/suspicion_score_screen.dart';
 import '../../features/admin/screens/user_activity_analytics_screen.dart';
 import '../../features/admin/screens/user_management_screen.dart';
 import '../../features/admin/screens/chatbot_analytics_screen.dart';
+import '../../features/admin/screens/admin_notifications_screen.dart';
 import '../../features/admin/screens/post_moderation_review_screen.dart';
 import '../../features/super_admin/screens/super_admin_dashboard_screen.dart';
 // ── Lecturer screens ──────────────────────────────────────────────────────
@@ -169,6 +170,7 @@ class AppRouter {
           Routes.adminSync,
           Routes.activityLogs,
           Routes.adminChatbotAnalytics,
+          Routes.adminNotifications,
           RouteNames.adminPostReview.split('/:').first,
         ];
         final isAdminRoute = adminOnly.any(
@@ -507,6 +509,10 @@ class AppRouter {
           builder: (_, state) => PostModerationReviewScreen(
             postId: state.pathParameters['postId'] ?? '',
           ),
+        ),
+        GoRoute(
+          path: Routes.adminNotifications,
+          builder: (_, __) => const AdminNotificationsScreen(),
         ),
 
         // ── Super Admin ────────────────────────────────────────────────────

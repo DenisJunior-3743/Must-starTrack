@@ -12,6 +12,7 @@ import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_names.dart';
 import '../../../data/local/dao/activity_log_dao.dart';
 import '../../../data/local/dao/group_dao.dart';
+import '../../../data/local/dao/notification_dao.dart';
 import '../../../data/local/dao/post_dao.dart';
 import '../../../data/local/dao/sync_queue_dao.dart';
 import '../../../data/local/dao/user_dao.dart';
@@ -132,10 +133,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final _syncQueueDao = sl<SyncQueueDao>();
   final _syncService = sl<SyncService>();
   final _firestoreService = sl<FirestoreService>();
+  final _notifDao = sl<NotificationDao>();
   late final FacultyManagementCubit _facultyManagementCubit;
   late final CourseManagementCubit _courseManagementCubit;
   bool _isSidebarVisible = true;
   StreamSubscription<List<UserModel>>? _usersSub;
+  StreamSubscription<void>? _notifCountSub;
 
   int _selectedTab = 0;
   bool _loading = true;
@@ -148,6 +151,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   int _syncDeadLetters = 0;
   int _weeklyReports = 0;
   int _weeklyActiveUsers = 0;
+  int _unreadNotifCount = 0;
   List<PostModel> _pendingQueue = const [];
   List<UserModel> _allUsers = const [];
   List<UserModel> _filteredUsers = const [];
@@ -161,6 +165,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     _courseManagementCubit = CourseManagementCubit();
     _reloadDashboard();
     _subscribeToUsersStream();
+    _subscribeToNotificationCount();
+  }
+
+  /// Listens to the notification DAO change stream and refreshes the unread
+  /// badge count whenever a notification is inserted or marked read.
+  void _subscribeToNotificationCount() {
+    final uid = sl<AuthCubit>().currentUser?.id;
+    if (uid == null || uid.isEmpty) return;
+    _unreadNotifCount = 0;
+    // Initial load
+    _notifDao.getUnreadCount(uid).then((count) {
+      if (mounted) setState(() => _unreadNotifCount = count);
+    });
+    _notifCountSub = _notifDao.changes.listen((_) async {
+      if (!mounted) return;
+      final count = await _notifDao.getUnreadCount(uid);
+      if (mounted) setState(() => _unreadNotifCount = count);
+    });
   }
 
   /// Listens to the Firestore users collection so the admin user list updates
@@ -234,6 +256,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   void dispose() {
     _usersSub?.cancel();
+    _notifCountSub?.cancel();
     _facultyManagementCubit.close();
     _courseManagementCubit.close();
     super.dispose();
@@ -1323,6 +1346,44 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
         ),
         actions: [
+          // ── Notification bell ───────────────────────────────────────────
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                tooltip: 'Notifications',
+                icon: const Icon(Icons.notifications_outlined),
+                onPressed: () {
+                  context.push(RouteNames.adminNotifications);
+                },
+              ),
+              if (_unreadNotifCount > 0)
+                Positioned(
+                  top: 8,
+                  right: 6,
+                  child: IgnorePointer(
+                    child: Container(
+                      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.danger,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _unreadNotifCount > 99 ? '99+' : '$_unreadNotifCount',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             onPressed: _reloadDashboard,
