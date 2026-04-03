@@ -47,7 +47,8 @@ class _OfflineVideoPlayerScreenState extends State<OfflineVideoPlayerScreen> {
   }
 
   Future<void> _prepareVideo({bool forceRefresh = false}) async {
-    final playbackSource = getPreferredPlaybackSource(widget.source);
+    final playbackCandidates = getPlaybackSourceCandidates(widget.source);
+    final playbackSource = playbackCandidates.first;
     debugPrint(
       '[OfflineVideo] prepare start: source=${widget.source} '
       'playbackSource=$playbackSource '
@@ -65,21 +66,7 @@ class _OfflineVideoPlayerScreenState extends State<OfflineVideoPlayerScreen> {
     try {
       await _controller?.dispose();
 
-      final cachedFile = await getCachedVideoFile(playbackSource);
-      if (cachedFile != null) {
-        final exists = await cachedFile.exists();
-        final length = exists ? await cachedFile.length() : 0;
-        debugPrint(
-          '[OfflineVideo] cache candidate: path=${cachedFile.path} '
-          'exists=$exists size=$length',
-        );
-      }
-      final hasUsableCache = !forceRefresh &&
-          cachedFile != null &&
-          await cachedFile.exists() &&
-          await cachedFile.length() > 1024;
-
-      VideoPlayerController controller;
+      VideoPlayerController? controller;
       if (isLocalMediaPath(widget.source)) {
         final localPath = widget.source.startsWith('file://')
             ? Uri.parse(widget.source).toFilePath()
@@ -89,48 +76,77 @@ class _OfflineVideoPlayerScreenState extends State<OfflineVideoPlayerScreen> {
         await controller.initialize();
         await controller.setLooping(true);
         _savedOffline = true;
-      } else if (hasUsableCache) {
-        try {
-          debugPrint('[OfflineVideo] trying cached file playback: ${cachedFile.path}');
-          controller = VideoPlayerController.file(cachedFile);
-          await controller.initialize();
-          await controller.setLooping(true);
-          _savedOffline = true;
-        } catch (error, stackTrace) {
-          debugPrint('[OfflineVideo] cached playback failed: $error');
-          debugPrint('$stackTrace');
-          await cachedFile.delete().catchError((_) => cachedFile);
-          debugPrint('[OfflineVideo] deleted invalid cache and falling back to network');
-          controller = VideoPlayerController.networkUrl(Uri.parse(playbackSource));
-          await controller.initialize();
-          await controller.setLooping(true);
-          _initializedFromNetwork = true;
-          unawaited(_downloadForOffline());
-        }
       } else {
-        debugPrint('[OfflineVideo] no usable cache, streaming from network');
-        controller = VideoPlayerController.networkUrl(Uri.parse(playbackSource));
-        await controller.initialize();
-        await controller.setLooping(true);
-        _initializedFromNetwork = true;
-        unawaited(_downloadForOffline(forceRefresh: forceRefresh));
+        Object? lastError;
+        for (final candidate in playbackCandidates) {
+          final cachedFile = await getCachedVideoFile(candidate);
+          if (cachedFile != null) {
+            final exists = await cachedFile.exists();
+            final length = exists ? await cachedFile.length() : 0;
+            debugPrint(
+              '[OfflineVideo] cache candidate: path=${cachedFile.path} '
+              'exists=$exists size=$length',
+            );
+          }
+          final hasUsableCache = !forceRefresh &&
+              cachedFile != null &&
+              await cachedFile.exists() &&
+              await cachedFile.length() > 1024;
+
+          try {
+            if (hasUsableCache) {
+              debugPrint('[OfflineVideo] trying cached file playback: ${cachedFile.path}');
+              controller = VideoPlayerController.file(cachedFile);
+              await controller.initialize();
+              await controller.setLooping(true);
+              _savedOffline = true;
+              _initializedFromNetwork = false;
+              break;
+            }
+
+            debugPrint('[OfflineVideo] streaming candidate: $candidate');
+            controller = VideoPlayerController.networkUrl(Uri.parse(candidate));
+            await controller.initialize();
+            await controller.setLooping(true);
+            _initializedFromNetwork = true;
+            _savedOffline = false;
+            unawaited(_downloadForOffline(sourceOverride: candidate));
+            break;
+          } catch (error, stackTrace) {
+            lastError = error;
+            debugPrint('[OfflineVideo] candidate failed: $candidate error=$error');
+            debugPrint('$stackTrace');
+            await controller?.dispose();
+            controller = null;
+
+            if (hasUsableCache) {
+              await cachedFile.delete().catchError((_) => cachedFile);
+            }
+          }
+        }
+
+        if (controller == null) {
+          throw Exception('No playable source found. Last error: $lastError');
+        }
       }
 
+      final readyController = controller;
+
       if (!mounted) {
-        await controller.dispose();
+        await readyController.dispose();
         return;
       }
 
       setState(() {
-        _controller = controller;
+        _controller = readyController;
         _loading = false;
         _downloading = _initializedFromNetwork;
         _debugContext =
             'mode=${_initializedFromNetwork ? 'network' : 'file'} '
-            'saved=$_savedOffline size=${controller.value.size}';
+            'saved=$_savedOffline size=${readyController.value.size}';
       });
       debugPrint('[OfflineVideo] player ready: ${_debugContext!}');
-      await controller.play();
+      await readyController.play();
     } catch (error, stackTrace) {
       debugPrint('[OfflineVideo] prepare failed: $error');
       debugPrint('$stackTrace');
@@ -144,13 +160,16 @@ class _OfflineVideoPlayerScreenState extends State<OfflineVideoPlayerScreen> {
     }
   }
 
-  Future<void> _downloadForOffline({bool forceRefresh = false}) async {
+  Future<void> _downloadForOffline({
+    bool forceRefresh = false,
+    String? sourceOverride,
+  }) async {
     if (isLocalMediaPath(widget.source)) {
       return;
     }
 
     try {
-      final playbackSource = getPreferredPlaybackSource(widget.source);
+      final playbackSource = sourceOverride ?? getPreferredPlaybackSource(widget.source);
       final file = await resolveVideoFile(
         playbackSource,
         forceRefresh: forceRefresh,

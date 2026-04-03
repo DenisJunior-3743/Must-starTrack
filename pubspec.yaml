@@ -114,8 +114,8 @@ dependencies:
   # ── File & Export ──────────────────────────────────────────
   # path_provider: locates app documents directory
   path_provider: ^2.1.3
-  # open_file: opens exported PDF/CSV reports
-  open_file: ^3.3.2
+  # open_filex: opens exported PDF/CSV reports
+  open_filex: ^4.7.0
   # share_plus: native share sheet for posts
   share_plus: ^9.0.0
   # url_launcher: opens external links (GitHub, demo sites)

@@ -89,6 +89,15 @@ class AuthEmailVerificationSent extends AuthState {
   List<Object?> get props => [email];
 }
 
+/// Manual password reset completed.
+class AuthPasswordResetSuccess extends AuthState {
+  final String username;
+  const AuthPasswordResetSuccess(this.username);
+
+  @override
+  List<Object?> get props => [username];
+}
+
 /// Tracks data collected across the 3-step student registration.
 /// currentStep: 1 | 2 | 3
 class AuthRegistrationInProgress extends AuthState {
@@ -261,6 +270,26 @@ class AuthCubit extends Cubit<AuthState> {
       );
     } catch (e) {
       emit(const AuthError('Could not send reset email. Please try again.'));
+    }
+  }
+
+  Future<void> resetPasswordManually({
+    required String username,
+    required String newPassword,
+  }) async {
+    emit(const AuthLoading());
+    try {
+      final result = await _repo.resetPasswordManually(
+        username: username,
+        newPassword: newPassword,
+      );
+
+      result.fold(
+        (failure) => emit(AuthError(failure.message)),
+        (_) => emit(AuthPasswordResetSuccess(username)),
+      );
+    } catch (_) {
+      emit(const AuthError('Could not reset password. Please try again.'));
     }
   }
 

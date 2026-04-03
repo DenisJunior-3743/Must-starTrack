@@ -106,6 +106,35 @@ class UserDao {
     return UserModel.fromMap(rows.first, profile: profile);
   }
 
+  /// Fetches a user by username-like identifier.
+  ///
+  /// Accepts either:
+  /// - exact email address
+  /// - email local-part (before @)
+  /// - display name
+  Future<UserModel?> getUserByUsername(String username) async {
+    final db = await _db.database;
+    final key = username.trim();
+    if (key.isEmpty) return null;
+
+    final rows = await db.rawQuery(
+      '''
+      SELECT *
+      FROM ${DatabaseSchema.tableUsers}
+      WHERE LOWER(email) = LOWER(?)
+         OR LOWER(display_name) = LOWER(?)
+         OR LOWER(SUBSTR(email, 1, INSTR(email, '@') - 1)) = LOWER(?)
+      ORDER BY updated_at DESC
+      LIMIT 1
+      ''',
+      [key, key, key],
+    );
+
+    if (rows.isEmpty) return null;
+    final profile = await getProfileByUserId(rows.first['id'] as String);
+    return UserModel.fromMap(rows.first, profile: profile);
+  }
+
   /// Update a user record. Only updates changed fields.
   Future<void> updateUser(UserModel user) async {
     final db = await _db.database;

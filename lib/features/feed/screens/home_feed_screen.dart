@@ -17,6 +17,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -436,20 +437,6 @@ class _VideoFeedTabState extends State<_VideoFeedTab> {
   @override
   void initState() {
     super.initState();
-    _pageCtrl.addListener(() {
-      final page = _pageCtrl.page?.round() ?? 0;
-      if (page != _currentPage) {
-        setState(() => _currentPage = page);
-        if (page != _lastHapticPage) {
-          HapticFeedback.selectionClick();
-          _lastHapticPage = page;
-        }
-        // Load more when near end
-        if (page >= widget.posts.length - 3 && widget.hasMore) {
-          widget.cubit.loadMore();
-        }
-      }
-    });
   }
 
   @override
@@ -482,8 +469,21 @@ class _VideoFeedTabState extends State<_VideoFeedTab> {
           child: PageView.builder(
             controller: _pageCtrl,
             scrollDirection: Axis.vertical,
-            physics: const BouncingScrollPhysics(),
+            dragStartBehavior: DragStartBehavior.down,
+            allowImplicitScrolling: true,
+            physics: const _SoftPagePhysics(),
             itemCount: total,
+            onPageChanged: (page) {
+              if (page == _currentPage) return;
+              setState(() => _currentPage = page);
+              if (page != _lastHapticPage) {
+                HapticFeedback.selectionClick();
+                _lastHapticPage = page;
+              }
+              if (page >= widget.posts.length - 3 && widget.hasMore) {
+                widget.cubit.loadMore();
+              }
+            },
             itemBuilder: (ctx, i) {
               if (i == widget.posts.length) {
                 if (widget.isLoadingMore) {
@@ -548,6 +548,22 @@ class _VideoFeedTabState extends State<_VideoFeedTab> {
   }
 }
 
+class _SoftPagePhysics extends PageScrollPhysics {
+  const _SoftPagePhysics({super.parent});
+
+  @override
+  _SoftPagePhysics applyTo(ScrollPhysics? ancestor) {
+    return _SoftPagePhysics(parent: buildParent(ancestor));
+  }
+
+  // Lower thresholds slightly so users can change videos with softer swipes.
+  @override
+  double get minFlingDistance => 8.0;
+
+  @override
+  double get minFlingVelocity => 220.0;
+}
+
 class _VideoPage extends StatefulWidget {
   final PostModel post;
   final bool isActive;
@@ -591,7 +607,9 @@ class _VideoPageState extends State<_VideoPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initController();
+    if (widget.isActive) {
+      _initController();
+    }
     _loadMyRating();
   }
 
@@ -612,17 +630,40 @@ class _VideoPageState extends State<_VideoPage>
   @override
   void didUpdateWidget(_VideoPage old) {
     super.didUpdateWidget(old);
-    _syncPlayback();
+
     if (widget.post.id != old.post.id) {
       _ctrl?.dispose();
       _ctrl = null;
       _ready = false;
       _error = false;
       _downloadProgress = null;
-      _initController();
+      if (widget.isActive) {
+        _initController();
+      }
       _myRating = null;
       _loadMyRating();
+      return;
     }
+
+    // Keep only the visible card's decoder alive. This avoids decoder
+    // allocation failures on low-end devices when multiple players coexist.
+    if (widget.isActive != old.isActive) {
+      if (widget.isActive) {
+        if (_ctrl == null && !_ready && !_error) {
+          _initController();
+        } else {
+          _syncPlayback();
+        }
+      } else {
+        _ctrl?.dispose();
+        _ctrl = null;
+        _ready = false;
+        _downloadProgress = null;
+      }
+      return;
+    }
+
+    _syncPlayback();
   }
 
   bool get _isCurrentRoute {
@@ -631,7 +672,12 @@ class _VideoPageState extends State<_VideoPage>
   }
 
   void _syncPlayback() {
-    if (!_ready || _ctrl == null) return;
+    if (!_ready || _ctrl == null) {
+      if (widget.isActive && _ctrl == null && !_error) {
+        _initController();
+      }
+      return;
+    }
     if (widget.isActive && _isCurrentRoute) {
       _ctrl!.play();
     } else {
@@ -696,53 +742,61 @@ class _VideoPageState extends State<_VideoPage>
       return;
     }
 
-    // Apply Cloudinary H.264 transform when applicable
-    final url = getPreferredPlaybackSource(rawUrl);
+    final playbackCandidates = getPlaybackSourceCandidates(rawUrl);
+    Object? lastError;
 
-    try {
-      VideoPlayerController ctrl;
-
-      if (isLocalMediaPath(url)) {
-        // Local file – play directly
-        final localPath = url.startsWith('file://')
-            ? Uri.parse(url).toFilePath(windows: Platform.isWindows)
-            : url;
-        ctrl = VideoPlayerController.file(File(localPath));
-      } else {
-        // Check for an existing local cache
-        final cachedFile = await getCachedVideoFile(url);
-        final hasCache = cachedFile != null &&
-            await cachedFile.exists() &&
-            await cachedFile.length() > 1024;
-
-        if (hasCache) {
-          debugPrint('[VideoPage] playing from cache: ${cachedFile.path}');
-          // ignore: unnecessary_non_null_assertion
-          ctrl = VideoPlayerController.file(cachedFile);
+    for (final url in playbackCandidates) {
+      VideoPlayerController? ctrl;
+      var shouldDownloadInBackground = false;
+      try {
+        if (isLocalMediaPath(url)) {
+          final localPath = url.startsWith('file://')
+              ? Uri.parse(url).toFilePath(windows: Platform.isWindows)
+              : url;
+          ctrl = VideoPlayerController.file(File(localPath));
         } else {
-          // No cache yet – stream from network and download in bakground
-          debugPrint('[VideoPage] no cache, streaming:$url');
-          ctrl = VideoPlayerController.networkUrl(Uri.parse(url));
+          final cachedFile = await getCachedVideoFile(url);
+          final hasCache = cachedFile != null &&
+              await cachedFile.exists() &&
+              await cachedFile.length() > 1024;
+
+          if (hasCache) {
+            debugPrint('[VideoPage] playing from cache: ${cachedFile.path}');
+            ctrl = VideoPlayerController.file(cachedFile);
+          } else {
+            debugPrint('[VideoPage] no cache, streaming:$url');
+            ctrl = VideoPlayerController.networkUrl(Uri.parse(url));
+            shouldDownloadInBackground = true;
+          }
+        }
+
+        await ctrl.initialize();
+        if (!mounted) {
+          await ctrl.dispose();
+          return;
+        }
+
+        ctrl.setLooping(true);
+        ctrl.setVolume(_isMuted ? 0 : 1);
+        setState(() {
+          _ctrl = ctrl;
+          _ready = true;
+          _error = false;
+        });
+        if (shouldDownloadInBackground) {
           unawaited(_downloadInBackground(url));
         }
-      }
-
-      await ctrl.initialize();
-      if (!mounted) {
-        ctrl.dispose();
+        _syncPlayback();
         return;
+      } catch (e) {
+        lastError = e;
+        debugPrint('[VideoPage] init failed for source=$url: $e');
+        await ctrl?.dispose();
       }
-      ctrl.setLooping(true);
-      ctrl.setVolume(_isMuted ? 0 : 1);
-      setState(() {
-        _ctrl = ctrl;
-        _ready = true;
-      });
-      _syncPlayback();
-    } catch (e) {
-      debugPrint('[VideoPage] init error url=$url: $e');
-      if (mounted) setState(() => _error = true);
     }
+
+    debugPrint('[VideoPage] all playback sources failed: $lastError');
+    if (mounted) setState(() => _error = true);
   }
 
   /// Downloads [url] to the local cache in the background while playback
@@ -1250,6 +1304,9 @@ class _PhotoFeedTabState extends State<_PhotoFeedTab> {
       },
       child: ListView(
         controller: widget.scrollCtrl,
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
         padding: const EdgeInsets.only(bottom: 24),
         children: children,
       ),
@@ -1296,6 +1353,9 @@ class _PhotoFeedTabState extends State<_PhotoFeedTab> {
       },
       child: ListView(
         controller: widget.scrollCtrl,
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
         padding: const EdgeInsets.only(bottom: 24),
         children: sections,
       ),
@@ -1401,6 +1461,8 @@ class _AuthorPhotoRailState extends State<_AuthorPhotoRail> {
               children: [
                 PageView.builder(
                   controller: _pageCtrl,
+                  dragStartBehavior: DragStartBehavior.down,
+                  physics: const BouncingScrollPhysics(),
                   padEnds: false,
                   itemCount: widget.posts.length,
                   onPageChanged: (i) => setState(() => _currentIndex = i),
@@ -1933,6 +1995,9 @@ class _ShowcaseFeedTab extends StatelessWidget {
       },
       child: ListView.builder(
         controller: scrollCtrl,
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
         itemCount: itemCount,
         itemBuilder: (ctx, i) {
@@ -3246,174 +3311,231 @@ class _StaticFeedHeaderState extends State<_StaticFeedHeader>
 
   @override
   Widget build(BuildContext context) {
-    final greetingName = _greetingName();
-    return Material(
-      color: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.96),
-      elevation: 0,
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 10, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
+    return BlocBuilder<AuthCubit, AuthState>(
+      builder: (context, authState) {
+        final user = authState is AuthAuthenticated ? authState.user : null;
+        final displayName = user?.displayName?.trim() ?? '';
+        final greetingName = displayName.isEmpty
+            ? 'there'
+            : displayName.split(' ').first;
+        final isGuest = user == null;
+        final photoUrl = user?.photoUrl?.trim() ?? '';
+        ImageProvider<Object>? greetingImage;
+        if (photoUrl.isNotEmpty) {
+          if (isLocalMediaPath(photoUrl)) {
+            greetingImage = FileImage(File(photoUrl));
+          } else {
+            greetingImage = CachedNetworkImageProvider(photoUrl);
+          }
+        }
+
+        return Material(
+          color:
+              Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.96),
+          elevation: 0,
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 10, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: Row(
-                      children: [
-                        const Icon(Icons.auto_awesome_rounded,
-                            size: 18, color: AppColors.primary),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            'Recommended for You',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.primary,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            const Icon(Icons.auto_awesome_rounded,
+                                size: 18, color: AppColors.primary),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'Recommended for You',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primary,
+                                ),
+                              ),
                             ),
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                  BlocBuilder<AuthCubit, AuthState>(
-                    builder: (_, authState) {
-                      final isGuest = sl<AuthCubit>().currentUser == null;
-                      if (!isGuest) return const SizedBox.shrink();
-                      return Transform.translate(
-                        offset: const Offset(4, 0),
-                        child: ScaleTransition(
-                          scale: _signInPulse,
-                          child: InkWell(
-                            borderRadius:
-                                BorderRadius.circular(AppDimensions.radiusFull),
-                            onTap: () => context.push(RouteNames.login),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 9,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryTint10,
-                                borderRadius: BorderRadius.circular(
-                                  AppDimensions.radiusFull,
+                      ),
+                      if (isGuest)
+                        Transform.translate(
+                          offset: const Offset(4, 0),
+                          child: ScaleTransition(
+                            scale: _signInPulse,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(
+                                  AppDimensions.radiusFull),
+                              onTap: () => context.push(RouteNames.login),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 9,
+                                  vertical: 6,
                                 ),
-                                border: Border.all(
-                                  color: AppColors.primary.withValues(alpha: 0.35),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.account_circle_outlined,
-                                    color: AppColors.primary,
-                                    size: 18,
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryTint10,
+                                  borderRadius: BorderRadius.circular(
+                                    AppDimensions.radiusFull,
                                   ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Sign in',
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
+                                  border: Border.all(
+                                    color: AppColors.primary
+                                        .withValues(alpha: 0.35),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.account_circle_outlined,
                                       color: AppColors.primary,
+                                      size: 18,
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Sign in',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                         ),
+                      Transform.translate(
+                        offset: const Offset(5, 0),
+                        child: IconButton(
+                          constraints:
+                              const BoxConstraints.tightFor(width: 34, height: 34),
+                          padding: EdgeInsets.zero,
+                          iconSize: 19,
+                          icon: BlocBuilder<NotificationCubit, NotificationState>(
+                            builder: (_, state) {
+                              final unread = state is NotificationsLoaded
+                                  ? state.unreadCount
+                                  : 0;
+                              return Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  const Icon(Icons.notifications_outlined),
+                                  if (unread > 0)
+                                    Positioned(
+                                      right: -4,
+                                      top: -4,
+                                      child: Container(
+                                        constraints: const BoxConstraints(
+                                            minWidth: 16, minHeight: 16),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 4, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.danger,
+                                          borderRadius:
+                                              BorderRadius.circular(999),
+                                        ),
+                                        child: Text(
+                                          unread > 99 ? '99+' : '$unread',
+                                          textAlign: TextAlign.center,
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              );
+                            },
+                          ),
+                          onPressed: () => context.push(RouteNames.notifications),
+                          tooltip: 'Notifications',
+                        ),
+                      ),
+                      Builder(
+                        builder: (ctx) => IconButton(
+                          constraints:
+                              const BoxConstraints.tightFor(width: 34, height: 34),
+                          padding: EdgeInsets.zero,
+                          iconSize: 20,
+                          icon: const Icon(Icons.menu_rounded),
+                          onPressed: () => Scaffold.of(ctx).openEndDrawer(),
+                          tooltip: 'Settings',
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+                    onTap: () {
+                      if (isGuest || user == null) {
+                        context.push(RouteNames.login);
+                        return;
+                      }
+                      context.push(
+                        RouteNames.profile.replaceFirst(':userId', user.id),
                       );
                     },
-                  ),
-                  Transform.translate(
-                    offset: const Offset(5, 0),
-                    child: IconButton(
-                      constraints:
-                          const BoxConstraints.tightFor(width: 34, height: 34),
-                      padding: EdgeInsets.zero,
-                      iconSize: 19,
-                      icon: BlocBuilder<NotificationCubit, NotificationState>(
-                      builder: (_, state) {
-                        final unread =
-                            state is NotificationsLoaded ? state.unreadCount : 0;
-                        return Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            const Icon(Icons.notifications_outlined),
-                            if (unread > 0)
-                              Positioned(
-                                right: -4,
-                                top: -4,
-                                child: Container(
-                                  constraints: const BoxConstraints(
-                                      minWidth: 16, minHeight: 16),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 4, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.danger,
-                                    borderRadius: BorderRadius.circular(999),
-                                  ),
-                                  child: Text(
-                                    unread > 99 ? '99+' : '$unread',
-                                    textAlign: TextAlign.center,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 16,
+                            backgroundColor: AppColors.primaryTint10,
+                            backgroundImage: greetingImage,
+                            child: greetingImage == null
+                                ? Text(
+                                    greetingName[0].toUpperCase(),
                                     style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.primary,
                                     ),
-                                  ),
-                                ),
+                                  )
+                                : null,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '$greetingName ',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 23,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.3,
                               ),
-                          ],
-                        );
-                      },
-                    ),
-                      onPressed: () => context.push(RouteNames.notifications),
-                      tooltip: 'Notifications',
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                  Builder(
-                    builder: (ctx) => IconButton(
-                      constraints:
-                          const BoxConstraints.tightFor(width: 34, height: 34),
-                      padding: EdgeInsets.zero,
-                      iconSize: 20,
-                      icon: const Icon(Icons.menu_rounded),
-                      onPressed: () => Scaffold.of(ctx).openEndDrawer(),
-                      tooltip: 'Settings',
+                  Text(
+                    'Based on your research interests and skills',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      color: AppColors.textSecondaryLight,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 2),
-              Text(
-                'Hi $greetingName 👋',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 23,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.3,
-                ),
-              ),
-              Text(
-                'Based on your research interests and skills',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 12,
-                  color: AppColors.textSecondaryLight,
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

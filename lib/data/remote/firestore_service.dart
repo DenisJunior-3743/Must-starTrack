@@ -323,7 +323,8 @@ class FirestoreService {
   }) async {
     Query<Map<String, dynamic>> query = _posts
         .where('is_archived', isEqualTo: false)
-        .where('moderation_status', whereIn: [null, 'approved']) // Only show approved or unmoderated posts
+      // Firestore whereIn cannot contain null.
+      .where('moderation_status', isEqualTo: 'approved')
         .orderBy('created_at', descending: true)
         .limit(pageSize);
 
@@ -359,7 +360,8 @@ class FirestoreService {
         .limit(limit);
 
     if (!includePendingForAdmin) {
-      query = query.where('moderation_status', whereIn: [null, 'approved']);
+      // Firestore whereIn cannot contain null.
+      query = query.where('moderation_status', isEqualTo: 'approved');
     }
 
     final snapshot = await query.get(const GetOptions(source: Source.serverAndCache));

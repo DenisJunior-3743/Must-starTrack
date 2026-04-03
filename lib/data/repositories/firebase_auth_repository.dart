@@ -127,10 +127,17 @@ class FirebaseAuthRepository implements AuthRepository {
     required String email,
     required String password,
   }) async {
+    final normalizedEmail = email.trim().toLowerCase();
+    final normalizedPassword = password.trim();
+
+    if (normalizedEmail.isEmpty || normalizedPassword.isEmpty) {
+      return const Left(ValidationFailure('Email and password are required.'));
+    }
+
     try {
       final credential = await _firebaseAuth.signInWithEmailAndPassword(
-        email: email.trim(),
-        password: password,
+        email: normalizedEmail,
+        password: normalizedPassword,
       );
 
       final fbUser = credential.user;
@@ -144,6 +151,15 @@ class FirebaseAuthRepository implements AuthRepository {
 
       return _resolveAndCacheUser(fbUser);
     } on fb.FirebaseAuthException catch (e) {
+      if (e.code == 'invalid-credential' || e.code == 'wrong-password') {
+        final localUser = await _userDao.getUserByEmail(normalizedEmail);
+        if (localUser != null) {
+          return const Left(AuthFailure(
+            'Firebase rejected this password. If it was changed offline, '
+            'it has not been applied to Firebase Auth yet.',
+          ));
+        }
+      }
       return Left(_mapFirebaseAuthError(e));
     } catch (e) {
       return Left(UnexpectedFailure(e.toString()));
@@ -319,6 +335,74 @@ class FirebaseAuthRepository implements AuthRepository {
   Future<Either<Failure, void>> sendPasswordReset(String email) async {
     try {
       await _firebaseAuth.sendPasswordResetEmail(email: email.trim());
+      return const Right(null);
+    } on fb.FirebaseAuthException catch (e) {
+      return Left(_mapFirebaseAuthError(e));
+    } catch (e) {
+      return Left(UnexpectedFailure(e.toString()));
+    }
+  }
+
+  @override
+  Future<Either<Failure, void>> resetPasswordManually({
+    required String username,
+    required String newPassword,
+  }) async {
+    final normalized = username.trim();
+    if (normalized.isEmpty) {
+      return const Left(ValidationFailure('Username is required.'));
+    }
+    if (newPassword.length < 8) {
+      return const Left(
+        WeakPasswordFailure('Password must be at least 8 characters.'),
+      );
+    }
+
+    try {
+      final targetUser = await _userDao.getUserByUsername(normalized);
+      if (targetUser == null) {
+        return const Left(
+          UserNotFoundFailure('No account was found for that username.'),
+        );
+      }
+
+      final current = _firebaseAuth.currentUser;
+      if (current == null || current.uid != targetUser.id) {
+        return const Left(
+          PermissionFailure(
+            'Manual reset can only change password for the currently signed-in account. '
+            'Continue with Google using this same account, then apply reset again.',
+          ),
+        );
+      }
+
+      await current.updatePassword(newPassword);
+
+      final now = DateTime.now();
+      final updatedUser = targetUser.copyWith(updatedAt: now);
+
+      // Local-first persistence so sync jobs can replay offline.
+      await _userDao.updateUser(updatedUser);
+
+      try {
+        await _firestore.collection('users').doc(updatedUser.id).set(
+          {
+            ...updatedUser.toJson(),
+            'passwordResetAt': now.toIso8601String(),
+            'passwordResetMode': 'manual',
+            'passwordResetUserName': normalized,
+          },
+          SetOptions(merge: true),
+        );
+      } catch (_) {
+        await _syncDao.enqueue(
+          entity: 'users',
+          entityId: updatedUser.id,
+          operation: 'update',
+          payload: updatedUser.toJson(),
+        );
+      }
+
       return const Right(null);
     } on fb.FirebaseAuthException catch (e) {
       return Left(_mapFirebaseAuthError(e));
