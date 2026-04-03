@@ -1978,9 +1978,21 @@ class SyncService {
       for (final user in users) {
         await _userDao.insertUser(user);
       }
+
+      // Best effort for any IDs omitted by batched fetch (missing docs, limits,
+      // or eventual consistency): try fetching individually.
+      for (final userId in userIds) {
+        final local = await _userDao.getUserById(userId);
+        if (local != null) continue;
+        final remote = await _firestore.getUser(userId);
+        if (remote != null) {
+          await _userDao.insertUser(remote);
+        }
+      }
     }
 
     var upserted = 0;
+    var deferred = 0;
     for (final doc in docsById.values) {
       final data = doc.data();
       final senderId = data['sender_id'] as String?;
@@ -1988,35 +2000,56 @@ class SyncService {
       if (senderId == null || receiverId == null) {
         continue;
       }
+
+      final sender = await _userDao.getUserById(senderId);
+      final receiver = await _userDao.getUserById(receiverId);
+      if (sender == null || receiver == null) {
+        deferred++;
+        debugPrint(
+          '[SyncService] Deferring collab_request ${doc.id}: '
+          'missing local sender/receiver (sender=$senderId receiver=$receiverId)',
+        );
+        continue;
+      }
+
       final createdAt = data['created_at'];
       final updatedAt = data['updated_at'];
       final respondedAt = data['responded_at'];
-      await db.insert(
-        DatabaseSchema.tableCollabRequests,
-        {
-          'id': doc.id,
-          'sender_id': senderId,
-          'receiver_id': receiverId,
-          'post_id': data['post_id'] as String?,
-          'message': data['message'] as String?,
-          'status': data['status'] as String? ?? 'pending',
-          'responded_at': respondedAt is Timestamp
-              ? respondedAt.toDate().toIso8601String()
-              : respondedAt as String?,
-          'created_at': createdAt is Timestamp
-              ? createdAt.toDate().toIso8601String()
-              : DateTime.now().toIso8601String(),
-          'updated_at': updatedAt is Timestamp
-              ? updatedAt.toDate().toIso8601String()
-              : DateTime.now().toIso8601String(),
-          'sync_status': 1,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-      upserted++;
+      try {
+        await db.insert(
+          DatabaseSchema.tableCollabRequests,
+          {
+            'id': doc.id,
+            'sender_id': senderId,
+            'receiver_id': receiverId,
+            'post_id': data['post_id'] as String?,
+            'message': data['message'] as String?,
+            'status': data['status'] as String? ?? 'pending',
+            'responded_at': respondedAt is Timestamp
+                ? respondedAt.toDate().toIso8601String()
+                : respondedAt as String?,
+            'created_at': createdAt is Timestamp
+                ? createdAt.toDate().toIso8601String()
+                : DateTime.now().toIso8601String(),
+            'updated_at': updatedAt is Timestamp
+                ? updatedAt.toDate().toIso8601String()
+                : DateTime.now().toIso8601String(),
+            'sync_status': 1,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        upserted++;
+      } on DatabaseException catch (e) {
+        deferred++;
+        debugPrint(
+          '[SyncService] Deferring collab_request ${doc.id} due to SQLite constraint: $e',
+        );
+      }
     }
     debugPrint(
-        '[SyncService] Hydrated $upserted collaboration request row(s) for user=$currentUid');
+      '[SyncService] Hydrated collab_requests for user=$currentUid '
+      'upserted=$upserted deferred=$deferred',
+    );
   }
 
   Future<void> _syncRemoteOpportunityJoins(String currentUid) async {

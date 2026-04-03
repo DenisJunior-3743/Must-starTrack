@@ -192,7 +192,18 @@ class SettingsDrawer extends StatelessWidget {
     );
     if (confirmed == true) {
       await sl<AuthCubit>().logout();
-      if (context.mounted) context.go(RouteNames.login);
+      if (!context.mounted) return;
+      context.go(RouteNames.home);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Logged out successfully. You are now viewing in guest mode.',
+            style: GoogleFonts.plusJakartaSans(),
+          ),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 

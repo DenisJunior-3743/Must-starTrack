@@ -46,6 +46,14 @@ abstract class AuthRepository {
   /// Sends a password reset email via Firebase Auth.
   Future<Either<Failure, void>> sendPasswordReset(String email);
 
+  /// Manually resets a password using a username-like identifier.
+  ///
+  /// This updates local persistence first, then syncs the user record remotely.
+  Future<Either<Failure, void>> resetPasswordManually({
+    required String username,
+    required String newPassword,
+  });
+
   /// Sends an email verification link.
   Future<Either<Failure, void>> sendEmailVerification();
 
@@ -95,6 +103,15 @@ class StubAuthRepository implements AuthRepository {
 
   @override
   Future<Either<Failure, void>> sendPasswordReset(String email) async {
+    await Future.delayed(const Duration(seconds: 1));
+    return const Right(null);
+  }
+
+  @override
+  Future<Either<Failure, void>> resetPasswordManually({
+    required String username,
+    required String newPassword,
+  }) async {
     await Future.delayed(const Duration(seconds: 1));
     return const Right(null);
   }
