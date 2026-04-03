@@ -55,6 +55,7 @@ import '../models/post_model.dart';
 import '../models/user_model.dart';
 import '../models/group_model.dart';
 import '../models/group_member_model.dart';
+import '../../core/router/route_guards.dart';
 
 // ── Sync result ───────────────────────────────────────────────────────────────
 
@@ -235,25 +236,41 @@ class SyncService {
   /// same Future) rather than returning early with stale data. This prevents
   /// the race where [loadFeed] queries SQLite before the ongoing sync has
   /// finished inserting posts.
-  Future<void> syncRemoteToLocal({int postLimit = 50}) {
+  Future<void> syncRemoteToLocal({
+    int postLimit = 50,
+    bool forceIncludePendingForAdmin = false,
+  }) {
     if (_isHydrating) {
       debugPrint(
           '[SyncService] syncRemoteToLocal already running — joining existing hydration');
       return _hydrationFuture ?? Future<void>.value();
     }
     _isHydrating = true;
-    _hydrationFuture = _runHydration(postLimit: postLimit);
+    _hydrationFuture = _runHydration(
+      postLimit: postLimit,
+      forceIncludePendingForAdmin: forceIncludePendingForAdmin,
+    );
     return _hydrationFuture!;
   }
 
-  Future<void> _runHydration({int postLimit = 50}) async {
+  Future<void> _runHydration({
+    int postLimit = 50,
+    bool forceIncludePendingForAdmin = false,
+  }) async {
     final syncedPostIds = <String>[];
     try {
+      // When called from admin dashboard, pre-hydrate ALL users first so that
+      // every group, follow, and post row can satisfy its FK constraints.
+      if (forceIncludePendingForAdmin) {
+        await _runHydrationStep('all_users', _syncAllUsers);
+      }
       await _runHydrationStep('posts', () async {
         debugPrint(
             '[SyncService] posts hydration starting, postLimit=$postLimit');
 
-        final includePendingForAdmin = await _currentUserCanReviewPendingPosts();
+        final includePendingForAdmin = forceIncludePendingForAdmin
+            ? true
+            : await _currentUserCanReviewPendingPosts();
         final posts = await _firestore.getRecentPosts(
           limit: postLimit,
           includePendingForAdmin: includePendingForAdmin,
@@ -275,23 +292,31 @@ class SyncService {
         debugPrint(
             '[SyncService] posts hydration unique authorIds=${authorIds.length}');
 
-        final users = await _firestore.getUsersByIds(authorIds);
+        final placeholderUsers = <String, UserModel>{
+          for (final post in posts)
+            if (post.authorId.isNotEmpty)
+              post.authorId: _buildPlaceholderUser(
+                userId: post.authorId,
+                displayName: post.authorName,
+                photoUrl: post.authorPhotoUrl,
+                role: post.authorRole,
+              ),
+        };
+        final existingAuthorIds = await _cacheUsersAndGetExistingIds(
+          authorIds,
+          placeholderUsers: placeholderUsers,
+          logContext: 'post_authors',
+        );
         debugPrint(
-            '[SyncService] posts hydration fetched ${users.length} author docs');
-
-        for (final user in users) {
-          try {
-            await _userDao.insertUser(user);
-            debugPrint('[SyncService] inserted user=${user.id}');
-          } catch (error, stackTrace) {
-            debugPrint(
-                '[SyncService] failed inserting user=${user.id}: $error');
-            debugPrint('$stackTrace');
-          }
-        }
+            '[SyncService] posts hydration resolved authors local=${existingAuthorIds.length}/${authorIds.length}');
 
         for (final post in posts) {
           try {
+            if (!existingAuthorIds.contains(post.authorId)) {
+              debugPrint(
+                  '[SyncService] deferring post=${post.id} because author=${post.authorId} is still missing locally');
+              continue;
+            }
             await _postDao.insertPost(post);
             debugPrint(
               '[SyncService] inserted post=${post.id} author=${post.authorId} '
@@ -446,6 +471,172 @@ class SyncService {
     }
   }
 
+  /// Fetches every user document from Firestore and upserts into local SQLite.
+  /// Called at the top of admin hydration so all FK dependencies are satisfied
+  /// before posts / groups / follows are written.
+  Future<void> _syncAllUsers() async {
+    debugPrint('[SyncService][UserSync] ── _syncAllUsers starting ──────────────');
+
+    // ── Remote count ──────────────────────────────────────────────────────
+    final users = await _firestore.getAllUsersFromRemote(limit: 500);
+    debugPrint(
+        '[SyncService][UserSync] remote Firestore user count = ${users.length}');
+    for (final user in users) {
+      debugPrint(
+          '[SyncService][UserSync]   remote uid=${user.id} '
+          'email=${user.email} role=${user.role.name}');
+    }
+
+    // ── Local count before upsert ─────────────────────────────────────────
+    final localBefore = await _userDao.getUserCount();
+    debugPrint(
+        '[SyncService][UserSync] local SQLite count BEFORE upsert = $localBefore');
+
+    // ── Upsert ────────────────────────────────────────────────────────────
+    var upserted = 0;
+    var failed = 0;
+    for (final user in users) {
+      try {
+        await _userDao.insertUser(user);
+        upserted++;
+      } catch (error) {
+        failed++;
+        debugPrint(
+            '[SyncService][UserSync] ⚠ failed upserting uid=${user.id} '
+            'email=${user.email} role=${user.role.name}: $error');
+      }
+    }
+
+    // ── Local count after upsert ──────────────────────────────────────────
+    final localAfter = await _userDao.getUserCount();
+    debugPrint(
+        '[SyncService][UserSync] local SQLite count AFTER upsert  = $localAfter');
+    debugPrint(
+        '[SyncService][UserSync] summary  remote=${users.length} '
+        'upserted=$upserted failed=$failed '
+        'localBefore=$localBefore localAfter=$localAfter '
+        'delta=${localAfter - localBefore}');
+    if (localAfter < users.length) {
+      debugPrint(
+          '[SyncService][UserSync] ⚠ CONSISTENCY GAP: '
+          'remote=${users.length} but local=$localAfter '
+          '— ${users.length - localAfter} user(s) missing locally. '
+          'Check failed upserts above for FK/constraint errors.');
+    } else {
+      debugPrint('[SyncService][UserSync] ✓ local count matches remote.');
+    }
+    debugPrint('[SyncService][UserSync] ── _syncAllUsers done ───────────────────');
+  }
+
+  Future<Set<String>> _getExistingLocalUserIds(Iterable<String> userIds) async {
+    final existing = <String>{};
+    for (final userId in userIds.where((id) => id.isNotEmpty)) {
+      final user = await _userDao.getUserById(userId);
+      if (user != null) {
+        existing.add(userId);
+      }
+    }
+    return existing;
+  }
+
+  String _placeholderEmailForUser(String userId) {
+    return 'placeholder+$userId@must-startrack.invalid';
+  }
+
+  UserModel _buildPlaceholderUser({
+    required String userId,
+    String? displayName,
+    String? photoUrl,
+    String? role,
+    String? email,
+  }) {
+    final now = DateTime.now();
+    final normalizedEmail = (email ?? '').trim().toLowerCase();
+    return UserModel(
+      id: userId,
+      firebaseUid: userId,
+      email: normalizedEmail.isNotEmpty
+          ? normalizedEmail
+          : _placeholderEmailForUser(userId),
+      role: UserRole.fromString(role),
+      displayName: (displayName ?? '').trim().isEmpty ? null : displayName?.trim(),
+      photoUrl: (photoUrl ?? '').trim().isEmpty ? null : photoUrl?.trim(),
+      createdAt: now,
+      updatedAt: now,
+    );
+  }
+
+  Future<void> _insertPlaceholderUser(
+    UserModel user, {
+    required String logContext,
+  }) async {
+    try {
+      await _userDao.insertUser(user);
+      debugPrint(
+          '[SyncService] inserted placeholder user=${user.id} '
+          'email=${user.email} role=${user.role.name} context=$logContext');
+    } catch (error, stackTrace) {
+      debugPrint(
+          '[SyncService] failed inserting placeholder user=${user.id} '
+          'email=${user.email} context=$logContext: $error');
+      debugPrint('$stackTrace');
+    }
+  }
+
+  Future<Set<String>> _cacheUsersAndGetExistingIds(
+    Iterable<String> userIds, {
+    Map<String, UserModel>? placeholderUsers,
+    String logContext = 'dependencies',
+  }) async {
+    final normalizedIds = userIds.where((id) => id.isNotEmpty).toSet();
+    if (normalizedIds.isEmpty) {
+      return const <String>{};
+    }
+
+    try {
+      final users = await _firestore.getUsersByIds(normalizedIds);
+      for (final user in users) {
+        try {
+          await _userDao.insertUser(user);
+        } catch (error, stackTrace) {
+          debugPrint('[SyncService] failed inserting dependency user=${user.id}: $error');
+          debugPrint('$stackTrace');
+        }
+      }
+    } catch (error, stackTrace) {
+      debugPrint('[SyncService] failed fetching dependency users: $error');
+      debugPrint('$stackTrace');
+    }
+
+    var existingIds = await _getExistingLocalUserIds(normalizedIds);
+    final missingIds = normalizedIds.difference(existingIds);
+    if (missingIds.isNotEmpty) {
+      debugPrint(
+          '[SyncService] unresolved user dependencies context=$logContext '
+          'missing=${missingIds.length} ids=$missingIds');
+      for (final userId in missingIds) {
+        final placeholder = placeholderUsers?[userId] ??
+            _buildPlaceholderUser(userId: userId);
+        await _insertPlaceholderUser(placeholder, logContext: logContext);
+      }
+      existingIds = await _getExistingLocalUserIds(normalizedIds);
+    }
+
+    return existingIds;
+  }
+
+  Future<bool> _localGroupExists(String groupId) async {
+    final db = await DatabaseHelper.instance.database;
+    final rows = await db.query(
+      DatabaseSchema.tableGroups,
+      columns: ['id'],
+      where: 'id = ?',
+      whereArgs: [groupId],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
   Future<void> _syncRemoteGroups(String? currentUid) async {
     if (currentUid == null || currentUid.isEmpty) {
       debugPrint('[SyncService] skipping _syncRemoteGroups (empty user id)');
@@ -464,26 +655,96 @@ class SyncService {
     final groups = allGroupIds.isEmpty
         ? recentGroups
         : await _firestore.getGroupsByIds(allGroupIds);
-    for (final group in groups) {
-      await _groupDao.upsertGroup(group);
-    }
+
+    final referencedUserIds = <String>{
+      ...groups.map((group) => group.creatorId),
+      ...personalMemberships.map((member) => member.userId),
+    };
 
     final groupMembers = allGroupIds.isEmpty
         ? personalMemberships
         : await _firestore.getGroupMembersByGroupIds(allGroupIds);
+    referencedUserIds.addAll(groupMembers.map((member) => member.userId));
+
+    final placeholderUsers = <String, UserModel>{
+      for (final group in groups)
+        if (group.creatorId.isNotEmpty)
+          group.creatorId: _buildPlaceholderUser(
+            userId: group.creatorId,
+            displayName: group.creatorName,
+          ),
+      for (final member in groupMembers)
+        if (member.userId.isNotEmpty)
+          member.userId: _buildPlaceholderUser(
+            userId: member.userId,
+            displayName: member.userName,
+            photoUrl: member.userPhotoUrl,
+          ),
+    };
+    final existingUserIds = await _cacheUsersAndGetExistingIds(
+      referencedUserIds,
+      placeholderUsers: placeholderUsers,
+      logContext: 'group_dependencies',
+    );
+
+    var upsertedGroups = 0;
+    var deferredGroups = 0;
+    for (final group in groups) {
+      if (!existingUserIds.contains(group.creatorId)) {
+        deferredGroups++;
+        debugPrint(
+          '[SyncService] deferring group=${group.id} because creator=${group.creatorId} is missing locally',
+        );
+        continue;
+      }
+      try {
+        await _groupDao.upsertGroup(group);
+        upsertedGroups++;
+      } catch (error, stackTrace) {
+        deferredGroups++;
+        debugPrint('[SyncService] failed inserting group=${group.id}: $error');
+        debugPrint('$stackTrace');
+      }
+    }
+
     final mergedMembers = <String, GroupMemberModel>{
       for (final member in groupMembers) member.id: member,
       for (final member in personalMemberships) member.id: member,
     };
-    await _groupMemberDao.upsertMembers(mergedMembers.values.toList());
+
+    var upsertedMembers = 0;
+    var deferredMembers = 0;
+    for (final member in mergedMembers.values) {
+      final groupExists = await _localGroupExists(member.groupId);
+      final userExists = existingUserIds.contains(member.userId);
+      if (!groupExists || !userExists) {
+        deferredMembers++;
+        debugPrint(
+          '[SyncService] deferring group_member=${member.id} missingGroup=$groupExists missingUser=$userExists',
+        );
+        continue;
+      }
+      try {
+        await _groupMemberDao.upsertMember(member);
+        upsertedMembers++;
+      } catch (error, stackTrace) {
+        deferredMembers++;
+        debugPrint('[SyncService] failed inserting group_member=${member.id}: $error');
+        debugPrint('$stackTrace');
+      }
+    }
 
     for (final groupId in allGroupIds) {
+      if (!await _localGroupExists(groupId)) {
+        continue;
+      }
       final count = await _groupMemberDao.countActiveMembers(groupId);
       await _groupDao.updateMemberCount(groupId, count);
     }
 
     debugPrint(
-      '[SyncService] Hydrated groups=${groups.length} memberships=${mergedMembers.length}',
+      '[SyncService] Hydrated groups upserted=$upsertedGroups deferred=$deferredGroups '
+      'memberships upserted=$upsertedMembers deferred=$deferredMembers',
     );
   }
 
@@ -1352,20 +1613,57 @@ class SyncService {
   }
 
   Future<bool> _currentUserCanReviewPendingPosts() async {
-    final currentUid = FirebaseAuth.instance.currentUser?.uid;
-    if (currentUid == null || currentUid.isEmpty) {
+    final authUser = FirebaseAuth.instance.currentUser;
+    if (authUser == null) {
       return false;
     }
+
+    final currentUid = authUser.uid;
+    if (currentUid.isEmpty) {
+      return false;
+    }
+
+    // 1) Fast path: token claims (if present).
+    try {
+      final claims = await authUser.getIdTokenResult();
+      final roleClaim = claims.claims?['role']?.toString().trim().toLowerCase();
+      if (roleClaim == 'admin' || roleClaim == 'super_admin') {
+        return true;
+      }
+      final isAdminClaim = claims.claims?['isAdmin'];
+      if (isAdminClaim == true) {
+        return true;
+      }
+    } catch (_) {
+      // Fall through to profile checks.
+    }
+
+    // 2) Firestore profile role.
     try {
       final profileDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(currentUid)
           .get(const GetOptions(source: Source.serverAndCache));
       final role = (profileDoc.data()?['role'] as String?)?.trim().toLowerCase();
-        return role == 'admin' || role == 'super_admin';
+      if (role == 'admin' || role == 'super_admin') {
+        return true;
+      }
     } catch (_) {
-      return false;
+      // Fall through to local profile role.
     }
+
+    // 3) Local user cache fallback.
+    try {
+      final localUser = await _userDao.getUserById(currentUid);
+      final localRole = localUser?.role.name.trim().toLowerCase();
+      if (localRole == 'admin' || localRole == 'super_admin') {
+        return true;
+      }
+    } catch (_) {
+      // Ignore and default to false.
+    }
+
+    return false;
   }
 
   Future<List<String>> _getAdminUserIds() async {
@@ -1458,13 +1756,16 @@ class SyncService {
       if (followingId != null) userIds.add(followingId);
     }
     if (userIds.isNotEmpty) {
-      final users = await _firestore.getUsersByIds(userIds);
-      for (final user in users) {
-        await _userDao.insertUser(user);
-      }
+      await _cacheUsersAndGetExistingIds(
+        userIds,
+        logContext: 'follow_dependencies',
+      );
     }
 
+    final existingUserIds = await _getExistingLocalUserIds(userIds);
+
     var upserted = 0;
+    var deferred = 0;
     for (final doc in docs) {
       final data = doc.data();
       final followerId = data['follower_id'] as String?;
@@ -1472,24 +1773,38 @@ class SyncService {
       if (followerId == null || followingId == null) {
         continue;
       }
+      if (!existingUserIds.contains(followerId) ||
+          !existingUserIds.contains(followingId)) {
+        deferred++;
+        debugPrint(
+          '[SyncService] deferring follow=${doc.id} because follower=$followerId or followee=$followingId is missing locally',
+        );
+        continue;
+      }
       final createdAt = data['created_at'];
-      await db.insert(
-        DatabaseSchema.tableFollows,
-        {
-          'id': doc.id,
-          'follower_id': followerId,
-          'followee_id': followingId,
-          'created_at': createdAt is Timestamp
-              ? createdAt.toDate().toIso8601String()
-              : DateTime.now().toIso8601String(),
-          'sync_status': 1,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-      upserted++;
+      try {
+        await db.insert(
+          DatabaseSchema.tableFollows,
+          {
+            'id': doc.id,
+            'follower_id': followerId,
+            'followee_id': followingId,
+            'created_at': createdAt is Timestamp
+                ? createdAt.toDate().toIso8601String()
+                : DateTime.now().toIso8601String(),
+            'sync_status': 1,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        upserted++;
+      } catch (error, stackTrace) {
+        deferred++;
+        debugPrint('[SyncService] failed inserting follow=${doc.id}: $error');
+        debugPrint('$stackTrace');
+      }
     }
     debugPrint(
-        '[SyncService] Hydrated $upserted follow row(s) for user=$currentUid');
+        '[SyncService] Hydrated follow rows for user=$currentUid upserted=$upserted deferred=$deferred');
   }
 
   Future<void> _syncRemoteMessages(String currentUid) async {

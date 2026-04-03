@@ -51,7 +51,18 @@ service cloud.firestore {
     }
 
     function isMustUser() {
-      return request.auth != null && hasAllowedDomainForRole();
+      return request.auth != null && (hasAllowedDomainForRole() || isRegisteredMustUser());
+    }
+
+    // Fallback for users whose email domain doesn't perfectly match their role
+    // (e.g. test accounts, newly registered users whose Firestore doc was
+    // just created). Accepts any authenticated user who has a valid profile
+    // document with a recognized role.
+    function isRegisteredMustUser() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(uid()))
+        && get(/databases/$(database)/documents/users/$(uid())).data.get('role', '')
+           in ['student', 'lecturer', 'staff', 'admin', 'super_admin'];
     }
 
     function uid() {
@@ -59,7 +70,10 @@ service cloud.firestore {
     }
 
     function userRole() {
-      return get(/databases/$(database)/documents/users/$(uid())).data.role;
+      // Safe against missing user document — returns '' instead of throwing.
+      return exists(/databases/$(database)/documents/users/$(uid()))
+        ? get(/databases/$(database)/documents/users/$(uid())).data.get('role', '')
+        : '';
     }
 
     function isAdmin() {
@@ -365,11 +379,15 @@ service cloud.firestore {
     // RECOMMENDATION LOGS
     match /recommendation_logs/{logId} {
 
-      allow read: if isMustUser()
-        && (resource.data.user_id == uid() || isAdmin());
+      allow read: if request.auth != null
+        && (resource.data.user_id == request.auth.uid || isAdmin());
 
-      allow create, update: if isMustUser()
-        && request.resource.data.user_id == uid();
+      // Analytics writes: only require auth + ownership.
+      // Omitting isMustUser() here avoids userRole() get() failures
+      // that would block logging when the Firestore user doc is briefly
+      // unavailable during a first-launch or offline hydration cycle.
+      allow create, update: if request.auth != null
+        && request.resource.data.user_id == request.auth.uid;
 
       allow delete: if isAdmin();
     }

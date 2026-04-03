@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -130,9 +131,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final _userDao = sl<UserDao>();
   final _syncQueueDao = sl<SyncQueueDao>();
   final _syncService = sl<SyncService>();
+  final _firestoreService = sl<FirestoreService>();
   late final FacultyManagementCubit _facultyManagementCubit;
   late final CourseManagementCubit _courseManagementCubit;
   bool _isSidebarVisible = true;
+  StreamSubscription<List<UserModel>>? _usersSub;
 
   int _selectedTab = 0;
   bool _loading = true;
@@ -157,10 +160,80 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     _facultyManagementCubit = FacultyManagementCubit();
     _courseManagementCubit = CourseManagementCubit();
     _reloadDashboard();
+    _subscribeToUsersStream();
+  }
+
+  /// Listens to the Firestore users collection so the admin user list updates
+  /// the moment a new user registers or an existing profile changes — no
+  /// manual refresh needed.
+  void _subscribeToUsersStream() {
+    _usersSub = _firestoreService.watchAllUsers(limit: 500).listen(
+      (remoteUsers) async {
+        debugPrint(
+            '[AdminDashboard][UserSync] stream event: '
+            'remoteUsers=${remoteUsers.length}');
+        for (final user in remoteUsers) {
+          debugPrint(
+              '[AdminDashboard][UserSync]   stream uid=${user.id} '
+              'email=${user.email} role=${user.role.name}');
+        }
+
+        // Upsert every user into local SQLite so FK dependencies are satisfied.
+        var upserted = 0;
+        var failed = 0;
+        for (final user in remoteUsers) {
+          try {
+            await _userDao.insertUser(user);
+            upserted++;
+          } catch (error) {
+            failed++;
+            debugPrint(
+                '[AdminDashboard][UserSync] ⚠ stream upsert failed '
+                'uid=${user.id} email=${user.email}: $error');
+          }
+        }
+
+        final localCount = await _userDao.getUserCount();
+        debugPrint(
+            '[AdminDashboard][UserSync] after stream upsert: '
+            'remote=${remoteUsers.length} local=$localCount '
+            'upserted=$upserted failed=$failed');
+        if (localCount < remoteUsers.length) {
+          debugPrint(
+              '[AdminDashboard][UserSync] ⚠ CONSISTENCY GAP: '
+              '${remoteUsers.length - localCount} user(s) missing from local DB.');
+        }
+
+        if (!mounted) return;
+        setState(() {
+          _allUsers = remoteUsers;
+          _totalUsers = remoteUsers.length;
+          _filterUsers(_userSearchQuery);
+        });
+      },
+      onError: (Object error) {
+        debugPrint('[AdminDashboard] users stream error: $error');
+        Future<void>.microtask(() async {
+          final localUsers = await _userDao.getAllUsers(pageSize: 500);
+          final localCount = await _userDao.getUserCount();
+          debugPrint(
+              '[AdminDashboard][UserSync] stream fallback to local cache: '
+              'getUserCount()=$localCount '
+              'getAllUsers(pageSize:500).length=${localUsers.length}');
+          if (!mounted) return;
+          setState(() {
+            _allUsers = localUsers;
+            _totalUsers = localCount;
+            _filterUsers(_userSearchQuery);
+          });
+        });
+      },
+    );
   }
 
   @override
   void dispose() {
+    _usersSub?.cancel();
     _facultyManagementCubit.close();
     _courseManagementCubit.close();
     super.dispose();
@@ -171,10 +244,34 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Future<void> _reloadDashboard() async {
     setState(() => _loading = true);
     try {
-      final postStats = await _postDao.getPostStats();
-      final pendingPosts = await _postDao.getPendingModerationPosts(limit: 80);
-      final flaggedRows = await _activityLogDao.getReportedPostSummaries(limit: 80);
+      // Ensure dashboard decisions use fresh remote data, not stale local cache.
+      await _syncService.processPendingSync();
+      await _syncService.syncRemoteToLocal(
+        postLimit: 250,
+        forceIncludePendingForAdmin: true,
+      );
+
+      // ── User-count diagnostics ───────────────────────────────────────
+      final localCountAfterSync = await _userDao.getUserCount();
       final allUsers = await _userDao.getAllUsers(pageSize: 500);
+      debugPrint(
+          '[AdminDashboard][UserSync] _reloadDashboard: '
+          'getUserCount()=$localCountAfterSync '
+          'getAllUsers(pageSize:500).length=${allUsers.length}');
+      if (localCountAfterSync != allUsers.length) {
+        debugPrint(
+            '[AdminDashboard][UserSync] ⚠ pageSize cap hit or query mismatch: '
+            'count=$localCountAfterSync but list=${allUsers.length}');
+      }
+      for (final user in allUsers) {
+        debugPrint(
+            '[AdminDashboard][UserSync]   local uid=${user.id} '
+            'email=${user.email} role=${user.role.name}');
+      }
+
+      final postStats = await _postDao.getPostStats();
+      final pendingPosts = await _postDao.getPendingModerationPosts(limit: 250);
+      final flaggedRows = await _activityLogDao.getReportedPostSummaries(limit: 80);
       final syncPending = await _syncQueueDao.getPendingCount();
       final syncDeadLetters = await _syncQueueDao.getDeadLetterCount();
       final weeklyReports = await _activityLogDao.getActionCountForDays(action: 'report_post', days: 7);

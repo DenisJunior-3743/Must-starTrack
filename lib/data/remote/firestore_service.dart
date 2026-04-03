@@ -251,18 +251,66 @@ class FirestoreService {
     await _users.doc(user.id).set(user.toJson(), SetOptions(merge: true));
   }
 
+  String _firestoreDateToIso(dynamic value, {DateTime? fallback}) {
+    if (value is Timestamp) {
+      return value.toDate().toIso8601String();
+    }
+    if (value is DateTime) {
+      return value.toIso8601String();
+    }
+    if (value is String && value.trim().isNotEmpty) {
+      final parsed = DateTime.tryParse(value.trim());
+      if (parsed != null) {
+        return parsed.toIso8601String();
+      }
+    }
+    return (fallback ?? DateTime.now()).toIso8601String();
+  }
+
+  UserModel _decodeUserDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? const <String, dynamic>{};
+    final now = DateTime.now();
+    final createdAt = _firestoreDateToIso(
+      data['createdAt'] ?? data['created_at'],
+      fallback: now,
+    );
+    final updatedAt = _firestoreDateToIso(
+      data['updatedAt'] ?? data['updated_at'] ?? data['createdAt'] ?? data['created_at'],
+      fallback: now,
+    );
+    final lastSeenAtRaw = data['lastSeenAt'] ?? data['last_seen_at'];
+
+    return UserModel.fromJson({
+      'id': doc.id,
+      'firebaseUid': data['firebaseUid'] ?? data['firebase_uid'],
+      'email': data['email'] ?? '',
+      'role': data['role'],
+      'displayName': data['displayName'] ?? data['display_name'],
+      'photoUrl': data['photoUrl'] ?? data['photo_url'],
+      'isEmailVerified': data['isEmailVerified'] ?? data['is_email_verified'] ?? false,
+      'isSuspended': data['isSuspended'] ?? data['is_suspended'] ?? false,
+      'isBanned': data['isBanned'] ?? data['is_banned'] ?? false,
+      'lastSeenAt': lastSeenAtRaw == null
+          ? null
+          : _firestoreDateToIso(lastSeenAtRaw, fallback: now),
+      'createdAt': createdAt,
+      'updatedAt': updatedAt,
+      'profile': data['profile'],
+    });
+  }
+
   /// Fetches a single user. Returns null if not found.
   Future<UserModel?> getUser(String userId) async {
     final doc = await _users.doc(userId).get();
     if (!doc.exists || doc.data() == null) return null;
-    return UserModel.fromJson({'id': doc.id, ...doc.data()!});
+    return _decodeUserDoc(doc);
   }
 
   /// Streams profile changes for real-time profile screen updates (Phase 6).
   Stream<UserModel?> watchUser(String userId) {
     return _users.doc(userId).snapshots().map((snap) {
       if (!snap.exists || snap.data() == null) return null;
-      return UserModel.fromJson({'id': snap.id, ...snap.data()!});
+      return _decodeUserDoc(snap);
     });
   }
 
@@ -419,15 +467,94 @@ class FirestoreService {
 
       final snapshot = await _users.where(FieldPath.documentId, whereIn: batch).get();
       for (final doc in snapshot.docs) {
-        final data = doc.data();
         try {
-          users.add(UserModel.fromJson({'id': doc.id, ...data}));
+          users.add(_decodeUserDoc(doc));
         } catch (error) {
-          debugPrint('[FirestoreService] Skipping unreadable user ${doc.id}: $error');
+          debugPrint(
+              '[FirestoreService] Skipping unreadable user ${doc.id}: $error keys=${doc.data().keys.toList()}');
         }
       }
     }
     return users;
+  }
+
+  /// Fetches all users from Firestore for admin full-hydration.
+  Future<List<UserModel>> getAllUsersFromRemote({int limit = 500}) async {
+    try {
+      final snapshot = await _users.get(const GetOptions(source: Source.serverAndCache));
+      final users = <UserModel>[];
+      for (final doc in snapshot.docs) {
+        try {
+          users.add(_decodeUserDoc(doc));
+        } catch (error) {
+          debugPrint(
+              '[FirestoreService] Skipping unreadable user ${doc.id}: $error keys=${doc.data().keys.toList()}');
+        }
+      }
+      users.sort((left, right) => right.createdAt.compareTo(left.createdAt));
+      debugPrint(
+          '[FirestoreService] getAllUsersFromRemote returned ${users.length} users '
+          'fromCache=${snapshot.metadata.isFromCache}');
+      if (users.length > limit) {
+        return users.take(limit).toList(growable: false);
+      }
+      return users;
+    } on FirebaseException catch (error) {
+      if (error.code == 'unavailable') {
+        debugPrint(
+            '[FirestoreService] getAllUsersFromRemote server unavailable; retrying from cache only');
+        try {
+          final cacheSnapshot =
+              await _users.get(const GetOptions(source: Source.cache));
+          final users = <UserModel>[];
+          for (final doc in cacheSnapshot.docs) {
+            try {
+              users.add(_decodeUserDoc(doc));
+            } catch (decodeError) {
+              debugPrint(
+                  '[FirestoreService] Skipping unreadable cached user ${doc.id}: '
+                  '$decodeError keys=${doc.data().keys.toList()}');
+            }
+          }
+          users.sort((left, right) => right.createdAt.compareTo(left.createdAt));
+          debugPrint(
+              '[FirestoreService] getAllUsersFromRemote cache fallback returned '
+              '${users.length} users');
+          if (users.length > limit) {
+            return users.take(limit).toList(growable: false);
+          }
+          return users;
+        } on FirebaseException catch (cacheError) {
+          debugPrint(
+              '[FirestoreService] getAllUsersFromRemote cache fallback failed: '
+              '${cacheError.code} ${cacheError.message}');
+        }
+      }
+      debugPrint(
+          '[FirestoreService] getAllUsersFromRemote failed: ${error.code} ${error.message}');
+      return const [];
+    }
+  }
+
+  /// Streams all user documents — used by the admin dashboard for real-time
+  /// updates so newly registered users appear without a manual refresh.
+  Stream<List<UserModel>> watchAllUsers({int limit = 500}) {
+    return _users.snapshots().map((snap) {
+      final users = <UserModel>[];
+      for (final doc in snap.docs) {
+        try {
+          users.add(_decodeUserDoc(doc));
+        } catch (error) {
+          debugPrint(
+              '[FirestoreService] Skipping unreadable user in stream ${doc.id}: $error keys=${doc.data().keys.toList()}');
+        }
+      }
+      users.sort((left, right) => right.createdAt.compareTo(left.createdAt));
+      if (users.length > limit) {
+        return users.take(limit).toList(growable: false);
+      }
+      return users;
+    });
   }
 
   Future<List<GroupModel>> getGroupsByIds(Iterable<String> groupIds) async {
