@@ -93,6 +93,7 @@ class SyncService {
   final NotificationPreferencesService _preferences;
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _notifSub;
   bool _isSyncing = false;
   bool _isHydrating = false;
   Future<void>? _hydrationFuture;
@@ -139,6 +140,56 @@ class SyncService {
         unawaited(syncRemoteToLocal());
       }
     });
+    _startWatchingNotifications();
+  }
+
+  /// Starts a real-time Firestore listener on the current user's unread
+  /// notifications. Shows a local push alert immediately when a new unread
+  /// notification arrives — no need to wait for the next sync cycle.
+  void _startWatchingNotifications() {
+    _notifSub?.cancel();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || uid.isEmpty) return;
+
+    _notifSub = FirebaseFirestore.instance
+        .collection('notifications')
+        .where('user_id', isEqualTo: uid)
+        .where('is_read', isEqualTo: false)
+        .orderBy('created_at', descending: true)
+        .limit(20)
+        .snapshots()
+        .listen(
+      (snapshot) {
+        for (final change in snapshot.docChanges) {
+          if (change.type != DocumentChangeType.added) continue;
+          final d = change.doc.data();
+          if (d == null) continue;
+          final notificationId = change.doc.id;
+          if (_preferences.wasNotificationDelivered(notificationId)) continue;
+          final ts = d['created_at'];
+          final createdAtMs = ts is Timestamp
+              ? ts.millisecondsSinceEpoch
+              : DateTime.now().millisecondsSinceEpoch;
+          final row = <String, Object?>{
+            'id': notificationId,
+            'user_id': d['user_id'] as String? ?? uid,
+            'type': d['type'] as String? ?? 'system',
+            'sender_id': d['sender_id'] as String?,
+            'sender_name': d['sender_name'] as String?,
+            'body': d['body'] as String? ?? 'You have a new notification.',
+            'detail': d['detail'] as String?,
+            'entity_id': d['entity_id'] as String?,
+            'created_at': createdAtMs,
+            'is_read': 0,
+          };
+          unawaited(_showLocalAlertForNotification(row));
+          unawaited(_preferences.markNotificationDelivered(notificationId));
+        }
+      },
+      onError: (dynamic error) {
+        debugPrint('[SyncService] Notification watcher error: $error');
+      },
+    );
   }
 
   bool _isOnline(List<ConnectivityResult> results) {
@@ -163,7 +214,10 @@ class SyncService {
     }
   }
 
-  void stopListening() => _connectivitySub?.cancel();
+  void stopListening() {
+    _connectivitySub?.cancel();
+    _notifSub?.cancel();
+  }
 
   // ── Process sync queue ────────────────────────────────────────────────────
 
@@ -833,11 +887,27 @@ class SyncService {
 
   // ── Post sync ─────────────────────────────────────────────────────────────
 
+  Future<PostModel?> _tryGetRemotePostForSync(String postId) async {
+    try {
+      return await _firestore.getPostById(postId);
+    } on FirebaseException catch (e) {
+      // Authors can create pending posts that are not globally readable.
+      // If rules deny this pre-read, continue sync with unknown previous state.
+      if (e.code == 'permission-denied') {
+        debugPrint(
+          '[SyncService] Skipping remote pre-read for post=$postId due to permission-denied.',
+        );
+        return null;
+      }
+      rethrow;
+    }
+  }
+
   Future<bool> _syncPost(SyncJob job) async {
     switch (job.operation) {
       case 'create':
       case 'update':
-        final previousRemote = await _firestore.getPostById(job.entityId);
+        final previousRemote = await _tryGetRemotePostForSync(job.entityId);
         final payload = job.payloadJson;
         PostModel? postFromPayload;
         if (payload.isNotEmpty) {
@@ -2600,6 +2670,8 @@ class SyncService {
         return 'New view';
       case 'collaboration':
         return 'Collaboration request';
+      case 'moderation':
+        return 'MUST StarTrack — Moderation';
       default:
         return 'MUST StarTrack';
     }

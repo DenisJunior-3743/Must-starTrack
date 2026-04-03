@@ -125,6 +125,7 @@ service cloud.firestore {
       // Anonymous visitors are further limited to approved / unmoderated
       // posts so flagged content is never served to unauthenticated clients.
       allow read: if isAdmin()
+        || (isMustUser() && resource.data.author_id == uid())
         || (
           resource.data.is_archived == false
           && (
