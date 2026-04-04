@@ -438,6 +438,18 @@ class _VideoFeedTabState extends State<_VideoFeedTab> {
   int _currentPage = 0;
   int _lastHapticPage = 0;
 
+  Future<void> _onRefresh() async {
+    await widget.cubit.refresh();
+    if (!mounted) return;
+    setState(() {
+      _currentPage = 0;
+      _lastHapticPage = 0;
+    });
+    if (_pageCtrl.hasClients) {
+      _pageCtrl.jumpToPage(0);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -465,66 +477,71 @@ class _VideoFeedTabState extends State<_VideoFeedTab> {
 
     return Stack(
       children: [
-        NotificationListener<UserScrollNotification>(
-          onNotification: (n) {
-            widget.onScrollDirectionChanged?.call(n.direction);
-            return false;
-          },
-          child: PageView.builder(
-            controller: _pageCtrl,
-            scrollDirection: Axis.vertical,
-            dragStartBehavior: DragStartBehavior.down,
-            allowImplicitScrolling: true,
-            physics: const _SoftPagePhysics(),
-            itemCount: total,
-            onPageChanged: (page) {
-              if (page == _currentPage) return;
-              setState(() => _currentPage = page);
-              if (page != _lastHapticPage) {
-                HapticFeedback.selectionClick();
-                _lastHapticPage = page;
-              }
-              if (page >= widget.posts.length - 3 && widget.hasMore) {
-                widget.cubit.loadMore();
-              }
+        RefreshIndicator(
+          onRefresh: _onRefresh,
+          color: AppColors.primary,
+          triggerMode: RefreshIndicatorTriggerMode.onEdge,
+          child: NotificationListener<UserScrollNotification>(
+            onNotification: (n) {
+              widget.onScrollDirectionChanged?.call(n.direction);
+              return false;
             },
-            itemBuilder: (ctx, i) {
-              if (i == widget.posts.length) {
-                if (widget.isLoadingMore) {
-                  return const Center(
-                      child: CircularProgressIndicator(color: AppColors.primary));
+            child: PageView.builder(
+              controller: _pageCtrl,
+              scrollDirection: Axis.vertical,
+              dragStartBehavior: DragStartBehavior.down,
+              allowImplicitScrolling: true,
+              physics: const _SoftPagePhysics(),
+              itemCount: total,
+              onPageChanged: (page) {
+                if (page == _currentPage) return;
+                setState(() => _currentPage = page);
+                if (page != _lastHapticPage) {
+                  HapticFeedback.selectionClick();
+                  _lastHapticPage = page;
                 }
-                return const _EndOfFeed();
-              }
-              final post = widget.posts[i];
-              return AnimatedBuilder(
-                animation: _pageCtrl,
-                child: _VideoPage(
-                  post: post,
-                  isActive: i == _currentPage,
-                  isGuest: widget.isGuest,
-                  cubit: widget.cubit,
-                ),
-                builder: (context, child) {
-                  double page = _currentPage.toDouble();
-                  if (_pageCtrl.hasClients && _pageCtrl.position.haveDimensions) {
-                    page = _pageCtrl.page ?? _currentPage.toDouble();
+                if (page >= widget.posts.length - 3 && widget.hasMore) {
+                  widget.cubit.loadMore();
+                }
+              },
+              itemBuilder: (ctx, i) {
+                if (i == widget.posts.length) {
+                  if (widget.isLoadingMore) {
+                    return const Center(
+                        child: CircularProgressIndicator(color: AppColors.primary));
                   }
-                  final distance = (page - i).abs();
-                  final t = distance.clamp(0.0, 1.0).toDouble();
-                  final scale = 1 - (0.06 * t);
-                  final opacity = 1 - (0.22 * t);
-                  final translateY = 22 * t;
-                  return Transform.translate(
-                    offset: Offset(0, translateY),
-                    child: Transform.scale(
-                      scale: scale,
-                      child: Opacity(opacity: opacity, child: child),
-                    ),
-                  );
-                },
-              );
-            },
+                  return const _EndOfFeed();
+                }
+                final post = widget.posts[i];
+                return AnimatedBuilder(
+                  animation: _pageCtrl,
+                  child: _VideoPage(
+                    post: post,
+                    isActive: i == _currentPage,
+                    isGuest: widget.isGuest,
+                    cubit: widget.cubit,
+                  ),
+                  builder: (context, child) {
+                    double page = _currentPage.toDouble();
+                    if (_pageCtrl.hasClients && _pageCtrl.position.haveDimensions) {
+                      page = _pageCtrl.page ?? _currentPage.toDouble();
+                    }
+                    final distance = (page - i).abs();
+                    final t = distance.clamp(0.0, 1.0).toDouble();
+                    final scale = 1 - (0.06 * t);
+                    final opacity = 1 - (0.22 * t);
+                    final translateY = 22 * t;
+                    return Transform.translate(
+                      offset: Offset(0, translateY),
+                      child: Transform.scale(
+                        scale: scale,
+                        child: Opacity(opacity: opacity, child: child),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
           ),
         ),
         // Page counter badge
@@ -560,12 +577,15 @@ class _SoftPagePhysics extends PageScrollPhysics {
     return _SoftPagePhysics(parent: buildParent(ancestor));
   }
 
-  // Lower thresholds slightly so users can change videos with softer swipes.
+  // Use very soft thresholds so one intentional swipe reliably changes video.
   @override
-  double get minFlingDistance => 8.0;
+  double get dragStartDistanceMotionThreshold => 1.5;
 
   @override
-  double get minFlingVelocity => 220.0;
+  double get minFlingDistance => 3.0;
+
+  @override
+  double get minFlingVelocity => 90.0;
 }
 
 class _VideoPage extends StatefulWidget {
@@ -811,6 +831,89 @@ class _VideoPageState extends State<_VideoPage>
     }
   }
 
+  Widget _buildPlaybackControls() {
+    if (!_ready || _ctrl == null || _error) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      decoration: BoxDecoration(
+        color: Colors.black45,
+        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+      ),
+      child: ValueListenableBuilder<VideoPlayerValue>(
+        valueListenable: _ctrl!,
+        builder: (context, value, _) {
+          final position = value.position;
+          final duration = value.duration;
+
+          String fmt(Duration d) {
+            final totalSeconds = d.inSeconds.clamp(0, 359999);
+            final h = totalSeconds ~/ 3600;
+            final m = (totalSeconds % 3600) ~/ 60;
+            final s = totalSeconds % 60;
+            if (h > 0) {
+              return '$h:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+            }
+            return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+          }
+
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: () {
+                      if (value.isPlaying) {
+                        _ctrl!.pause();
+                      } else {
+                        _ctrl!.play();
+                      }
+                    },
+                    icon: Icon(
+                      value.isPlaying
+                          ? Icons.pause_circle_filled_rounded
+                          : Icons.play_circle_fill_rounded,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: VideoProgressIndicator(
+                      _ctrl!,
+                      allowScrubbing: true,
+                      colors: const VideoProgressColors(
+                        playedColor: AppColors.primary,
+                        bufferedColor: Colors.white38,
+                        backgroundColor: Colors.white24,
+                      ),
+                      padding: EdgeInsets.zero,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  '${fmt(position)} / ${fmt(duration)}',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 10,
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -1003,6 +1106,14 @@ class _VideoPageState extends State<_VideoPage>
                 ],
               ),
             ),
+          ),
+
+          // ── Playback controls (scrub + play/pause) ───────────────────────
+          Positioned(
+            left: 12,
+            right: 84,
+            bottom: 6,
+            child: _buildPlaybackControls(),
           ),
 
           // ── Right-side action column ───────────────────────────────────────
