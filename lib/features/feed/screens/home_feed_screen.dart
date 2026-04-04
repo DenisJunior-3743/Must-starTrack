@@ -132,7 +132,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
   final _photoScrollCtrl = ScrollController();
   final _showcaseScrollCtrl = ScrollController();
   FeedCubit? _cubit;
-  bool _controlsCollapsed = false;
+  bool _controlsCollapsed = true;
   bool _immersiveMode = false;
 
   @override
@@ -140,8 +140,17 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
     super.initState();
     // Videos is index 0 — default
     _tabCtrl = TabController(length: 3, vsync: this, initialIndex: 0);
+    _tabCtrl.addListener(_onTabChanged);
     _photoScrollCtrl.addListener(_onPhotoScroll);
     _showcaseScrollCtrl.addListener(_onShowcaseScroll);
+  }
+
+  void _onTabChanged() {
+    if (!mounted || _tabCtrl.indexIsChanging || _immersiveMode) return;
+    final shouldCollapse = _tabCtrl.index == 0;
+    if (_controlsCollapsed != shouldCollapse) {
+      setState(() => _controlsCollapsed = shouldCollapse);
+    }
   }
 
   @override
@@ -180,6 +189,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
 
   @override
   void dispose() {
+    _tabCtrl.removeListener(_onTabChanged);
     _tabCtrl.dispose();
     _photoScrollCtrl.dispose();
     _showcaseScrollCtrl.dispose();
@@ -435,6 +445,7 @@ class _VideoFeedTab extends StatefulWidget {
 
 class _VideoFeedTabState extends State<_VideoFeedTab> {
   final _pageCtrl = PageController();
+  final Set<String> _prefetchingSources = <String>{};
   int _currentPage = 0;
   int _lastHapticPage = 0;
 
@@ -453,12 +464,51 @@ class _VideoFeedTabState extends State<_VideoFeedTab> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _prefetchAround(0);
+    });
   }
 
   @override
   void dispose() {
     _pageCtrl.dispose();
     super.dispose();
+  }
+
+  void _prefetchAround(int currentIndex) {
+    const lookAhead = 2;
+    for (var offset = 0; offset <= lookAhead; offset++) {
+      final index = currentIndex + offset;
+      if (index < 0 || index >= widget.posts.length) continue;
+
+      final post = widget.posts[index];
+      final source = _preferredVideoSourceForPost(post);
+      if (source == null || !_prefetchingSources.add(source)) continue;
+
+      unawaited(() async {
+        try {
+          await resolveVideoFile(source);
+        } catch (e) {
+          debugPrint('[VideoPrefetch] failed for $source: $e');
+        } finally {
+          _prefetchingSources.remove(source);
+        }
+      }());
+    }
+  }
+
+  String? _preferredVideoSourceForPost(PostModel post) {
+    for (final mediaUrl in post.mediaUrls) {
+      if (_isVideoUrl(mediaUrl)) {
+        return getPreferredPlaybackSource(mediaUrl);
+      }
+    }
+    final youtube = post.youtubeUrl?.trim();
+    if (youtube != null && youtube.isNotEmpty && _isVideoUrl(youtube)) {
+      return getPreferredPlaybackSource(youtube);
+    }
+    return null;
   }
 
   @override
@@ -491,11 +541,14 @@ class _VideoFeedTabState extends State<_VideoFeedTab> {
               scrollDirection: Axis.vertical,
               dragStartBehavior: DragStartBehavior.down,
               allowImplicitScrolling: true,
-              physics: const _SoftPagePhysics(),
+              physics: const _SoftPagePhysics(
+                parent: BouncingScrollPhysics(),
+              ),
               itemCount: total,
               onPageChanged: (page) {
                 if (page == _currentPage) return;
                 setState(() => _currentPage = page);
+                _prefetchAround(page);
                 if (page != _lastHapticPage) {
                   HapticFeedback.selectionClick();
                   _lastHapticPage = page;
@@ -579,13 +632,13 @@ class _SoftPagePhysics extends PageScrollPhysics {
 
   // Use very soft thresholds so one intentional swipe reliably changes video.
   @override
-  double get dragStartDistanceMotionThreshold => 1.5;
+  double get dragStartDistanceMotionThreshold => 0.25;
 
   @override
-  double get minFlingDistance => 3.0;
+  double get minFlingDistance => 0.5;
 
   @override
-  double get minFlingVelocity => 90.0;
+  double get minFlingVelocity => 25.0;
 }
 
 class _VideoPage extends StatefulWidget {
@@ -3462,6 +3515,15 @@ class _CommentSheetState extends State<_CommentSheet> {
       final userId = sl<AuthCubit>().currentUser?.id ?? '';
       final userName = sl<AuthCubit>().currentUser?.displayName ?? 'Unknown';
       final userPhotoUrl = sl<AuthCubit>().currentUser?.photoUrl;
+      _traceFeedAction(
+        userId: userId,
+        action: 'comment',
+        step: 'ui_submit',
+        details: {
+          'postId': widget.post.id,
+          'contentLength': content.length,
+        },
+      );
 
       // Add comment locally
       final commentId = const Uuid().v4();
@@ -3470,6 +3532,15 @@ class _CommentSheetState extends State<_CommentSheet> {
         authorId: userId,
         content: content,
         commentId: commentId,
+      );
+      _traceFeedAction(
+        userId: userId,
+        action: 'comment',
+        step: 'local_persisted',
+        details: {
+          'postId': widget.post.id,
+          'commentId': commentId,
+        },
       );
 
       // Log activity
@@ -3483,6 +3554,15 @@ class _CommentSheetState extends State<_CommentSheet> {
           'comment_text': content,
           'post_title': widget.post.title,
           'author_id': widget.post.authorId,
+        },
+      );
+      _traceFeedAction(
+        userId: userId,
+        action: 'comment',
+        step: 'activity_logged',
+        details: {
+          'postId': widget.post.id,
+          'commentId': commentId,
         },
       );
 
@@ -3499,6 +3579,15 @@ class _CommentSheetState extends State<_CommentSheet> {
           'created_at': DateTime.now().toIso8601String(),
           'author_name': userName,
           'author_photo_url': userPhotoUrl,
+        },
+      );
+      _traceFeedAction(
+        userId: userId,
+        action: 'comment',
+        step: 'remote_queued',
+        details: {
+          'postId': widget.post.id,
+          'commentId': commentId,
         },
       );
 
@@ -3528,6 +3617,15 @@ class _CommentSheetState extends State<_CommentSheet> {
 
       // Update feed cubit with incremented comment count
       await widget.cubit.addCommentToPost(widget.post.id);
+      _traceFeedAction(
+        userId: userId,
+        action: 'comment',
+        step: 'render_updated',
+        details: {
+          'postId': widget.post.id,
+          'commentId': commentId,
+        },
+      );
 
       if (mounted) {
         _commentCtrl.clear();
@@ -3717,11 +3815,28 @@ class _CommentSheetState extends State<_CommentSheet> {
                                     ],
                                   ),
                                   const SizedBox(height: 4),
-                                  Text(
-                                    comment.content,
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 12,
-                                      color: Colors.white70,
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surfaceLight,
+                                      borderRadius: BorderRadius.circular(
+                                        AppDimensions.radiusMd,
+                                      ),
+                                      border: Border.all(
+                                        color: AppColors.borderLight,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      comment.content,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 12,
+                                        height: 1.45,
+                                        color: AppColors.textPrimaryLight,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -3838,6 +3953,16 @@ class _CollaborateRequestSheetState extends State<_CollaborateRequestSheet> {
     if (currentUserId.isEmpty) return;
 
     setState(() => _loading = true);
+    _traceFeedAction(
+      userId: currentUserId,
+      action: 'collaborate',
+      step: 'ui_submit',
+      details: {
+        'postId': widget.post.id,
+        'authorId': widget.post.authorId,
+        'messageLength': message.length,
+      },
+    );
 
     try {
       // Log activity
@@ -3852,19 +3977,37 @@ class _CollaborateRequestSheetState extends State<_CollaborateRequestSheet> {
           'post_title': widget.post.title,
         },
       );
+      _traceFeedAction(
+        userId: currentUserId,
+        action: 'collaborate',
+        step: 'activity_logged',
+        details: {
+          'postId': widget.post.id,
+          'authorId': widget.post.authorId,
+        },
+      );
 
       // Queue for sync
       await sl<SyncQueueDao>().enqueue(
         operation: 'create',
-        entity: 'collaboration_requests',
+        entity: 'collab_requests',
         entityId:
             '${currentUserId}_${widget.post.id}_${DateTime.now().millisecondsSinceEpoch}',
         payload: {
-          'from_user_id': currentUserId,
-          'to_user_id': widget.post.authorId,
+          'sender_id': currentUserId,
+          'receiver_id': widget.post.authorId,
           'post_id': widget.post.id,
           'message': message,
           'created_at': DateTime.now().toIso8601String(),
+        },
+      );
+      _traceFeedAction(
+        userId: currentUserId,
+        action: 'collaborate',
+        step: 'remote_queued',
+        details: {
+          'postId': widget.post.id,
+          'authorId': widget.post.authorId,
         },
       );
 
@@ -3887,10 +4030,21 @@ class _CollaborateRequestSheetState extends State<_CollaborateRequestSheet> {
         debugPrint('[Collaborate Notification] Error: $e');
       }
 
-  // Update feed cubit with collaboration request state
-  await widget.cubit.requestCollaborationWithPost(widget.post.id);
+      // Update feed cubit with collaboration request state
+      await widget.cubit.requestCollaborationWithPost(
+        widget.post.id,
+        message: message,
+      );
+      _traceFeedAction(
+        userId: currentUserId,
+        action: 'collaborate',
+        step: 'render_updated',
+        details: {
+          'postId': widget.post.id,
+        },
+      );
 
-  if (mounted) {
+      if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -3918,8 +4072,13 @@ class _CollaborateRequestSheetState extends State<_CollaborateRequestSheet> {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          16,
+          20,
+          24 + MediaQuery.of(context).viewInsets.bottom,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -4014,6 +4173,18 @@ String _compact(int n) {
   if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
   if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
   return '$n';
+}
+
+void _traceFeedAction({
+  required String userId,
+  required String action,
+  required String step,
+  Map<String, Object?> details = const {},
+}) {
+  debugPrint('=========== user=$userId action=$action step=$step ===========');
+  if (details.isNotEmpty) {
+    debugPrint('[FeedUI][$action][$step] $details');
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

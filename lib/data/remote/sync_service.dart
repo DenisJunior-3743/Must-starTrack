@@ -251,6 +251,16 @@ class SyncService {
           '[SyncService] Starting sync loop with ${jobs.length} ready job(s).');
 
       for (final job in jobs) {
+        final actorId = (job.payloadJson['user_id'] ??
+                job.payloadJson['author_id'] ??
+                job.payloadJson['sender_id'] ??
+                job.payloadJson['from_user_id'] ??
+                job.payloadJson['follower_id'] ??
+                job.payloadJson['viewer_id'])
+            ?.toString();
+        debugPrint(
+          '=========== sync_pickup user=${actorId ?? 'unknown'} entity=${job.entityType} op=${job.operation} ===========',
+        );
         debugPrint(
           '[SyncService] Processing job id=${job.id} entity=${job.entityType} '
           'operation=${job.operation} entityId=${job.entityId} retry=${job.retryCount}',
@@ -259,10 +269,16 @@ class SyncService {
         if (success) {
           await _queueDao.deleteJob(job.id);
           debugPrint(
+            '=========== sync_result job=${job.id} status=success entity=${job.entityType} ===========',
+          );
+          debugPrint(
               '[SyncService] Job id=${job.id} entity=${job.entityType} completed and removed from queue.');
           processed++;
         } else {
           await _queueDao.incrementAttempt(job.id);
+          debugPrint(
+            '=========== sync_result job=${job.id} status=retry entity=${job.entityType} ===========',
+          );
           debugPrint(
               '[SyncService] Job id=${job.id} entity=${job.entityType} failed and will retry.');
           failed++;
@@ -832,6 +848,7 @@ class SyncService {
         case 'post_views':
           return await _syncPostView(job);
         case 'collab_requests':
+        case 'collaboration_requests':
           return await _syncCollabRequest(job);
         case 'opportunity_joins':
           return await _syncOpportunityJoin(job);
@@ -1096,7 +1113,8 @@ class SyncService {
   Future<bool> _syncFollow(SyncJob job) async {
     final payload = job.payloadJson;
     final followerId = payload['follower_id'] as String?;
-    final followingId = payload['following_id'] as String?;
+    final followingId =
+        (payload['following_id'] ?? payload['followed_id']) as String?;
 
     if (followerId == null || followingId == null) {
       debugPrint(
@@ -1115,8 +1133,8 @@ class SyncService {
     }
 
     if (job.operation == 'create') {
-      debugPrint(
-          '[SyncFollow] Writing follow follower=$followerId followee=$followingId');
+        debugPrint(
+          '[SyncFollow] Writing follow follower=$followerId followee=$followingId entity=${job.entityType}');
       await _firestore.follow(followerId: followerId, followingId: followingId);
       final followerName = payload['follower_name'] as String? ?? 'Someone';
       if (followingId != followerId) {
@@ -1571,8 +1589,9 @@ class SyncService {
       return true;
     }
 
-    final senderId = payload['sender_id'] as String?;
-    final receiverId = payload['receiver_id'] as String?;
+    final senderId = (payload['sender_id'] ?? payload['from_user_id']) as String?;
+    final receiverId =
+      (payload['receiver_id'] ?? payload['to_user_id']) as String?;
     final postId = payload['post_id'] as String?;
     final message = payload['message'] as String? ?? '';
     final status = payload['status'] as String? ?? 'pending';

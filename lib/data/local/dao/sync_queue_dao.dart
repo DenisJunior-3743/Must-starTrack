@@ -112,6 +112,15 @@ class SyncQueueDao {
       DatabaseSchema.tableSyncQueue,
       item.toMap(),
     );
+    final actorId = payload['user_id'] ??
+        payload['author_id'] ??
+        payload['sender_id'] ??
+        payload['from_user_id'] ??
+        payload['follower_id'] ??
+        payload['viewer_id'];
+    debugPrint(
+      '=========== sync_enqueued entity=$entity op=$operation actor=${actorId ?? 'unknown'} ===========',
+    );
     debugPrint(
       '[SyncQueue] Enqueued operation=$operation entity=$entity entityId=$entityId '
       'retry=${item.retryCount} payloadKeys=${payload.keys.toList()}',
