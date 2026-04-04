@@ -29,6 +29,7 @@ class NotificationPreferences {
     'like': true,
     'comment': true,
     'view': true,
+    'rating': true,
   };
 
   factory NotificationPreferences.defaults() => const NotificationPreferences(

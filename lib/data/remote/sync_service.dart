@@ -42,6 +42,7 @@ import '../local/dao/sync_queue_dao.dart';
 import '../local/dao/user_dao.dart';
 import '../local/dao/post_dao.dart';
 import '../local/dao/message_dao.dart';
+import '../local/dao/notification_dao.dart';
 import '../local/dao/faculty_dao.dart';
 import '../local/dao/course_dao.dart';
 import '../local/dao/group_dao.dart';
@@ -87,6 +88,7 @@ class SyncService {
   final CourseDao _courseDao;
   final GroupDao _groupDao;
   final GroupMemberDao _groupMemberDao;
+  final NotificationDao _notificationDao;
   final Connectivity _connectivity;
   final CloudinaryService _cloudinary;
   final FlutterLocalNotificationsPlugin _localNotif;
@@ -108,6 +110,7 @@ class SyncService {
     required CourseDao courseDao,
     required GroupDao groupDao,
     required GroupMemberDao groupMemberDao,
+    required NotificationDao notificationDao,
     required CloudinaryService cloudinary,
     required FlutterLocalNotificationsPlugin localNotif,
     required NotificationPreferencesService preferences,
@@ -121,6 +124,7 @@ class SyncService {
         _courseDao = courseDao,
         _groupDao = groupDao,
         _groupMemberDao = groupMemberDao,
+        _notificationDao = notificationDao,
         _cloudinary = cloudinary,
         _localNotif = localNotif,
         _preferences = preferences,
@@ -160,6 +164,10 @@ class SyncService {
         .snapshots()
         .listen(
       (snapshot) {
+        debugPrint(
+          '[SyncDownlink] notification snapshot docs=${snapshot.docs.length} '
+          'changes=${snapshot.docChanges.length} fromCache=${snapshot.metadata.isFromCache}',
+        );
         for (final change in snapshot.docChanges) {
           if (change.type != DocumentChangeType.added) continue;
           final d = change.doc.data();
@@ -182,6 +190,28 @@ class SyncService {
             'created_at': createdAtMs,
             'is_read': 0,
           };
+
+          // Persist immediately so receiver device notification center updates
+          // in real time without waiting for the next hydration pass.
+          unawaited(_notificationDao.insertNotification(
+            NotificationModel(
+              id: notificationId,
+              userId: row['user_id'] as String,
+              type: row['type'] as String,
+              senderId: row['sender_id'] as String?,
+              senderName: row['sender_name'] as String?,
+              body: row['body'] as String,
+              detail: row['detail'] as String?,
+              entityId: row['entity_id'] as String?,
+              createdAt: DateTime.fromMillisecondsSinceEpoch(createdAtMs),
+              isRead: false,
+            ),
+          ));
+          debugPrint(
+            '[SyncDownlink] receiver_local_upsert notification=$notificationId '
+            'type=${row['type']} user=${row['user_id']}',
+          );
+
           unawaited(_showLocalAlertForNotification(row));
           unawaited(_preferences.markNotificationDelivered(notificationId));
         }
@@ -1078,10 +1108,39 @@ class SyncService {
     switch (job.operation) {
       case 'create':
       case 'update':
+        debugPrint(
+          '[SyncRating] Writing rating id=${job.entityId} '
+          'post=${job.payloadJson['post_id']} user=${job.payloadJson['user_id']} '
+          'stars=${job.payloadJson['stars']}',
+        );
         await _firestore.setPostRating(
           ratingId: job.entityId,
           payload: job.payloadJson,
         );
+        final payload = job.payloadJson;
+        final authorId = payload['author_id'] as String?;
+        final raterId = payload['user_id'] as String?;
+        if (authorId != null &&
+            raterId != null &&
+            authorId.isNotEmpty &&
+            raterId.isNotEmpty &&
+            authorId != raterId) {
+          final postId = payload['post_id'] as String?;
+          final postTitle = payload['post_title'] as String? ?? 'your post';
+          final raterName = payload['rater_name'] as String? ?? 'Someone';
+          final stars = payload['stars'];
+          await _bestEffortUserNotification(
+            source: 'rating',
+            notificationId: 'rating_${job.entityId}',
+            receiverId: authorId,
+            senderId: raterId,
+            senderName: raterName,
+            type: 'rating',
+            body: '$raterName rated "$postTitle" ${stars ?? ''}'.trim(),
+            detail: stars != null ? 'Rating: $stars star(s)' : null,
+            entityId: postId,
+          );
+        }
         return true;
       case 'delete':
         await _firestore.deletePostRating(job.entityId);
@@ -1381,7 +1440,9 @@ class SyncService {
 
     final receiverId = payload['receiver_id'] as String?;
     if (receiverId != null && receiverId != authorId) {
-      final commenterName = payload['commenter_name'] as String? ?? 'Someone';
+      final commenterName =
+          (payload['commenter_name'] ?? payload['author_name']) as String? ??
+              'Someone';
       final postTitle = payload['post_title'] as String? ?? 'your project';
       await _bestEffortUserNotification(
         source: 'comment',
@@ -1676,6 +1737,10 @@ class SyncService {
     String? entityId,
     String? senderName,
   }) async {
+    debugPrint(
+      '[SyncNotification] Fan-out requested source=$source type=$type '
+      'receiver=$receiverId sender=$senderId notification=$notificationId entity=$entityId',
+    );
     try {
       await _upsertUserNotification(
         notificationId: notificationId,
@@ -2623,15 +2688,27 @@ class SyncService {
       'entity_id': entityId,
     };
 
+    debugPrint(
+      '[SyncNotification] Upsert start notification=$notificationId '
+      'receiver=$receiverId sender=$senderId type=$type',
+    );
+
     try {
       await docRef.update(updateData);
       debugPrint(
-          '[SyncNotification] Updated existing notification=$notificationId for receiver=$receiverId');
+          '[SyncNotification] Updated existing notification=$notificationId for receiver=$receiverId keys=${updateData.keys.toList()}');
       return;
     } on FirebaseException catch (error) {
       if (error.code != 'not-found') {
+        debugPrint(
+          '[SyncNotification] Update failed notification=$notificationId '
+          'receiver=$receiverId type=$type code=${error.code}',
+        );
         rethrow;
       }
+      debugPrint(
+        '[SyncNotification] Existing notification not found, creating new notification=$notificationId',
+      );
     }
 
     final createData = <String, Object?>{
@@ -2649,7 +2726,7 @@ class SyncService {
 
     await docRef.set(createData);
     debugPrint(
-        '[SyncNotification] Created notification=$notificationId for receiver=$receiverId type=$type');
+    '[SyncNotification] Created notification=$notificationId for receiver=$receiverId type=$type payloadKeys=${createData.keys.toList()}');
   }
 
   Future<void> _showLocalAlertForNotification(Map<String, Object?> row) async {
@@ -2687,6 +2764,8 @@ class SyncService {
         return 'New comment';
       case 'view':
         return 'New view';
+      case 'rating':
+        return 'New rating';
       case 'collaboration':
         return 'Collaboration request';
       case 'moderation':

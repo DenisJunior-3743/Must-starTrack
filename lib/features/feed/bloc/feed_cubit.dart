@@ -625,6 +625,11 @@ class FeedCubit extends Cubit<FeedState> {
           'user_id': currentUserId,
           'stars': safeStars,
           'rater_role': role,
+          'author_id': post.authorId,
+          'post_title': post.title,
+          'rater_name': _authCubit?.currentUser?.displayName ??
+              _authCubit?.currentUser?.email ??
+              'Someone',
           'rated_at': DateTime.now().toIso8601String(),
         },
       );
@@ -664,6 +669,129 @@ class FeedCubit extends Cubit<FeedState> {
     _emitIfOpen(current.copyWith(posts: updatedPosts));
     
     debugPrint('[FeedCubit] Comment added to post=$postId new count=${optimistic.commentCount}');
+  }
+
+  Future<void> recordPostView(String postId) async {
+    final current = state;
+    if (current is! FeedLoaded) return;
+
+    final currentUserId = _activeUserId;
+    if (currentUserId == null || currentUserId.isEmpty) {
+      return;
+    }
+
+    final index = current.posts.indexWhere((p) => p.id == postId);
+    if (index == -1) return;
+
+    final original = current.posts[index];
+    if (original.isViewedByMe) {
+      _traceAction(
+        'view',
+        'already_viewed',
+        userId: currentUserId,
+        details: {
+          'postId': postId,
+        },
+      );
+      return;
+    }
+
+    _traceAction(
+      'view',
+      'ui_open',
+      userId: currentUserId,
+      details: {
+        'postId': postId,
+        'authorId': original.authorId,
+      },
+    );
+
+    final optimistic = original.copyWith(
+      isViewedByMe: true,
+      viewCount: original.viewCount + 1,
+    );
+    final updatedPosts = List<PostModel>.from(current.posts)..[index] = optimistic;
+    _emitIfOpen(current.copyWith(posts: updatedPosts));
+    _traceAction(
+      'view',
+      'render_optimistic',
+      userId: currentUserId,
+      details: {
+        'postId': postId,
+        'viewCount': optimistic.viewCount,
+      },
+    );
+
+    try {
+      final isNewView = await _postDao.recordUniqueView(
+        postId: postId,
+        userId: currentUserId,
+      );
+
+      if (!isNewView) {
+        final correctedPosts = List<PostModel>.from(current.posts)
+          ..[index] = original.copyWith(isViewedByMe: true);
+        _emitIfOpen(current.copyWith(posts: correctedPosts));
+        _traceAction(
+          'view',
+          'already_persisted',
+          userId: currentUserId,
+          details: {
+            'postId': postId,
+          },
+        );
+        return;
+      }
+
+      await _postDao.incrementViewCount(postId);
+      _traceAction(
+        'view',
+        'local_persisted',
+        userId: currentUserId,
+        details: {
+          'postId': postId,
+          'viewCount': optimistic.viewCount,
+        },
+      );
+
+      await _syncQueue.enqueue(
+        operation: 'create',
+        entity: 'post_views',
+        entityId: '${currentUserId}_${original.id}',
+        payload: {
+          'viewer_id': currentUserId,
+          'viewer_name': _authCubit?.currentUser?.displayName ??
+              _authCubit?.currentUser?.email ??
+              'Someone',
+          'author_id': original.authorId,
+          'post_id': original.id,
+          'post_title': original.title,
+        },
+      );
+      _traceAction(
+        'view',
+        'remote_queued',
+        userId: currentUserId,
+        details: {
+          'postId': postId,
+          'authorId': original.authorId,
+        },
+      );
+
+      unawaited(_syncService?.processPendingSync());
+    } catch (e) {
+      _traceAction(
+        'view',
+        'failed',
+        userId: currentUserId,
+        details: {
+          'postId': postId,
+          'error': e.toString(),
+        },
+      );
+      final rollback = List<PostModel>.from(current.posts)..[index] = original;
+      _emitIfOpen(current.copyWith(posts: rollback));
+    }
   }
 
   /// Sets collaboration request state and emits updated post
@@ -825,6 +953,9 @@ class FeedCubit extends Cubit<FeedState> {
         payload: {
           'follower_id': currentUserId,
           'followed_id': original.authorId,
+          'follower_name': _authCubit?.currentUser?.displayName ??
+              _authCubit?.currentUser?.email ??
+              'Someone',
           'followed_at': DateTime.now().toIso8601String(),
         },
       );
@@ -941,6 +1072,9 @@ class FeedCubit extends Cubit<FeedState> {
           'like_count': newCount,
           'author_id': original.authorId,
           'post_title': original.title,
+          'actor_name': _authCubit?.currentUser?.displayName ??
+              _authCubit?.currentUser?.email ??
+              'Someone',
         },
       );
       debugPrint(
