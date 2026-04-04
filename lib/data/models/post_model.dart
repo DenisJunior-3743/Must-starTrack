@@ -53,6 +53,7 @@ class PostModel extends Equatable {
   final int myRatingStars;
   final bool isFollowingAuthor;
   final bool hasCollaborationRequest;
+  final bool isViewedByMe;
 
   // ── Opportunity-specific fields ──────────────────────────────────────────
   final String? areaOfExpertise;
@@ -100,6 +101,7 @@ class PostModel extends Equatable {
     this.myRatingStars = 0,
     this.isFollowingAuthor = false,
     this.hasCollaborationRequest = false,
+    this.isViewedByMe = false,
     this.areaOfExpertise,
     this.maxParticipants,
     this.joinCount = 0,
@@ -215,6 +217,7 @@ class PostModel extends Equatable {
         myRatingStars: toInt(j['myRatingStars'] ?? j['my_rating_stars']),
         isFollowingAuthor: toBool(j['isFollowingAuthor'] ?? j['is_following_author']),
         hasCollaborationRequest: toBool(j['hasCollaborationRequest'] ?? j['has_collaboration_request']),
+        isViewedByMe: toBool(j['isViewedByMe'] ?? j['is_viewed_by_me']),
         areaOfExpertise: toNullableString(j['areaOfExpertise'] ?? j['area_of_expertise']),
         maxParticipants: toNullableInt(j['maxParticipants'] ?? j['max_participants']),
         joinCount: toInt(j['joinCount'] ?? j['join_count']),
@@ -268,6 +271,7 @@ class PostModel extends Equatable {
         'myRatingStars': myRatingStars,
         'isFollowingAuthor': isFollowingAuthor,
         'hasCollaborationRequest': hasCollaborationRequest,
+        'isViewedByMe': isViewedByMe,
         'areaOfExpertise': areaOfExpertise,
         'maxParticipants': maxParticipants,
         'joinCount': joinCount,
@@ -313,6 +317,7 @@ class PostModel extends Equatable {
         'my_rating_stars': myRatingStars,
         'is_following_author': isFollowingAuthor,
         'has_collaboration_request': hasCollaborationRequest,
+        'is_viewed_by_me': isViewedByMe,
         'area_of_expertise': areaOfExpertise,
         'max_participants': maxParticipants,
         'join_count': joinCount,
@@ -358,6 +363,7 @@ class PostModel extends Equatable {
     int? myRatingStars,
     bool? isFollowingAuthor,
     bool? hasCollaborationRequest,
+    bool? isViewedByMe,
     String? areaOfExpertise,
     int? maxParticipants,
     int? joinCount,
@@ -402,6 +408,7 @@ class PostModel extends Equatable {
       myRatingStars: myRatingStars ?? this.myRatingStars,
       isFollowingAuthor: isFollowingAuthor ?? this.isFollowingAuthor,
       hasCollaborationRequest: hasCollaborationRequest ?? this.hasCollaborationRequest,
+      isViewedByMe: isViewedByMe ?? this.isViewedByMe,
       areaOfExpertise: areaOfExpertise ?? this.areaOfExpertise,
       maxParticipants: maxParticipants ?? this.maxParticipants,
       joinCount: joinCount ?? this.joinCount,
@@ -421,7 +428,17 @@ class PostModel extends Equatable {
         title,
         category,
         likeCount,
+        dislikeCount,
         commentCount,
+        shareCount,
+        viewCount,
+        isLikedByMe,
+        isDislikedByMe,
+        isRatedByMe,
+        myRatingStars,
+        isFollowingAuthor,
+        hasCollaborationRequest,
+        isViewedByMe,
         isArchived,
         updatedAt,
       ];

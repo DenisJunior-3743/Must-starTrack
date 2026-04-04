@@ -201,6 +201,7 @@ class InjectionContainer {
         courseDao: sl<CourseDao>(),
         groupDao: sl<GroupDao>(),
         groupMemberDao: sl<GroupMemberDao>(),
+        notificationDao: sl<NotificationDao>(),
         cloudinary: sl<CloudinaryService>(),
         connectivity: sl<Connectivity>(),
         localNotif: sl<FlutterLocalNotificationsPlugin>(),

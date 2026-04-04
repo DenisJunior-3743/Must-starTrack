@@ -40,7 +40,6 @@ import '../../../core/utils/video_cache_utils.dart';
 import '../../../data/local/dao/activity_log_dao.dart';
 import '../../../data/local/dao/comment_dao.dart';
 import '../../../data/local/dao/message_dao.dart';
-import '../../../data/local/dao/notification_dao.dart';
 import '../../../data/local/dao/sync_queue_dao.dart';
 import '../../../data/local/dao/user_dao.dart';
 import '../../../data/models/post_model.dart';
@@ -1246,11 +1245,13 @@ class _VideoPageState extends State<_VideoPage>
                       ? '${post.myRatingStars}★'
                       : 'Rate',
                   color: post.isRatedByMe ? AppColors.warning : Colors.white,
-                  enabled: !widget.isGuest && widget.post.authorId != (sl<AuthCubit>().currentUser?.id ?? ''),
+                  enabled: !widget.isGuest &&
+                      widget.post.authorId != (sl<AuthCubit>().currentUser?.id ?? '') &&
+                      !post.isRatedByMe,
                   onTap: () {
                     final currentUserId = sl<AuthCubit>().currentUser?.id ?? '';
                     final isOwnPost = currentUserId == post.authorId;
-                    if (!widget.isGuest && !isOwnPost) {
+                    if (!widget.isGuest && !isOwnPost && !post.isRatedByMe) {
                       _showRatePostSheet(
                         context,
                         post,
@@ -1728,7 +1729,7 @@ class _AuthorPhotoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => context.push('/project/${post.id}'),
+      onTap: () => _openPostDetails(context, post, context.read<FeedCubit>()),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: Theme.of(context).cardColor,
@@ -1844,7 +1845,7 @@ class _SinglePhotoPostCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => context.push('/project/${post.id}'),
+      onTap: () => _openPostDetails(context, post, context.read<FeedCubit>()),
       child: Container(
         decoration: BoxDecoration(
           color: Theme.of(context).cardColor,
@@ -1918,7 +1919,7 @@ class _FeaturedPhotoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final url = _photoUrl;
     return GestureDetector(
-      onTap: () => context.push('/project/${post.id}'),
+      onTap: () => _openPostDetails(context, post, context.read<FeedCubit>()),
       child: Container(
         margin: const EdgeInsets.fromLTRB(0, 0, 0, 2),
         child: Column(
@@ -2041,7 +2042,7 @@ class _PhotoGridCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () => context.push('/project/${post.id}'),
+      onTap: () => _openPostDetails(context, post, context.read<FeedCubit>()),
       child: Container(
         decoration: BoxDecoration(
           color: Theme.of(context).cardColor,
@@ -2232,7 +2233,7 @@ class _ShowcaseCard extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return GestureDetector(
-      onTap: () => context.push('/project/${post.id}'),
+      onTap: () => _openPostDetails(context, post, context.read<FeedCubit>()),
       child: Container(
         decoration: BoxDecoration(
           color: isDark ? AppColors.surfaceDark : Colors.white,
@@ -2538,11 +2539,11 @@ class _PostActionBarState extends State<_PostActionBar> {
                 ? '${widget.post.myRatingStars}★'
                 : 'Rate',
             color: widget.post.isRatedByMe ? AppColors.warning : (isOwnPost ? Colors.grey : AppColors.textSecondaryLight),
-            enabled: !isOwnPost && !widget.isGuest,
+            enabled: !isOwnPost && !widget.isGuest && !widget.post.isRatedByMe,
             onTap: () {
               if (widget.isGuest) {
                 _promptLogin(context);
-              } else if (!isOwnPost) {
+              } else if (!isOwnPost && !widget.post.isRatedByMe) {
                 _showRatePostSheet(
                   context,
                   widget.post,
@@ -3052,13 +3053,19 @@ class _MoreSheet extends StatelessWidget {
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.open_in_new_rounded,
-                  color: AppColors.primary),
-              title: Text('View Details',
+              leading: Icon(
+                post.isViewedByMe
+                    ? Icons.visibility_rounded
+                    : Icons.open_in_new_rounded,
+                color: post.isViewedByMe
+                    ? AppColors.success
+                    : AppColors.primary,
+              ),
+              title: Text(post.isViewedByMe ? 'Viewed Details' : 'View Details',
                   style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
-                parentCtx.push('/project/${post.id}');
+                await _openPostDetails(parentCtx, post, cubit);
               },
             ),
             ListTile(
@@ -3074,13 +3081,17 @@ class _MoreSheet extends StatelessWidget {
             ),
             if (!isGuest)
               ListTile(
-                leading:
-                    const Icon(Icons.person_add_alt_1_rounded,
-                        color: AppColors.primary),
-                title: Text('Follow Author',
+              leading: Icon(
+                post.isFollowingAuthor
+                  ? Icons.check_circle_rounded
+                  : Icons.person_add_alt_1_rounded,
+                color: post.isFollowingAuthor
+                  ? AppColors.success
+                  : AppColors.primary),
+              title: Text(post.isFollowingAuthor ? 'Following Author' : 'Follow Author',
                     style: GoogleFonts.plusJakartaSans(
                         fontWeight: FontWeight.w600)),
-                onTap: () {
+              onTap: post.isFollowingAuthor ? null : () {
                   Navigator.pop(context);
                   _showFollowSheet(parentCtx, post, () {});
                 },
@@ -3457,6 +3468,16 @@ void _promptLogin(BuildContext context) {
   );
 }
 
+Future<void> _openPostDetails(
+  BuildContext context,
+  PostModel post,
+  FeedCubit cubit,
+) async {
+  await cubit.recordPostView(post.id);
+  if (!context.mounted) return;
+  context.push('/project/${post.id}');
+}
+
 Future<void> _showCommentSheet(
     BuildContext context, PostModel post, FeedCubit cubit) {
   return showModalBottomSheet<void>(
@@ -3575,10 +3596,13 @@ class _CommentSheetState extends State<_CommentSheet> {
           'id': commentId,
           'post_id': widget.post.id,
           'author_id': userId,
+          'receiver_id': widget.post.authorId,
           'content': content,
           'created_at': DateTime.now().toIso8601String(),
           'author_name': userName,
+          'commenter_name': userName,
           'author_photo_url': userPhotoUrl,
+          'post_title': widget.post.title,
         },
       );
       _traceFeedAction(
@@ -3591,28 +3615,11 @@ class _CommentSheetState extends State<_CommentSheet> {
         },
       );
 
-      // Send notification to post author
       if (userId != widget.post.authorId) {
-        try {
-          await sl<NotificationDao>().insertNotification(
-            NotificationModel(
-              id: const Uuid().v4(),
-              userId: widget.post.authorId,
-              type: 'comment',
-              senderId: userId,
-              senderName: userName,
-              senderPhotoUrl: userPhotoUrl,
-              body: '$userName commented on your post',
-              detail: content.length > 80
-                  ? '${content.substring(0, 80)}...'
-                  : content,
-              entityId: widget.post.id,
-              createdAt: DateTime.now(),
-            ),
-          );
-        } catch (e) {
-          debugPrint('[Comment Notification] Error: $e');
-        }
+        debugPrint(
+          '[Comment Notification] Deferred to remote sync fan-out '
+          'sender=$userId receiver=${widget.post.authorId} post=${widget.post.id}',
+        );
       }
 
       // Update feed cubit with incremented comment count
@@ -3996,7 +4003,9 @@ class _CollaborateRequestSheetState extends State<_CollaborateRequestSheet> {
         payload: {
           'sender_id': currentUserId,
           'receiver_id': widget.post.authorId,
+          'sender_name': userName,
           'post_id': widget.post.id,
+          'post_title': widget.post.title,
           'message': message,
           'created_at': DateTime.now().toIso8601String(),
         },
@@ -4011,24 +4020,10 @@ class _CollaborateRequestSheetState extends State<_CollaborateRequestSheet> {
         },
       );
 
-      // Send notification to post author
-      try {
-        await sl<NotificationDao>().insertNotification(
-          NotificationModel(
-            id: const Uuid().v4(),
-            userId: widget.post.authorId,
-            type: 'collaboration',
-            senderId: currentUserId,
-            senderName: userName,
-            body: '$userName wants to collaborate',
-            detail: widget.post.title,
-            entityId: widget.post.id,
-            createdAt: DateTime.now(),
-          ),
-        );
-      } catch (e) {
-        debugPrint('[Collaborate Notification] Error: $e');
-      }
+      debugPrint(
+        '[Collaborate Notification] Deferred to remote sync fan-out '
+        'sender=$currentUserId receiver=${widget.post.authorId} post=${widget.post.id}',
+      );
 
       // Update feed cubit with collaboration request state
       await widget.cubit.requestCollaborationWithPost(

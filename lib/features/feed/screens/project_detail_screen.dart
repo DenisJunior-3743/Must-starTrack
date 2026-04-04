@@ -103,7 +103,10 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
   Future<void> _load() async {
     try {
-      var post = await _dao.getPostById(widget.postId);
+      var post = await _dao.getPostById(
+        widget.postId,
+        currentUserId: _currentUserId,
+      );
 
       // Fallback: if not cached locally, fetch from Firestore and cache it.
       if (post == null && FirebaseAuth.instance.currentUser != null) {
