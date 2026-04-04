@@ -113,6 +113,93 @@ class PostDao {
     );
   }
 
+  Future<void> persistFollowRelationship({
+    required String followerId,
+    required String followeeId,
+  }) async {
+    final db = await _db.database;
+    final now = DateTime.now().toIso8601String();
+    final rawMap = <String, Object?>{
+      'id': '${followerId}_$followeeId',
+      'follower_id': followerId,
+      'followee_id': followeeId,
+      'created_at': now,
+      'sync_status': 0,
+    };
+
+    final map = await _filterToExistingColumns(
+      db,
+      DatabaseSchema.tableFollows,
+      rawMap,
+    );
+
+    await db.insert(
+      DatabaseSchema.tableFollows,
+      map,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> persistCollaborationRequest({
+    required String senderId,
+    required String receiverId,
+    required String postId,
+    String? message,
+  }) async {
+    final db = await _db.database;
+    final now = DateTime.now().toIso8601String();
+    final existing = await db.query(
+      DatabaseSchema.tableCollabRequests,
+      columns: ['id'],
+      where: 'sender_id = ? AND receiver_id = ? AND post_id = ? AND COALESCE(status, ?) = ?',
+      whereArgs: [senderId, receiverId, postId, 'pending', 'pending'],
+      limit: 1,
+    );
+
+    if (existing.isNotEmpty) {
+      final updateMap = await _filterToExistingColumns(
+        db,
+        DatabaseSchema.tableCollabRequests,
+        <String, Object?>{
+          'message': message,
+          'updated_at': now,
+          'sync_status': 0,
+        },
+      );
+      if (updateMap.isNotEmpty) {
+        await db.update(
+          DatabaseSchema.tableCollabRequests,
+          updateMap,
+          where: 'id = ?',
+          whereArgs: [existing.first['id']],
+        );
+      }
+      return;
+    }
+
+    final insertMap = await _filterToExistingColumns(
+      db,
+      DatabaseSchema.tableCollabRequests,
+      <String, Object?>{
+        'id': _uuid.v4(),
+        'sender_id': senderId,
+        'receiver_id': receiverId,
+        'post_id': postId,
+        'message': message,
+        'status': 'pending',
+        'created_at': now,
+        'updated_at': now,
+        'sync_status': 0,
+      },
+    );
+
+    await db.insert(
+      DatabaseSchema.tableCollabRequests,
+      insertMap,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
   Future<void> archivePost(String postId) async {
     final db = await _db.database;
     final postColumns = await _tableColumns(db, DatabaseSchema.tablePosts);
@@ -306,6 +393,21 @@ class PostDao {
 
     final sql = '''
       SELECT p.*,
+         COALESCE((
+           SELECT COUNT(*)
+           FROM ${DatabaseSchema.tableLikes} lk_count
+           WHERE lk_count.post_id = p.id
+         ), p.like_count, 0) AS resolved_like_count,
+         COALESCE((
+           SELECT COUNT(*)
+           FROM ${DatabaseSchema.tableDislikes} dlk_count
+           WHERE dlk_count.post_id = p.id
+         ), p.dislike_count, 0) AS resolved_dislike_count,
+         COALESCE((
+           SELECT COUNT(*)
+           FROM ${DatabaseSchema.tableComments} cm_count
+           WHERE cm_count.post_id = p.id AND COALESCE(cm_count.is_deleted, 0) = 0
+         ), p.comment_count, 0) AS resolved_comment_count,
          $selectAuthorName,
          $selectAuthorPhoto,
          $selectAuthorRole
@@ -462,6 +564,21 @@ class PostDao {
 
         final fallbackSql = '''
           SELECT p.*,
+             COALESCE((
+               SELECT COUNT(*)
+               FROM ${DatabaseSchema.tableLikes} lk_count
+               WHERE lk_count.post_id = p.id
+             ), p.like_count, 0) AS resolved_like_count,
+             COALESCE((
+               SELECT COUNT(*)
+               FROM ${DatabaseSchema.tableDislikes} dlk_count
+               WHERE dlk_count.post_id = p.id
+             ), p.dislike_count, 0) AS resolved_dislike_count,
+             COALESCE((
+               SELECT COUNT(*)
+               FROM ${DatabaseSchema.tableComments} cm_count
+               WHERE cm_count.post_id = p.id AND COALESCE(cm_count.is_deleted, 0) = 0
+             ), p.comment_count, 0) AS resolved_comment_count,
              $selectAuthorName,
              $selectAuthorPhoto,
              $selectAuthorRole
@@ -1108,9 +1225,13 @@ class PostDao {
       ),
       trustScore:
           parseInt(row['trust_score'] ?? row['suspicion_score'], fallback: 100),
-      likeCount: parseInt(row['like_count']),
-      dislikeCount: parseInt(row['dislike_count']),
-      commentCount: parseInt(row['comment_count']),
+      likeCount: parseInt(row['resolved_like_count'] ?? row['like_count']),
+      dislikeCount: parseInt(
+        row['resolved_dislike_count'] ?? row['dislike_count'],
+      ),
+      commentCount: parseInt(
+        row['resolved_comment_count'] ?? row['comment_count'],
+      ),
       shareCount: parseInt(row['share_count']),
       viewCount: parseInt(row['view_count']),
       isArchived:

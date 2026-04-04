@@ -219,9 +219,26 @@ class FeedCubit extends Cubit<FeedState> {
     }
   }
 
+  void _traceAction(
+    String action,
+    String step, {
+    String? userId,
+    Map<String, Object?> details = const {},
+  }) {
+    debugPrint(
+      '=========== user=${userId ?? _activeUserId ?? 'guest'} action=$action step=$step ===========',
+    );
+    if (details.isNotEmpty) {
+      debugPrint('[FeedCubit][$action][$step] $details');
+    }
+  }
+
   // ── Load first page ────────────────────────────────────────────────────────
 
-  Future<void> loadFeed({FeedFilter? filter}) async {
+  Future<void> loadFeed({
+    FeedFilter? filter,
+    bool forceSync = false,
+  }) async {
     _ensureAuthListener();
     _emitIfOpen(const FeedLoading());
     try {
@@ -233,16 +250,20 @@ class FeedCubit extends Cubit<FeedState> {
         'user=${_activeUserId ?? 'guest'} '
         'at=${startTime.millisecondsSinceEpoch}',
       );
-      await _syncService?.syncRemoteToLocal(postLimit: _pageSize * 3);
-      if (isClosed) return;
-      final syncEndTime = DateTime.now();
-      debugPrint(
-        '[FeedCubit] loadFeed sync finished '
-        'filter=${requestedFilter.type ?? 'all'} '
-        'user=${_activeUserId ?? 'guest'} '
-        'syncDuration=${syncEndTime.difference(startTime).inMilliseconds}ms',
-      );
       final f = requestedFilter;
+
+      if (forceSync) {
+        await _syncService?.syncRemoteToLocal(postLimit: _pageSize * 2);
+        if (isClosed) return;
+        final syncEndTime = DateTime.now();
+        debugPrint(
+          '[FeedCubit] loadFeed sync finished '
+          'filter=${requestedFilter.type ?? 'all'} '
+          'user=${_activeUserId ?? 'guest'} '
+          'syncDuration=${syncEndTime.difference(startTime).inMilliseconds}ms',
+        );
+      }
+
       final batch = await _loadGroupedBatch(
         filter: f,
         existingAuthorIds: const <String>{},
@@ -258,11 +279,42 @@ class FeedCubit extends Cubit<FeedState> {
         hasMore: batch.hasMore,
         filter: f,
       ));
+
+      if (!forceSync) {
+        unawaited(_syncFeedInBackground(filter: f));
+      }
     } catch (e) {
       debugPrint('Feed load error: $e');
       _emitIfOpen(const FeedError(
         'Could not load your feed right now. Please try again.',
       ));
+    }
+  }
+
+  Future<void> _syncFeedInBackground({required FeedFilter filter}) async {
+    try {
+      await _syncService?.syncRemoteToLocal(postLimit: _pageSize * 2);
+      if (isClosed) return;
+
+      final current = state;
+      if (current is FeedLoaded && current.filter != filter) {
+        return;
+      }
+
+      final refreshedBatch = await _loadGroupedBatch(
+        filter: filter,
+        existingAuthorIds: const <String>{},
+      );
+
+      final latest = state;
+      if (latest is FeedLoaded && latest.filter == filter) {
+        _emitIfOpen(latest.copyWith(
+          posts: refreshedBatch.posts,
+          hasMore: refreshedBatch.hasMore,
+        ));
+      }
+    } catch (e) {
+      debugPrint('[FeedCubit] background sync failed: $e');
     }
   }
 
@@ -615,29 +667,80 @@ class FeedCubit extends Cubit<FeedState> {
   }
 
   /// Sets collaboration request state and emits updated post
-  Future<void> requestCollaborationWithPost(String postId) async {
+  Future<void> requestCollaborationWithPost(String postId, {String? message}) async {
     final current = state;
     if (current is! FeedLoaded) return;
+    final currentUserId = _activeUserId;
+    if (currentUserId == null || currentUserId.isEmpty) return;
 
     final index = current.posts.indexWhere((p) => p.id == postId);
     if (index == -1) return;
 
     final original = current.posts[index];
+    _traceAction(
+      'collaborate',
+      'ui_tap',
+      userId: currentUserId,
+      details: {
+        'postId': postId,
+        'authorId': original.authorId,
+      },
+    );
     final optimistic = original.copyWith(
       hasCollaborationRequest: true,
     );
 
     final updatedPosts = List<PostModel>.from(current.posts)..[index] = optimistic;
     _emitIfOpen(current.copyWith(posts: updatedPosts));
+    _traceAction(
+      'collaborate',
+      'render_optimistic',
+      userId: currentUserId,
+      details: {
+        'postId': postId,
+        'hasCollaborationRequest': optimistic.hasCollaborationRequest,
+      },
+    );
 
     try {
+      await _postDao.persistCollaborationRequest(
+        senderId: currentUserId,
+        receiverId: original.authorId,
+        postId: postId,
+        message: message,
+      );
+      _traceAction(
+        'collaborate',
+        'local_persisted',
+        userId: currentUserId,
+        details: {
+          'postId': postId,
+          'receiverId': original.authorId,
+        },
+      );
       await _postDao.updatePostActionState(
         postId: postId,
         hasCollaborationRequest: true,
       );
-      debugPrint('[FeedCubit] Collaboration request sent for post=$postId');
+      _traceAction(
+        'collaborate',
+        'render_state_saved',
+        userId: currentUserId,
+        details: {
+          'postId': postId,
+          'hasCollaborationRequest': true,
+        },
+      );
     } catch (e) {
-      debugPrint('[FeedCubit] requestCollaborationWithPost failed: $e');
+      _traceAction(
+        'collaborate',
+        'failed',
+        userId: currentUserId,
+        details: {
+          'postId': postId,
+          'error': e.toString(),
+        },
+      );
       final rollback = List<PostModel>.from(current.posts)..[index] = original;
       _emitIfOpen(current.copyWith(posts: rollback));
     }
@@ -654,14 +757,47 @@ class FeedCubit extends Cubit<FeedState> {
     if (index == -1) return;
 
     final original = current.posts[index];
+    _traceAction(
+      'follow',
+      'ui_tap',
+      userId: currentUserId,
+      details: {
+        'postId': postId,
+        'authorId': original.authorId,
+      },
+    );
     final optimistic = original.copyWith(
       isFollowingAuthor: true,
     );
 
     final updatedPosts = List<PostModel>.from(current.posts)..[index] = optimistic;
     _emitIfOpen(current.copyWith(posts: updatedPosts));
+    _traceAction(
+      'follow',
+      'render_optimistic',
+      userId: currentUserId,
+      details: {
+        'postId': postId,
+        'authorId': original.authorId,
+        'isFollowingAuthor': optimistic.isFollowingAuthor,
+      },
+    );
 
     try {
+      await _postDao.persistFollowRelationship(
+        followerId: currentUserId,
+        followeeId: original.authorId,
+      );
+      _traceAction(
+        'follow',
+        'local_persisted',
+        userId: currentUserId,
+        details: {
+          'postId': postId,
+          'authorId': original.authorId,
+        },
+      );
+
       await _activityLogDao.logAction(
         userId: currentUserId,
         action: 'follow_user',
@@ -670,6 +806,15 @@ class FeedCubit extends Cubit<FeedState> {
         metadata: {
           'author_name': original.authorName,
           'post_title': original.title,
+        },
+      );
+      _traceAction(
+        'follow',
+        'activity_logged',
+        userId: currentUserId,
+        details: {
+          'postId': postId,
+          'authorId': original.authorId,
         },
       );
 
@@ -683,15 +828,41 @@ class FeedCubit extends Cubit<FeedState> {
           'followed_at': DateTime.now().toIso8601String(),
         },
       );
+      _traceAction(
+        'follow',
+        'remote_queued',
+        userId: currentUserId,
+        details: {
+          'postId': postId,
+          'authorId': original.authorId,
+        },
+      );
 
       await _postDao.updatePostActionState(
         postId: postId,
         isFollowingAuthor: true,
       );
-
-      debugPrint('[FeedCubit] Following author=${original.authorId}');
+      _traceAction(
+        'follow',
+        'render_state_saved',
+        userId: currentUserId,
+        details: {
+          'postId': postId,
+          'authorId': original.authorId,
+          'isFollowingAuthor': true,
+        },
+      );
     } catch (e) {
-      debugPrint('[FeedCubit] followAuthor failed: $e');
+      _traceAction(
+        'follow',
+        'failed',
+        userId: currentUserId,
+        details: {
+          'postId': postId,
+          'authorId': original.authorId,
+          'error': e.toString(),
+        },
+      );
       final rollback = List<PostModel>.from(current.posts)..[index] = original;
       _emitIfOpen(current.copyWith(posts: rollback));
     }
@@ -925,7 +1096,7 @@ class FeedCubit extends Cubit<FeedState> {
     _ensureAuthListener();
     final currentFilter =
         state is FeedLoaded ? (state as FeedLoaded).filter : const FeedFilter();
-    await loadFeed(filter: currentFilter);
+    await loadFeed(filter: currentFilter, forceSync: true);
   }
 
   @override
