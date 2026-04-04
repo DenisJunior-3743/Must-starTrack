@@ -26,6 +26,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:timeago/timeago.dart' as timeago;
+import 'package:uuid/uuid.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../core/constants/app_colors.dart';
@@ -37,7 +38,10 @@ import '../../../core/router/route_names.dart';
 import '../../../core/utils/media_path_utils.dart';
 import '../../../core/utils/video_cache_utils.dart';
 import '../../../data/local/dao/activity_log_dao.dart';
+import '../../../data/local/dao/comment_dao.dart';
 import '../../../data/local/dao/message_dao.dart';
+import '../../../data/local/dao/notification_dao.dart';
+import '../../../data/local/dao/sync_queue_dao.dart';
 import '../../../data/local/dao/user_dao.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/remote/recommender_service.dart';
@@ -590,7 +594,6 @@ class _VideoPageState extends State<_VideoPage>
   bool _isMuted = false;
   bool _resumeOnForeground = false;
   double? _downloadProgress;   // null = not downloading; 0-1 = in progress
-  int? _myRating;
 
   String? get _videoUrl {
     for (final u in widget.post.mediaUrls) {
@@ -610,7 +613,6 @@ class _VideoPageState extends State<_VideoPage>
     if (widget.isActive) {
       _initController();
     }
-    _loadMyRating();
   }
 
   @override
@@ -640,8 +642,6 @@ class _VideoPageState extends State<_VideoPage>
       if (widget.isActive) {
         _initController();
       }
-      _myRating = null;
-      _loadMyRating();
       return;
     }
 
@@ -722,17 +722,6 @@ class _VideoPageState extends State<_VideoPage>
       _resumeOnForeground = widget.isActive && (_ctrl?.value.isPlaying ?? false);
       _ctrl?.pause();
     }
-  }
-
-  Future<void> _loadMyRating() async {
-    final uid = sl<AuthCubit>().currentUser?.id;
-    if (uid == null || uid.isEmpty) return;
-    final rating = await sl<ActivityLogDao>().getMyLatestPostRating(
-      userId: uid,
-      postId: widget.post.id,
-    );
-    if (!mounted) return;
-    setState(() => _myRating = rating);
   }
 
   Future<void> _initController() async {
@@ -820,31 +809,6 @@ class _VideoPageState extends State<_VideoPage>
       debugPrint('[VideoPage] background download failed: $e');
       if (mounted) setState(() => _downloadProgress = null);
     }
-  }
-
-  /// Pauses the video, shows the guest sign-in snackbar, and resumes playback
-  /// if the user returns without signing in (or after signing in).
-  Future<void> _guestPrompt() async {
-    _ctrl?.pause();
-    if (mounted) setState(() {});
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Sign in to interact with posts',
-          style: GoogleFonts.plusJakartaSans(),
-        ),
-        action: SnackBarAction(
-          label: 'Sign In',
-          onPressed: () async {
-            await context.push(RouteNames.login);
-            if (mounted) {
-              _syncPlayback();
-              setState(() {});
-            }
-          },
-        ),
-      ),
-    );
   }
 
   @override
@@ -1054,11 +1018,16 @@ class _VideoPageState extends State<_VideoPage>
                       : Icons.favorite_border_rounded,
                   label: _compact(post.likeCount),
                   color: post.isLikedByMe ? Colors.red : Colors.white,
-                  onTap: () => widget.isGuest
-                      ? _guestPrompt()
-                      : widget.cubit.likePost(post.id),
+                  enabled: !widget.isGuest && widget.post.authorId != (sl<AuthCubit>().currentUser?.id ?? ''),
+                  onTap: () {
+                    final currentUserId = sl<AuthCubit>().currentUser?.id ?? '';
+                    final isOwnPost = currentUserId == post.authorId;
+                    if (!widget.isGuest && !isOwnPost) {
+                      widget.cubit.likePost(post.id);
+                    }
+                  },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 _VideoActionBtn(
                   icon: post.isDislikedByMe
                       ? Icons.thumb_down_rounded
@@ -1066,54 +1035,89 @@ class _VideoPageState extends State<_VideoPage>
                   label: _compact(post.dislikeCount),
                   color:
                       post.isDislikedByMe ? AppColors.primary : Colors.white,
-                  onTap: () => widget.isGuest
-                      ? _guestPrompt()
-                      : widget.cubit.dislikePost(post.id),
+                  enabled: !widget.isGuest && widget.post.authorId != (sl<AuthCubit>().currentUser?.id ?? ''),
+                  onTap: () {
+                    final currentUserId = sl<AuthCubit>().currentUser?.id ?? '';
+                    final isOwnPost = currentUserId == post.authorId;
+                    if (!widget.isGuest && !isOwnPost) {
+                      widget.cubit.dislikePost(post.id);
+                    }
+                  },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 _VideoActionBtn(
                   icon: Icons.chat_bubble_outline_rounded,
                   label: _compact(post.commentCount),
                   color: Colors.white,
+                  enabled: !widget.isGuest,
                   onTap: () async {
-                    _ctrl?.pause();
-                    if (mounted) setState(() {});
-                    await context.push('/project/${post.id}');
-                    if (mounted) {
-                      _syncPlayback();
-                      setState(() {});
+                    if (!widget.isGuest) {
+                      _ctrl?.pause();
+                      if (mounted) setState(() {});
+                      await _showCommentSheet(context, post, widget.cubit);
+                      if (mounted) {
+                        _syncPlayback();
+                        setState(() {});
+                      }
                     }
                   },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 _VideoActionBtn(
                   icon: Icons.share_rounded,
                   label: 'Share',
                   color: Colors.white,
+                  enabled: true,
                   onTap: () => Share.share(
                     '${post.title}\n\n${post.description ?? ''}\n\nShared from MUST StarTrack',
                     subject: post.title,
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 _VideoActionBtn(
-                  icon: Icons.star_border_rounded,
-                  label: _myRating == null ? 'Rate' : '${_myRating!}★',
-                  color: Colors.white,
-                  onTap: () => widget.isGuest
-                      ? _guestPrompt()
-                      : _showRatePostSheet(
-                          context,
-                          post,
-                          widget.cubit,
-                          initialStars: _myRating ?? 0,
-                          onRated: (stars) {
-                            if (!mounted) return;
-                            setState(() => _myRating = stars);
-                          },
-                        ),
+                  icon: post.isRatedByMe
+                      ? Icons.star_rounded
+                      : Icons.star_border_rounded,
+                  label: post.isRatedByMe
+                      ? '${post.myRatingStars}★'
+                      : 'Rate',
+                  color: post.isRatedByMe ? AppColors.warning : Colors.white,
+                  enabled: !widget.isGuest && widget.post.authorId != (sl<AuthCubit>().currentUser?.id ?? ''),
+                  onTap: () {
+                    final currentUserId = sl<AuthCubit>().currentUser?.id ?? '';
+                    final isOwnPost = currentUserId == post.authorId;
+                    if (!widget.isGuest && !isOwnPost) {
+                      _showRatePostSheet(
+                        context,
+                        post,
+                        widget.cubit,
+                        initialStars: post.myRatingStars,
+                        onRated: (_) {},
+                      );
+                    }
+                  },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
+                _VideoActionBtn(
+                  icon: post.hasCollaborationRequest
+                      ? Icons.check_circle_rounded
+                      : Icons.people_outline_rounded,
+                  label: post.hasCollaborationRequest ? 'Pending' : 'Collab',
+                  color: post.hasCollaborationRequest
+                      ? AppColors.success
+                      : Colors.white,
+                  enabled: !widget.isGuest &&
+                      post.authorId != (sl<AuthCubit>().currentUser?.id ?? '') &&
+                      !post.hasCollaborationRequest,
+                  onTap: () {
+                    final currentUserId = sl<AuthCubit>().currentUser?.id ?? '';
+                    final isOwnPost = currentUserId == post.authorId;
+                    if (!widget.isGuest && !isOwnPost) {
+                      _showCollaborateRequestSheet(context, post, widget.cubit);
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
                 _VideoActionBtn(
                   icon: Icons.more_vert_rounded,
                   label: 'More',
@@ -1121,7 +1125,7 @@ class _VideoPageState extends State<_VideoPage>
                   onTap: () => _showMoreSheet(context, post, widget.cubit,
                       widget.isGuest),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 // Mute toggle
                 _VideoActionBtn(
                   icon: _isMuted
@@ -2293,36 +2297,11 @@ class _PostActionBar extends StatefulWidget {
 }
 
 class _PostActionBarState extends State<_PostActionBar> {
-  int? _myRating;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadMyRating();
-  }
-
-  @override
-  void didUpdateWidget(covariant _PostActionBar oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.post.id != widget.post.id) {
-      _myRating = null;
-      _loadMyRating();
-    }
-  }
-
-  Future<void> _loadMyRating() async {
-    final uid = sl<AuthCubit>().currentUser?.id;
-    if (uid == null || uid.isEmpty) return;
-    final rating = await sl<ActivityLogDao>().getMyLatestPostRating(
-      userId: uid,
-      postId: widget.post.id,
-    );
-    if (!mounted) return;
-    setState(() => _myRating = rating);
-  }
-
   @override
   Widget build(BuildContext context) {
+    final currentUserId = sl<AuthCubit>().currentUser?.id ?? '';
+    final isOwnPost = currentUserId == widget.post.authorId;
+    
     return Padding(
       padding: const EdgeInsets.fromLTRB(6, 4, 6, 8),
       child: Row(
@@ -2333,11 +2312,17 @@ class _PostActionBarState extends State<_PostActionBar> {
                 ? Icons.favorite_rounded
                 : Icons.favorite_border_rounded,
             label: _compact(widget.post.likeCount),
-            color: widget.post.isLikedByMe ? Colors.red : AppColors.textSecondaryLight,
-            onTap: () => widget.isGuest
-                ? _promptLogin(context)
-                : widget.cubit.likePost(widget.post.id),
+            color: widget.post.isLikedByMe ? Colors.red : (isOwnPost ? Colors.grey : AppColors.textSecondaryLight),
+            enabled: !isOwnPost && !widget.isGuest,
+            onTap: () {
+              if (widget.isGuest) {
+                _promptLogin(context);
+              } else if (!isOwnPost) {
+                widget.cubit.likePost(widget.post.id);
+              }
+            },
           ),
+          const SizedBox(width: 4),
           // Dislike
           _ActionBarBtn(
             icon: widget.post.isDislikedByMe
@@ -2346,45 +2331,86 @@ class _PostActionBarState extends State<_PostActionBar> {
             label: _compact(widget.post.dislikeCount),
             color: widget.post.isDislikedByMe
                 ? AppColors.primary
-                : AppColors.textSecondaryLight,
-            onTap: () => widget.isGuest
-                ? _promptLogin(context)
-                : widget.cubit.dislikePost(widget.post.id),
+                : (isOwnPost ? Colors.grey : AppColors.textSecondaryLight),
+            enabled: !isOwnPost && !widget.isGuest,
+            onTap: () {
+              if (widget.isGuest) {
+                _promptLogin(context);
+              } else if (!isOwnPost) {
+                widget.cubit.dislikePost(widget.post.id);
+              }
+            },
           ),
+          const SizedBox(width: 4),
           // Comment
           _ActionBarBtn(
             icon: Icons.chat_bubble_outline_rounded,
             label: _compact(widget.post.commentCount),
             color: AppColors.textSecondaryLight,
-            onTap: () => context.push('/project/${widget.post.id}'),
+            enabled: !widget.isGuest,
+            onTap: () => widget.isGuest
+                ? _promptLogin(context)
+                : _showCommentSheet(context, widget.post, widget.cubit),
           ),
+          const SizedBox(width: 4),
           // Share
           _ActionBarBtn(
             icon: Icons.share_rounded,
             label: 'Share',
             color: AppColors.textSecondaryLight,
+            enabled: !widget.isGuest,
             onTap: () => Share.share(
               '${widget.post.title}\n\n${widget.post.description ?? ''}\n\nShared from MUST StarTrack',
               subject: widget.post.title,
             ),
           ),
-          // Rate
+          const SizedBox(width: 4),
+          // Rate - Toggle state: Rate -> Show stars if rated
           _ActionBarBtn(
-            icon: Icons.star_border_rounded,
-            label: _myRating == null ? 'Rate' : '${_myRating!}★',
-            color: AppColors.textSecondaryLight,
-            onTap: () => widget.isGuest
-                ? _promptLogin(context)
-                : _showRatePostSheet(
-                    context,
-                    widget.post,
-                    widget.cubit,
-                    initialStars: _myRating ?? 0,
-                    onRated: (stars) {
-                      if (!mounted) return;
-                      setState(() => _myRating = stars);
-                    },
-                  ),
+            icon: widget.post.isRatedByMe
+                ? Icons.star_rounded
+                : Icons.star_border_rounded,
+            label: widget.post.isRatedByMe
+                ? '${widget.post.myRatingStars}★'
+                : 'Rate',
+            color: widget.post.isRatedByMe ? AppColors.warning : (isOwnPost ? Colors.grey : AppColors.textSecondaryLight),
+            enabled: !isOwnPost && !widget.isGuest,
+            onTap: () {
+              if (widget.isGuest) {
+                _promptLogin(context);
+              } else if (!isOwnPost) {
+                _showRatePostSheet(
+                  context,
+                  widget.post,
+                  widget.cubit,
+                  initialStars: widget.post.myRatingStars,
+                  onRated: (stars) {
+                    // State will update via BLoC when next feed loads
+                  },
+                );
+              }
+            },
+          ),
+          const SizedBox(width: 4),
+          // Collaborate - Toggle state: Request -> Pending if requested
+          _ActionBarBtn(
+            icon: widget.post.hasCollaborationRequest
+                ? Icons.check_circle_rounded
+                : Icons.people_outline_rounded,
+            label: widget.post.hasCollaborationRequest ? 'Pending' : 'Collab',
+            color: widget.post.hasCollaborationRequest
+                ? AppColors.success
+                : (isOwnPost ? Colors.grey : AppColors.textSecondaryLight),
+            enabled: !isOwnPost && !widget.isGuest && !widget.post.hasCollaborationRequest,
+            onTap: () {
+              if (widget.isGuest) {
+                _promptLogin(context);
+              } else if (widget.post.hasCollaborationRequest) {
+                // Silent - button is disabled
+              } else if (!isOwnPost) {
+                _showCollaborateRequestSheet(context, widget.post, widget.cubit);
+              }
+            },
           ),
           const Spacer(),
           // More (Report / Details / Profile)
@@ -2413,29 +2439,34 @@ class _SmallFollowButton extends StatefulWidget {
 }
 
 class _SmallFollowButtonState extends State<_SmallFollowButton> {
-  bool _following = false;
-
   @override
   Widget build(BuildContext context) {
+    final isFollowing = widget.post.isFollowingAuthor;
+    final isOwnPost = widget.post.authorId == (context.read<AuthCubit>().currentUser?.id ?? '');
+
+    if (isOwnPost) return const SizedBox.shrink();
+
     return GestureDetector(
-      onTap: () {
-        if (_following) return;
-        _showFollowSheet(context, widget.post, () {
-          setState(() => _following = true);
-        });
-      },
+      onTap: isFollowing
+          ? null
+          : () {
+              final cubit = context.read<FeedCubit>();
+              _showFollowSheet(context, widget.post, () {
+                cubit.followAuthor(widget.post.id);
+              });
+            },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: _following ? Colors.white24 : Colors.white,
+          color: isFollowing ? Colors.white24 : Colors.white,
           borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
         ),
         child: Text(
-          _following ? 'Following' : '+ Follow',
+          isFollowing ? 'Following' : '+ Follow',
           style: GoogleFonts.plusJakartaSans(
             fontSize: 11,
             fontWeight: FontWeight.w700,
-            color: _following ? Colors.white : AppColors.primary,
+            color: isFollowing ? Colors.white : AppColors.primary,
           ),
         ),
       ),
@@ -2526,31 +2557,34 @@ class _ActionBarBtn extends StatelessWidget {
   final String label;
   final Color color;
   final VoidCallback onTap;
+  final bool enabled;
 
   const _ActionBarBtn({
     required this.icon,
     required this.label,
     required this.color,
     required this.onTap,
+    this.enabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
+    final effectiveColor = enabled ? color : Colors.grey;
     return InkWell(
-      onTap: onTap,
+      onTap: enabled ? onTap : null,
       borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 18, color: color),
+            Icon(icon, size: 18, color: effectiveColor),
             const SizedBox(width: 4),
             Text(
               label,
               style: GoogleFonts.plusJakartaSans(
                   fontSize: 12,
-                  color: color,
+                  color: effectiveColor,
                   fontWeight: FontWeight.w600),
             ),
           ],
@@ -2565,19 +2599,23 @@ class _VideoActionBtn extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color color;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool enabled;
 
   const _VideoActionBtn({
     required this.icon,
     required this.label,
     required this.color,
     required this.onTap,
+    this.enabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
+    final effectiveColor = enabled ? color : Colors.grey;
+    
     return GestureDetector(
-      onTap: onTap,
+      onTap: enabled ? onTap : null,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -2588,13 +2626,13 @@ class _VideoActionBtn extends StatelessWidget {
               color: Colors.black38,
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: color, size: 24),
+            child: Icon(icon, color: effectiveColor, size: 24),
           ),
           const SizedBox(height: 3),
           Text(
             label,
             style: GoogleFonts.plusJakartaSans(
-                color: Colors.white, fontSize: 11),
+                color: effectiveColor, fontSize: 11),
           ),
         ],
       ),
@@ -3253,6 +3291,608 @@ void _promptLogin(BuildContext context) {
       ),
     ),
   );
+}
+
+Future<void> _showCommentSheet(
+    BuildContext context, PostModel post, FeedCubit cubit) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (ctx) => _CommentSheet(
+      post: post,
+      cubit: cubit,
+      parentCtx: context,
+    ),
+  );
+}
+
+class _CommentSheet extends StatefulWidget {
+  final PostModel post;
+  final FeedCubit cubit;
+  final BuildContext parentCtx;
+
+  const _CommentSheet({
+    required this.post,
+    required this.cubit,
+    required this.parentCtx,
+  });
+
+  @override
+  State<_CommentSheet> createState() => _CommentSheetState();
+}
+
+class _CommentSheetState extends State<_CommentSheet> {
+  late Future<List<CommentRecord>> _commentsFuture;
+  final _commentCtrl = TextEditingController();
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _commentsFuture = sl<CommentDao>().getCommentsForPost(widget.post.id);
+  }
+
+  @override
+  void dispose() {
+    _commentCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submitComment() async {
+    final content = _commentCtrl.text.trim();
+    if (content.isEmpty) return;
+
+    setState(() => _submitting = true);
+
+    try {
+      final userId = sl<AuthCubit>().currentUser?.id ?? '';
+      final userName = sl<AuthCubit>().currentUser?.displayName ?? 'Unknown';
+      final userPhotoUrl = sl<AuthCubit>().currentUser?.photoUrl;
+
+      // Add comment locally
+      final commentId = const Uuid().v4();
+      await sl<CommentDao>().addLocalComment(
+        postId: widget.post.id,
+        authorId: userId,
+        content: content,
+        commentId: commentId,
+      );
+
+      // Log activity
+      await sl<ActivityLogDao>().logAction(
+        userId: userId,
+        action: 'comment_post',
+        entityType: 'posts',
+        entityId: widget.post.id,
+        metadata: {
+          'comment_id': commentId,
+          'comment_text': content,
+          'post_title': widget.post.title,
+          'author_id': widget.post.authorId,
+        },
+      );
+
+      // Queue for sync
+      await sl<SyncQueueDao>().enqueue(
+        operation: 'create',
+        entity: 'comments',
+        entityId: commentId,
+        payload: {
+          'id': commentId,
+          'post_id': widget.post.id,
+          'author_id': userId,
+          'content': content,
+          'created_at': DateTime.now().toIso8601String(),
+          'author_name': userName,
+          'author_photo_url': userPhotoUrl,
+        },
+      );
+
+      // Send notification to post author
+      if (userId != widget.post.authorId) {
+        try {
+          await sl<NotificationDao>().insertNotification(
+            NotificationModel(
+              id: const Uuid().v4(),
+              userId: widget.post.authorId,
+              type: 'comment',
+              senderId: userId,
+              senderName: userName,
+              senderPhotoUrl: userPhotoUrl,
+              body: '$userName commented on your post',
+              detail: content.length > 80
+                  ? '${content.substring(0, 80)}...'
+                  : content,
+              entityId: widget.post.id,
+              createdAt: DateTime.now(),
+            ),
+          );
+        } catch (e) {
+          debugPrint('[Comment Notification] Error: $e');
+        }
+      }
+
+      // Update feed cubit with incremented comment count
+      await widget.cubit.addCommentToPost(widget.post.id);
+
+      if (mounted) {
+        _commentCtrl.clear();
+        setState(() => _submitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Comment posted!',
+                style: GoogleFonts.plusJakartaSans()),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        // Refresh comments
+        setState(() {
+          _commentsFuture =
+              sl<CommentDao>().getCommentsForPost(widget.post.id);
+        });
+      }
+    } catch (e) {
+      debugPrint('[Comment] Error: $e');
+      if (mounted) {
+        setState(() => _submitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to post comment: $e',
+                style: GoogleFonts.plusJakartaSans()),
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 14),
+                      decoration: BoxDecoration(
+                        color: AppColors.borderLight,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    'Comments',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    widget.post.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      color: AppColors.textSecondaryLight,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ),
+            ),
+            // Comments list
+            Flexible(
+              child: FutureBuilder<List<CommentRecord>>(
+                future: _commentsFuture,
+                builder: (ctx, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(
+                        child: CircularProgressIndicator());
+                  }
+
+                  final comments = snapshot.data ?? [];
+
+                  if (comments.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                        child: Text(
+                          'No comments yet. Be the first!',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: AppColors.textSecondaryLight,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
+                  return ListView.builder(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    itemCount: comments.length,
+                    itemBuilder: (ctx, i) {
+                      final comment = comments[i];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Avatar
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: AppColors.primaryTint10,
+                              ),
+                              child: comment.authorPhotoUrl != null &&
+                                      comment.authorPhotoUrl!.isNotEmpty
+                                  ? ClipOval(
+                                      child: isLocalMediaPath(
+                                              comment.authorPhotoUrl!)
+                                          ? Image.file(
+                                              File(comment.authorPhotoUrl!),
+                                              fit: BoxFit.cover,
+                                            )
+                                          : CachedNetworkImage(
+                                              imageUrl:
+                                                  comment.authorPhotoUrl!,
+                                              fit: BoxFit.cover,
+                                            ),
+                                    )
+                                  : Center(
+                                      child: Text(
+                                        (comment.authorName?.isNotEmpty ==
+                                                true)
+                                            ? comment.authorName![0]
+                                                .toUpperCase()
+                                            : '?',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 12,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                    ),
+                            ),
+                            const SizedBox(width: 8),
+                            // Comment content
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          comment.authorName ?? 'Unknown',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style:
+                                              GoogleFonts.plusJakartaSans(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
+                                      Text(
+                                        timeago.format(comment.createdAt),
+                                        style:
+                                            GoogleFonts.plusJakartaSans(
+                                          fontSize: 10,
+                                          color:
+                                              AppColors.textSecondaryLight,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    comment.content,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 12,
+                                      color: Colors.white70,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+            // Comment input
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+              decoration: const BoxDecoration(
+                border: Border(
+                  top: BorderSide(color: AppColors.borderLight, width: 0.5),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _commentCtrl,
+                      maxLines: 1,
+                      enabled: !_submitting,
+                      decoration: InputDecoration(
+                        hintText: 'Add a comment...',
+                        hintStyle: GoogleFonts.plusJakartaSans(
+                          fontSize: 13,
+                          color: AppColors.textHintLight,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppDimensions.radiusSm),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: _submitting ? null : _submitComment,
+                    icon: _submitting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Icon(Icons.send_rounded,
+                            color: AppColors.primary),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+void _showCollaborateRequestSheet(
+    BuildContext context, PostModel post, FeedCubit cubit) {
+  showModalBottomSheet<void>(
+    context: context,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (ctx) => _CollaborateRequestSheet(
+      post: post,
+      cubit: cubit,
+      parentCtx: context,
+    ),
+  );
+}
+
+class _CollaborateRequestSheet extends StatefulWidget {
+  final PostModel post;
+  final FeedCubit cubit;
+  final BuildContext parentCtx;
+
+  const _CollaborateRequestSheet({
+    required this.post,
+    required this.cubit,
+    required this.parentCtx,
+  });
+
+  @override
+  State<_CollaborateRequestSheet> createState() =>
+      _CollaborateRequestSheetState();
+}
+
+class _CollaborateRequestSheetState extends State<_CollaborateRequestSheet> {
+  final _messageCtrl = TextEditingController();
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _messageCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendRequest() async {
+    final message = _messageCtrl.text.trim();
+    final currentUserId = sl<AuthCubit>().currentUser?.id ?? '';
+    final userName = sl<AuthCubit>().currentUser?.displayName ?? 'A user';
+
+    if (currentUserId.isEmpty) return;
+
+    setState(() => _loading = true);
+
+    try {
+      // Log activity
+      await sl<ActivityLogDao>().logAction(
+        userId: currentUserId,
+        action: 'request_collaborate',
+        entityType: 'posts',
+        entityId: widget.post.id,
+        metadata: {
+          'target_user_id': widget.post.authorId,
+          'message': message,
+          'post_title': widget.post.title,
+        },
+      );
+
+      // Queue for sync
+      await sl<SyncQueueDao>().enqueue(
+        operation: 'create',
+        entity: 'collaboration_requests',
+        entityId:
+            '${currentUserId}_${widget.post.id}_${DateTime.now().millisecondsSinceEpoch}',
+        payload: {
+          'from_user_id': currentUserId,
+          'to_user_id': widget.post.authorId,
+          'post_id': widget.post.id,
+          'message': message,
+          'created_at': DateTime.now().toIso8601String(),
+        },
+      );
+
+      // Send notification to post author
+      try {
+        await sl<NotificationDao>().insertNotification(
+          NotificationModel(
+            id: const Uuid().v4(),
+            userId: widget.post.authorId,
+            type: 'collaboration',
+            senderId: currentUserId,
+            senderName: userName,
+            body: '$userName wants to collaborate',
+            detail: widget.post.title,
+            entityId: widget.post.id,
+            createdAt: DateTime.now(),
+          ),
+        );
+      } catch (e) {
+        debugPrint('[Collaborate Notification] Error: $e');
+      }
+
+  // Update feed cubit with collaboration request state
+  await widget.cubit.requestCollaborationWithPost(widget.post.id);
+
+  if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Collaboration request sent!',
+                style: GoogleFonts.plusJakartaSans()),
+            duration: const Duration(seconds: 2),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[Collaborate Request] Error: $e');
+      if (mounted) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send request: $e',
+                style: GoogleFonts.plusJakartaSans()),
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 14),
+                decoration: BoxDecoration(
+                  color: AppColors.borderLight,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Text(
+              'Request to Collaborate',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              widget.post.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12,
+                color: AppColors.textSecondaryLight,
+              ),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _messageCtrl,
+              maxLines: 3,
+              enabled: !_loading,
+              decoration: InputDecoration(
+                hintText:
+                    'Tell them why you\'d like to collaborate (optional)',
+                hintStyle: GoogleFonts.plusJakartaSans(
+                  fontSize: 13,
+                  color: AppColors.textHintLight,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius:
+                      BorderRadius.circular(AppDimensions.radiusMd),
+                ),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _loading ? null : () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _loading ? null : _sendRequest,
+                    child: _loading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text('Send Request'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

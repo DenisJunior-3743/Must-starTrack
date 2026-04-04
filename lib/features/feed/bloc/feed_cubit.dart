@@ -526,6 +526,8 @@ class FeedCubit extends Cubit<FeedState> {
     required PostModel post,
     required int stars,
   }) async {
+    final current = state;
+    if (current is! FeedLoaded) return;
     final currentUserId = _activeUserId;
     if (currentUserId == null || currentUserId.isEmpty) {
       debugPrint('[FeedCubit] Ignoring rating because user is guest.');
@@ -534,6 +536,19 @@ class FeedCubit extends Cubit<FeedState> {
 
     final safeStars = stars.clamp(1, 5);
     final role = _authCubit?.currentUser?.role.name ?? 'student';
+
+    // Find the post and optimistically update rating state
+    final index = current.posts.indexWhere((p) => p.id == post.id);
+    if (index == -1) return;
+
+    final original = current.posts[index];
+    final optimistic = original.copyWith(
+      isRatedByMe: true,
+      myRatingStars: safeStars,
+    );
+
+    final updatedPosts = List<PostModel>.from(current.posts)..[index] = optimistic;
+    _emitIfOpen(current.copyWith(posts: updatedPosts));
 
     try {
       await _activityLogDao.logAction(
@@ -562,12 +577,123 @@ class FeedCubit extends Cubit<FeedState> {
         },
       );
 
+      await _postDao.updatePostActionState(
+        postId: post.id,
+        isRatedByMe: true,
+        myRatingStars: safeStars,
+      );
+
       unawaited(_syncService?.processPendingSync());
       debugPrint(
         '[FeedCubit] Rating logged post=${post.id} stars=$safeStars role=$role',
       );
     } catch (e) {
       debugPrint('[FeedCubit] ratePost failed: $e');
+      // Rollback on error
+      final rollback = List<PostModel>.from(current.posts)..[index] = original;
+      _emitIfOpen(current.copyWith(posts: rollback));
+    }
+  }
+
+  /// Increments comment count and emits updated post state
+  Future<void> addCommentToPost(String postId) async {
+    final current = state;
+    if (current is! FeedLoaded) return;
+
+    final index = current.posts.indexWhere((p) => p.id == postId);
+    if (index == -1) return;
+
+    final original = current.posts[index];
+    final optimistic = original.copyWith(
+      commentCount: original.commentCount + 1,
+    );
+
+    final updatedPosts = List<PostModel>.from(current.posts)..[index] = optimistic;
+    _emitIfOpen(current.copyWith(posts: updatedPosts));
+    
+    debugPrint('[FeedCubit] Comment added to post=$postId new count=${optimistic.commentCount}');
+  }
+
+  /// Sets collaboration request state and emits updated post
+  Future<void> requestCollaborationWithPost(String postId) async {
+    final current = state;
+    if (current is! FeedLoaded) return;
+
+    final index = current.posts.indexWhere((p) => p.id == postId);
+    if (index == -1) return;
+
+    final original = current.posts[index];
+    final optimistic = original.copyWith(
+      hasCollaborationRequest: true,
+    );
+
+    final updatedPosts = List<PostModel>.from(current.posts)..[index] = optimistic;
+    _emitIfOpen(current.copyWith(posts: updatedPosts));
+
+    try {
+      await _postDao.updatePostActionState(
+        postId: postId,
+        hasCollaborationRequest: true,
+      );
+      debugPrint('[FeedCubit] Collaboration request sent for post=$postId');
+    } catch (e) {
+      debugPrint('[FeedCubit] requestCollaborationWithPost failed: $e');
+      final rollback = List<PostModel>.from(current.posts)..[index] = original;
+      _emitIfOpen(current.copyWith(posts: rollback));
+    }
+  }
+
+  /// Sets follow state when user follows post author
+  Future<void> followAuthor(String postId) async {
+    final current = state;
+    if (current is! FeedLoaded) return;
+    final currentUserId = _activeUserId;
+    if (currentUserId == null || currentUserId.isEmpty) return;
+
+    final index = current.posts.indexWhere((p) => p.id == postId);
+    if (index == -1) return;
+
+    final original = current.posts[index];
+    final optimistic = original.copyWith(
+      isFollowingAuthor: true,
+    );
+
+    final updatedPosts = List<PostModel>.from(current.posts)..[index] = optimistic;
+    _emitIfOpen(current.copyWith(posts: updatedPosts));
+
+    try {
+      await _activityLogDao.logAction(
+        userId: currentUserId,
+        action: 'follow_user',
+        entityType: 'users',
+        entityId: original.authorId,
+        metadata: {
+          'author_name': original.authorName,
+          'post_title': original.title,
+        },
+      );
+
+      await _syncQueue.enqueue(
+        operation: 'create',
+        entity: 'follows',
+        entityId: '${currentUserId}_${original.authorId}',
+        payload: {
+          'follower_id': currentUserId,
+          'followed_id': original.authorId,
+          'followed_at': DateTime.now().toIso8601String(),
+        },
+      );
+
+      await _postDao.updatePostActionState(
+        postId: postId,
+        isFollowingAuthor: true,
+      );
+
+      debugPrint('[FeedCubit] Following author=${original.authorId}');
+    } catch (e) {
+      debugPrint('[FeedCubit] followAuthor failed: $e');
+      final rollback = List<PostModel>.from(current.posts)..[index] = original;
+      _emitIfOpen(current.copyWith(posts: rollback));
     }
   }
 
