@@ -78,6 +78,41 @@ class PostDao {
     );
   }
 
+  Future<void> updatePostActionState({
+    required String postId,
+    bool? isRatedByMe,
+    int? myRatingStars,
+    bool? isFollowingAuthor,
+    bool? hasCollaborationRequest,
+  }) async {
+    final db = await _db.database;
+    final rawMap = <String, Object?>{
+      if (isRatedByMe != null) 'is_rated_by_me': isRatedByMe ? 1 : 0,
+      if (myRatingStars != null) 'my_rating_stars': myRatingStars,
+      if (isFollowingAuthor != null)
+        'is_following_author': isFollowingAuthor ? 1 : 0,
+      if (hasCollaborationRequest != null)
+        'has_collaboration_request': hasCollaborationRequest ? 1 : 0,
+      'updated_at': DateTime.now().toIso8601String(),
+      'sync_status': 0,
+    };
+
+    final map = await _filterToExistingColumns(
+      db,
+      DatabaseSchema.tablePosts,
+      rawMap,
+    );
+
+    if (map.isEmpty) return;
+
+    await db.update(
+      DatabaseSchema.tablePosts,
+      map,
+      where: 'id = ?',
+      whereArgs: [postId],
+    );
+  }
+
   Future<void> archivePost(String postId) async {
     final db = await _db.database;
     final postColumns = await _tableColumns(db, DatabaseSchema.tablePosts);
@@ -230,10 +265,19 @@ class PostDao {
 
     args.addAll([pageSize]);
 
-    // Left-join user interaction state so we get isLikedByMe in one query
+    // Left-join user interaction state so we get per-user action flags in one query
     final likeJoin = currentUserId != null
-        ? "LEFT JOIN ${DatabaseSchema.tableLikes} lk ON lk.post_id = p.id AND lk.user_id = '$currentUserId'"
-        : '';
+      ? "LEFT JOIN ${DatabaseSchema.tableLikes} lk ON lk.post_id = p.id AND lk.user_id = '$currentUserId'"
+      : '';
+    final dislikeJoin = currentUserId != null
+      ? "LEFT JOIN ${DatabaseSchema.tableDislikes} dlk ON dlk.post_id = p.id AND dlk.user_id = '$currentUserId'"
+      : '';
+    final followJoin = currentUserId != null
+      ? "LEFT JOIN ${DatabaseSchema.tableFollows} fl ON fl.followee_id = p.author_id AND fl.follower_id = '$currentUserId'"
+      : '';
+    final collabJoin = currentUserId != null
+      ? "LEFT JOIN ${DatabaseSchema.tableCollabRequests} cr ON cr.post_id = p.id AND cr.sender_id = '$currentUserId' AND COALESCE(cr.status, 'pending') = 'pending'"
+      : '';
 
     final userNameColumn = userColumns.contains('display_name')
         ? 'display_name'
@@ -265,10 +309,16 @@ class PostDao {
          $selectAuthorName,
          $selectAuthorPhoto,
          $selectAuthorRole
-             ${currentUserId != null ? ', CASE WHEN lk.id IS NOT NULL THEN 1 ELSE 0 END AS is_liked_by_me' : ''}
+                  ${currentUserId != null ? ', CASE WHEN lk.id IS NOT NULL THEN 1 ELSE 0 END AS is_liked_by_me' : ''}
+                  ${currentUserId != null ? ', CASE WHEN dlk.id IS NOT NULL THEN 1 ELSE 0 END AS is_disliked_by_me' : ''}
+                  ${currentUserId != null ? ', CASE WHEN fl.id IS NOT NULL THEN 1 ELSE 0 END AS is_following_author' : ''}
+                  ${currentUserId != null ? ', CASE WHEN cr.id IS NOT NULL THEN 1 ELSE 0 END AS has_collaboration_request' : ''}
       FROM   ${DatabaseSchema.tablePosts} p
       LEFT JOIN ${DatabaseSchema.tableUsers} u ON u.id = p.author_id
       $likeJoin
+                $dislikeJoin
+                $followJoin
+                $collabJoin
       WHERE  ${conditions.join(' AND ')}
       ORDER  BY p.created_at DESC
       LIMIT  ?
@@ -415,10 +465,16 @@ class PostDao {
              $selectAuthorName,
              $selectAuthorPhoto,
              $selectAuthorRole
-                 ${currentUserId != null ? ', CASE WHEN lk.id IS NOT NULL THEN 1 ELSE 0 END AS is_liked_by_me' : ''}
+                   ${currentUserId != null ? ', CASE WHEN lk.id IS NOT NULL THEN 1 ELSE 0 END AS is_liked_by_me' : ''}
+                   ${currentUserId != null ? ', CASE WHEN dlk.id IS NOT NULL THEN 1 ELSE 0 END AS is_disliked_by_me' : ''}
+                   ${currentUserId != null ? ', CASE WHEN fl.id IS NOT NULL THEN 1 ELSE 0 END AS is_following_author' : ''}
+                   ${currentUserId != null ? ', CASE WHEN cr.id IS NOT NULL THEN 1 ELSE 0 END AS has_collaboration_request' : ''}
           FROM   ${DatabaseSchema.tablePosts} p
           LEFT JOIN ${DatabaseSchema.tableUsers} u ON u.id = p.author_id
           $likeJoin
+                 $dislikeJoin
+                 $followJoin
+                 $collabJoin
           WHERE  ${fallbackConditions.join(' AND ')}
           ORDER  BY p.created_at DESC
           LIMIT  ?
@@ -919,6 +975,10 @@ class PostDao {
         'comment_count': p.commentCount,
         'share_count': p.shareCount,
         'view_count': p.viewCount,
+        'is_rated_by_me': p.isRatedByMe ? 1 : 0,
+        'my_rating_stars': p.myRatingStars,
+        'is_following_author': p.isFollowingAuthor ? 1 : 0,
+        'has_collaboration_request': p.hasCollaborationRequest ? 1 : 0,
         'is_archived': p.isArchived ? 1 : 0,
         'area_of_expertise': p.areaOfExpertise,
         'max_participants': p.maxParticipants ?? 0,
@@ -1056,6 +1116,11 @@ class PostDao {
       isArchived:
           parseBool(row['is_archived']) || (row['status'] == 'archived'),
       isLikedByMe: parseBool(row['is_liked_by_me']),
+        isDislikedByMe: parseBool(row['is_disliked_by_me']),
+        isRatedByMe: parseBool(row['is_rated_by_me']),
+        myRatingStars: parseInt(row['my_rating_stars']),
+        isFollowingAuthor: parseBool(row['is_following_author']),
+        hasCollaborationRequest: parseBool(row['has_collaboration_request']),
       areaOfExpertise: parseNullableString(row['area_of_expertise']),
       maxParticipants: row['max_participants'] != null
           ? parseInt(row['max_participants'])
