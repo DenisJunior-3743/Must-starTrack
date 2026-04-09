@@ -97,7 +97,8 @@ class SyncService {
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _notifSub;
   bool _isSyncing = false;
-  bool _isHydrating = false;
+    StreamSubscription<User?>? _authSub;
+    bool _isHydrating = false;
   Future<void>? _hydrationFuture;
   String _lastJobError = 'sync_failed';
 
@@ -250,7 +251,15 @@ class SyncService {
         unawaited(syncRemoteToLocal());
       }
     });
-    _startWatchingNotifications();
+      // Re-start the Firestore notification watcher whenever auth state
+      // changes (login, logout, token refresh).  On fresh app start the
+      // current user is null, so we must wait for authStateChanges rather
+      // than reading FirebaseAuth.instance.currentUser once at startup.
+      _authSub?.cancel();
+      _authSub = FirebaseAuth.instance.authStateChanges().listen((_) {
+        _startWatchingNotifications();
+      });
+      _startWatchingNotifications();
   }
 
   /// Starts a real-time Firestore listener on the current user's unread
@@ -353,6 +362,7 @@ class SyncService {
   void stopListening() {
     _connectivitySub?.cancel();
     _notifSub?.cancel();
+      _authSub?.cancel();
   }
 
   // ── Process sync queue ────────────────────────────────────────────────────
@@ -3365,7 +3375,8 @@ class SyncService {
           priority: Priority.high,
         ),
       ),
-    );
+      payload: jsonEncode({'type': type, 'entity_id': row['entity_id']}),
+      );
   }
 
   String _notificationTitle(String type) {

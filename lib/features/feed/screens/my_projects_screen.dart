@@ -1,4 +1,5 @@
-﻿import 'dart:io';
+﻿import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -30,6 +31,12 @@ class MyProjectsScreen extends StatefulWidget {
 }
 
 class _MyProjectsScreenState extends State<MyProjectsScreen> {
+  static const Duration _staleAfter = Duration(minutes: 2);
+  static DateTime? _cacheLoadedAt;
+  static String? _cacheUserId;
+  static List<PostModel> _cachedPosts = const [];
+  static List<PostModel> _cachedAppliedPosts = const [];
+
   final _postDao = sl<PostDao>();
   final _postJoinDao = sl<PostJoinDao>();
   final _syncQueue = sl<SyncQueueDao>();
@@ -46,10 +53,10 @@ class _MyProjectsScreenState extends State<MyProjectsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadPosts();
+    _loadPosts(useCacheFirst: true);
   }
 
-  Future<void> _loadPosts() async {
+  Future<void> _loadPosts({bool useCacheFirst = false}) async {
     final userId = _currentUserId;
     if (userId == null || userId.isEmpty) {
       setState(() {
@@ -57,6 +64,27 @@ class _MyProjectsScreenState extends State<MyProjectsScreen> {
         _posts = const [];
         _error = 'Sign in to manage your posts.';
       });
+      _cacheUserId = null;
+      _cacheLoadedAt = null;
+      _cachedPosts = const [];
+      _cachedAppliedPosts = const [];
+      return;
+    }
+
+    if (useCacheFirst && _cacheUserId == userId && _cacheLoadedAt != null) {
+      if (mounted) {
+        setState(() {
+          _posts = _cachedPosts;
+          _appliedPosts = _cachedAppliedPosts;
+          _loading = false;
+          _error = null;
+        });
+      }
+
+      final age = DateTime.now().difference(_cacheLoadedAt!);
+      if (age >= _staleAfter) {
+        unawaited(_loadPosts(useCacheFirst: false));
+      }
       return;
     }
 
@@ -76,6 +104,10 @@ class _MyProjectsScreenState extends State<MyProjectsScreen> {
       ]);
 
       if (!mounted) return;
+      _cacheUserId = userId;
+      _cacheLoadedAt = DateTime.now();
+      _cachedPosts = results[0];
+      _cachedAppliedPosts = results[1];
       setState(() {
         _posts = results[0];
         _appliedPosts = results[1];

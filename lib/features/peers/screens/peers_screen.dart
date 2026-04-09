@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -29,6 +30,12 @@ class PeersScreen extends StatefulWidget {
 }
 
 class _PeersScreenState extends State<PeersScreen> {
+  static const Duration _staleAfter = Duration(minutes: 2);
+  static DateTime? _cacheLoadedAt;
+  static String? _cacheUserId;
+  static List<AcceptedPeerCollaboration> _cachedCollaborators = const [];
+  static List<GroupMemberModel> _cachedPendingInvites = const [];
+
   final _dao = MessageDao();
 
   bool _loading = true;
@@ -39,12 +46,16 @@ class _PeersScreenState extends State<PeersScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _load(useCacheFirst: true);
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool useCacheFirst = false}) async {
     final currentUserId = sl<AuthCubit>().currentUser?.id;
     if (currentUserId == null || currentUserId.isEmpty) {
+      _cacheUserId = null;
+      _cacheLoadedAt = null;
+      _cachedCollaborators = const [];
+      _cachedPendingInvites = const [];
       if (!mounted) return;
       setState(() {
         _collaborators = const [];
@@ -54,6 +65,26 @@ class _PeersScreenState extends State<PeersScreen> {
       return;
     }
 
+    if (useCacheFirst && _cacheUserId == currentUserId && _cacheLoadedAt != null) {
+      if (mounted) {
+        setState(() {
+          _collaborators = _cachedCollaborators;
+          _pendingGroupInvites = _cachedPendingInvites;
+          _loading = false;
+        });
+      }
+
+      final age = DateTime.now().difference(_cacheLoadedAt!);
+      if (age >= _staleAfter) {
+        unawaited(_load(useCacheFirst: false));
+      }
+      return;
+    }
+
+    if (mounted) {
+      setState(() => _loading = true);
+    }
+
     final results = await Future.wait([
       _dao.getAcceptedCollaborators(userId: currentUserId),
       sl<GroupMemberDao>().getPendingInvitesForUser(currentUserId),
@@ -61,6 +92,10 @@ class _PeersScreenState extends State<PeersScreen> {
 
     final accepted = results[0] as List<AcceptedPeerCollaboration>;
     final pendingInvites = results[1] as List<GroupMemberModel>;
+    _cacheUserId = currentUserId;
+    _cacheLoadedAt = DateTime.now();
+    _cachedCollaborators = accepted;
+    _cachedPendingInvites = pendingInvites;
     if (!mounted) return;
     setState(() {
       _collaborators = accepted;
