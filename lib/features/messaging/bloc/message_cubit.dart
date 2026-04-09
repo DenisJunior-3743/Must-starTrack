@@ -222,6 +222,7 @@ class MessageCubit extends Cubit<MessageState> {
       );
       final requests = await _messageDao.getCollaborationRequests(
         userId: uid,
+        incomingOnly: true,
         limit: _pageSize,
       );
       final rankedRequests = await _attachRequestRanking(
@@ -251,6 +252,7 @@ class MessageCubit extends Cubit<MessageState> {
       );
       final requests = await _messageDao.getCollaborationRequests(
         userId: uid,
+        incomingOnly: true,
         limit: _pageSize,
       );
       final rankedRequests = await _attachRequestRanking(
