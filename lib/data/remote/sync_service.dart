@@ -99,6 +99,112 @@ class SyncService {
   bool _isSyncing = false;
   bool _isHydrating = false;
   Future<void>? _hydrationFuture;
+  String _lastJobError = 'sync_failed';
+
+  void _syncTrace(String message, {Map<String, Object?> details = const {}}) {
+    debugPrint('****  SYNC         **** $message');
+    if (details.isNotEmpty) {
+      debugPrint('****  SYNC         **** details=$details');
+    }
+  }
+
+  void _uplinkTrace(String message, {Map<String, Object?> details = const {}}) {
+    debugPrint('** UPLINK ** $message');
+    if (details.isNotEmpty) {
+      debugPrint('** UPLINK ** details=$details');
+    }
+  }
+
+  String _uplinkUserLabel({String? name, String? id}) {
+    final cleanName = (name ?? '').trim();
+    if (cleanName.isNotEmpty) {
+      return cleanName;
+    }
+    final cleanId = (id ?? '').trim();
+    if (cleanId.isNotEmpty) {
+      return cleanId;
+    }
+    return 'unknown';
+  }
+
+  void _notificationDebugBlock({
+    required String activity,
+    required String user,
+    required String receiver,
+    required String notificationId,
+    required String status,
+    String recordStatus = 'saved',
+    String? error,
+  }) {
+    final normalized = activity.trim().isEmpty ? 'unknown' : activity.trim();
+    debugPrint('========= $normalized ========');
+    debugPrint('user: $user');
+    debugPrint('receiver: $receiver');
+    debugPrint('notification_id: $notificationId');
+    debugPrint('record status: $recordStatus');
+    debugPrint('notification status: $status');
+    if (error != null && error.trim().isNotEmpty) {
+      debugPrint('error: $error');
+    }
+    debugPrint('====================');
+  }
+
+  Future<void> _verifyUplinkDoc({
+    required String action,
+    required DocumentReference<Map<String, dynamic>> docRef,
+    required bool expectedExists,
+    Map<String, Object?> details = const {},
+  }) async {
+    try {
+      final snap = await docRef.get(const GetOptions(source: Source.server));
+      _uplinkTrace('VERIFY_$action', details: {
+        ...details,
+        'path': docRef.path,
+        'expected_exists': expectedExists,
+        'actual_exists': snap.exists,
+        'from_cache': snap.metadata.isFromCache,
+      });
+    } on FirebaseException catch (error) {
+      _uplinkTrace('VERIFY_${action}_FAILED', details: {
+        ...details,
+        'path': docRef.path,
+        'code': error.code,
+        'message': error.message ?? '',
+      });
+    } catch (error) {
+      _uplinkTrace('VERIFY_${action}_FAILED', details: {
+        ...details,
+        'path': docRef.path,
+        'error': error.toString(),
+      });
+    }
+  }
+
+  Future<Map<String, int>> _readLocalInteractionCounts(String postId) async {
+    final db = await DatabaseHelper.instance.database;
+    final rows = await db.query(
+      DatabaseSchema.tablePosts,
+      columns: ['like_count', 'dislike_count', 'comment_count', 'view_count'],
+      where: 'id = ?',
+      whereArgs: [postId],
+      limit: 1,
+    );
+    if (rows.isEmpty) {
+      return const {
+        'like_count': 0,
+        'dislike_count': 0,
+        'comment_count': 0,
+        'view_count': 0,
+      };
+    }
+    final row = rows.first;
+    return {
+      'like_count': row['like_count'] as int? ?? 0,
+      'dislike_count': row['dislike_count'] as int? ?? 0,
+      'comment_count': row['comment_count'] as int? ?? 0,
+      'view_count': row['view_count'] as int? ?? 0,
+    };
+  }
 
   SyncService({
     required SyncQueueDao queueDao,
@@ -254,6 +360,7 @@ class SyncService {
   /// Main sync loop — drains ready jobs from the queue.
   Future<SyncResult> processPendingSync() async {
     if (_isSyncing) {
+      _syncTrace('QUEUE_ALREADY_RUNNING');
       return const SyncResult(processed: 0, failed: 0, remaining: 0);
     }
 
@@ -261,12 +368,18 @@ class SyncService {
     if (authUser == null) {
       debugPrint('[SyncService] Skipping sync: no active FirebaseAuth session');
       final remaining = await _queueDao.getPendingCount();
+      _syncTrace('QUEUE_SKIPPED_NO_AUTH', details: {'remaining': remaining});
       return SyncResult(processed: 0, failed: 0, remaining: remaining);
     }
 
     _isSyncing = true;
     int processed = 0;
     int failed = 0;
+
+    _syncTrace('QUEUE_START', details: {
+      'uid': authUser.uid,
+      'email': authUser.email,
+    });
 
     try {
       try {
@@ -279,6 +392,12 @@ class SyncService {
       final jobs = await _queueDao.getReadyJobs(limit: 50);
       debugPrint(
           '[SyncService] Starting sync loop with ${jobs.length} ready job(s).');
+      final jobMix = <String, int>{};
+      for (final job in jobs) {
+        jobMix[job.entityType] = (jobMix[job.entityType] ?? 0) + 1;
+      }
+        _syncTrace('QUEUE_JOBS_FETCHED', details: {'jobs': jobs.length});
+      _syncTrace('QUEUE_JOBS_MIX', details: jobMix);
 
       for (final job in jobs) {
         final actorId = (job.payloadJson['user_id'] ??
@@ -295,6 +414,13 @@ class SyncService {
           '[SyncService] Processing job id=${job.id} entity=${job.entityType} '
           'operation=${job.operation} entityId=${job.entityId} retry=${job.retryCount}',
         );
+        _syncTrace('JOB_PICKED', details: {
+          'jobId': job.id,
+          'entity': job.entityType,
+          'op': job.operation,
+          'entityId': job.entityId,
+          'retry': job.retryCount,
+        });
         final success = await _processJob(job);
         if (success) {
           await _queueDao.deleteJob(job.id);
@@ -303,14 +429,26 @@ class SyncService {
           );
           debugPrint(
               '[SyncService] Job id=${job.id} entity=${job.entityType} completed and removed from queue.');
+          _syncTrace('JOB_SUCCESS', details: {
+            'jobId': job.id,
+            'entity': job.entityType,
+            'op': job.operation,
+          });
           processed++;
         } else {
-          await _queueDao.incrementAttempt(job.id);
+          await _queueDao.incrementAttempt(job.id,
+              errorMessage: _lastJobError);
           debugPrint(
             '=========== sync_result job=${job.id} status=retry entity=${job.entityType} ===========',
           );
           debugPrint(
-              '[SyncService] Job id=${job.id} entity=${job.entityType} failed and will retry.');
+              '[SyncService] Job id=${job.id} entity=${job.entityType} failed and will retry. reason=$_lastJobError');
+          _syncTrace('JOB_RETRY', details: {
+            'jobId': job.id,
+            'entity': job.entityType,
+            'op': job.operation,
+            'reason': _lastJobError,
+          });
           failed++;
         }
       }
@@ -321,6 +459,12 @@ class SyncService {
         '[SyncService] Queue summary processed=$processed failed=$failed '
         'remaining=$remaining deadLetters=$deadLetters',
       );
+      _syncTrace('QUEUE_DONE', details: {
+        'processed': processed,
+        'failed': failed,
+        'remaining': remaining,
+        'deadLetters': deadLetters,
+      });
       await _logSyncSnapshot(label: 'after_queue_push');
       return SyncResult(
           processed: processed, failed: failed, remaining: remaining);
@@ -879,6 +1023,7 @@ class SyncService {
 
   Future<bool> _processJob(SyncJob job) async {
     try {
+      _lastJobError = 'sync_failed';
       switch (job.entityType) {
         case 'users':
           return await _syncUser(job);
@@ -927,6 +1072,7 @@ class SyncService {
       }
     } catch (e, st) {
       // Log and return false to trigger backoff
+      _lastJobError = e.toString();
       debugPrint(
           '[SyncService] ❌ Job id=${job.id} type=${job.entityType} failed: $e\n$st');
       return false;
@@ -1159,6 +1305,18 @@ class SyncService {
     switch (job.operation) {
       case 'create':
       case 'update':
+        final payload = job.payloadJson;
+        final raterId = payload['user_id'] as String?;
+        final raterName = payload['rater_name'] as String?;
+        _uplinkTrace('RATING_WRITE_START', details: {
+          'jobId': job.id,
+          'operation': job.operation,
+          'ratingId': job.entityId,
+          'postId': payload['post_id'],
+          'userName': _uplinkUserLabel(name: raterName, id: raterId),
+          'userId': raterId,
+          'stars': payload['stars'],
+        });
         debugPrint(
           '[SyncRating] Writing rating id=${job.entityId} '
           'post=${job.payloadJson['post_id']} user=${job.payloadJson['user_id']} '
@@ -1168,9 +1326,21 @@ class SyncService {
           ratingId: job.entityId,
           payload: job.payloadJson,
         );
-        final payload = job.payloadJson;
+        await _verifyUplinkDoc(
+          action: 'RATING',
+          docRef: FirebaseFirestore.instance
+              .collection('post_ratings')
+              .doc(job.entityId),
+          expectedExists: true,
+          details: {
+            'jobId': job.id,
+            'ratingId': job.entityId,
+            'postId': payload['post_id'],
+            'userName': _uplinkUserLabel(name: raterName, id: raterId),
+            'userId': raterId,
+          },
+        );
         final authorId = payload['author_id'] as String?;
-        final raterId = payload['user_id'] as String?;
         if (authorId != null &&
             raterId != null &&
             authorId.isNotEmpty &&
@@ -1194,7 +1364,23 @@ class SyncService {
         }
         return true;
       case 'delete':
+        _uplinkTrace('RATING_DELETE_START', details: {
+          'jobId': job.id,
+          'operation': job.operation,
+          'ratingId': job.entityId,
+        });
         await _firestore.deletePostRating(job.entityId);
+        await _verifyUplinkDoc(
+          action: 'RATING',
+          docRef: FirebaseFirestore.instance
+              .collection('post_ratings')
+              .doc(job.entityId),
+          expectedExists: false,
+          details: {
+            'jobId': job.id,
+            'ratingId': job.entityId,
+          },
+        );
         return true;
       default:
         return true;
@@ -1363,6 +1549,9 @@ class SyncService {
   Future<bool> _syncLike(SyncJob job) async {
     final payload = job.payloadJson;
     final userId = payload['user_id'] as String?;
+    final actorName =
+      (payload['actor_name'] ?? payload['user_name'] ?? payload['author_name'])
+        as String?;
     final postId = payload['post_id'] as String?;
     final isLiking = payload['is_liking'] as bool? ?? true;
 
@@ -1383,10 +1572,34 @@ class SyncService {
 
     debugPrint(
         '[SyncLike] Writing remote like post=$postId user=$userId isLiking=$isLiking');
+    _uplinkTrace('LIKE_WRITE_START', details: {
+      'jobId': job.id,
+      'operation': job.operation,
+      'postId': postId,
+      'userName': _uplinkUserLabel(name: actorName, id: userId),
+      'userId': userId,
+      'isLiking': isLiking,
+    });
     await _firestore.toggleLike(
       postId: postId,
       userId: userId,
       isLiking: isLiking,
+    );
+    await _verifyUplinkDoc(
+      action: 'LIKE',
+      docRef: FirebaseFirestore.instance
+          .collection('posts')
+          .doc(postId)
+          .collection('likes')
+          .doc(userId),
+      expectedExists: isLiking,
+      details: {
+        'jobId': job.id,
+        'postId': postId,
+        'userName': _uplinkUserLabel(name: actorName, id: userId),
+        'userId': userId,
+        'isLiking': isLiking,
+      },
     );
 
     final authorId = payload['author_id'] as String?;
@@ -1413,6 +1626,9 @@ class SyncService {
   Future<bool> _syncDislike(SyncJob job) async {
     final payload = job.payloadJson;
     final userId = payload['user_id'] as String?;
+    final actorName =
+      (payload['actor_name'] ?? payload['user_name'] ?? payload['author_name'])
+        as String?;
     final postId = payload['post_id'] as String?;
     final isDisliking = payload['is_disliking'] as bool? ?? true;
 
@@ -1437,6 +1653,15 @@ class SyncService {
         .collection('dislikes')
         .doc(userId);
 
+    _uplinkTrace('DISLIKE_WRITE_START', details: {
+      'jobId': job.id,
+      'operation': job.operation,
+      'postId': postId,
+      'userName': _uplinkUserLabel(name: actorName, id: userId),
+      'userId': userId,
+      'isDisliking': isDisliking,
+    });
+
     if (isDisliking) {
       await dislikeRef.set({
         'user_id': userId,
@@ -1446,12 +1671,27 @@ class SyncService {
       await dislikeRef.delete();
     }
 
+    await _verifyUplinkDoc(
+      action: 'DISLIKE',
+      docRef: dislikeRef,
+      expectedExists: isDisliking,
+      details: {
+        'jobId': job.id,
+        'postId': postId,
+        'userName': _uplinkUserLabel(name: actorName, id: userId),
+        'userId': userId,
+        'isDisliking': isDisliking,
+      },
+    );
+
     return true;
   }
 
   Future<bool> _syncComment(SyncJob job) async {
     final payload = job.payloadJson;
     final authorId = payload['author_id'] as String?;
+    final authorName =
+        (payload['commenter_name'] ?? payload['author_name']) as String?;
     final postId = payload['post_id'] as String?;
     final content = payload['content'] as String? ?? '';
     final parentCommentId = payload['parent_comment_id'] as String?;
@@ -1483,6 +1723,16 @@ class SyncService {
       jobId: job.id,
     );
 
+    _uplinkTrace('COMMENT_WRITE_START', details: {
+      'jobId': job.id,
+      'operation': job.operation,
+      'commentId': job.entityId,
+      'postId': postId,
+      'userName': _uplinkUserLabel(name: authorName, id: authorId),
+      'authorId': authorId,
+      'isReply': parentCommentId != null && parentCommentId.isNotEmpty,
+    });
+
     await FirebaseFirestore.instance
         .collection('comments')
         .doc(job.entityId)
@@ -1495,6 +1745,21 @@ class SyncService {
       'created_at': FieldValue.serverTimestamp(),
       'updated_at': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
+
+    await _verifyUplinkDoc(
+      action: 'COMMENT',
+      docRef: FirebaseFirestore.instance
+          .collection('comments')
+          .doc(job.entityId),
+      expectedExists: true,
+      details: {
+        'jobId': job.id,
+        'commentId': job.entityId,
+        'postId': postId,
+        'userName': _uplinkUserLabel(name: authorName, id: authorId),
+        'authorId': authorId,
+      },
+    );
 
     final receiverId = payload['receiver_id'] as String?;
     if (receiverId != null && receiverId != authorId) {
@@ -1521,6 +1786,7 @@ class SyncService {
   Future<bool> _syncPostView(SyncJob job) async {
     final payload = job.payloadJson;
     final viewerId = payload['viewer_id'] as String?;
+    final viewerName = payload['viewer_name'] as String?;
     final postId = payload['post_id'] as String?;
 
     if (viewerId == null || postId == null) {
@@ -1540,6 +1806,14 @@ class SyncService {
 
     final docRef =
         FirebaseFirestore.instance.collection('post_views').doc(job.entityId);
+    _uplinkTrace('VIEW_WRITE_START', details: {
+      'jobId': job.id,
+      'operation': job.operation,
+      'viewId': job.entityId,
+      'postId': postId,
+      'userName': _uplinkUserLabel(name: viewerName, id: viewerId),
+      'viewerId': viewerId,
+    });
     try {
       await docRef.update({
         'viewer_name': payload['viewer_name'] as String?,
@@ -1569,6 +1843,19 @@ class SyncService {
         '[SyncView] Remote view created viewId=${job.entityId} post=$postId viewer=$viewerId',
       );
     }
+
+    await _verifyUplinkDoc(
+      action: 'VIEW',
+      docRef: docRef,
+      expectedExists: true,
+      details: {
+        'jobId': job.id,
+        'viewId': job.entityId,
+        'postId': postId,
+        'userName': _uplinkUserLabel(name: viewerName, id: viewerId),
+        'viewerId': viewerId,
+      },
+    );
 
     final authorId = payload['author_id'] as String?;
     if (authorId != null && authorId != viewerId) {
@@ -1795,6 +2082,16 @@ class SyncService {
     String? entityId,
     String? senderName,
   }) async {
+    final senderLabel = _uplinkUserLabel(name: senderName, id: senderId);
+    final receiverLabel = receiverId.trim().isNotEmpty ? receiverId : 'unknown';
+    _notificationDebugBlock(
+      activity: source,
+      user: senderLabel,
+      receiver: receiverLabel,
+      notificationId: notificationId,
+      status: 'sending',
+    );
+
     debugPrint(
       '[SyncNotification] Fan-out requested source=$source type=$type '
       'receiver=$receiverId sender=$senderId notification=$notificationId entity=$entityId',
@@ -1810,12 +2107,35 @@ class SyncService {
         entityId: entityId,
         senderName: senderName,
       );
+      _notificationDebugBlock(
+        activity: source,
+        user: senderLabel,
+        receiver: receiverLabel,
+        notificationId: notificationId,
+        status: 'sent',
+      );
     } on FirebaseException catch (error) {
+      _notificationDebugBlock(
+        activity: source,
+        user: senderLabel,
+        receiver: receiverLabel,
+        notificationId: notificationId,
+        status: 'not sent',
+        error: 'FirebaseException(code=${error.code}, message=${error.message ?? ''})',
+      );
       debugPrint(
         '[SyncNotification] Skipping fan-out for source=$source notification=$notificationId '
         'receiver=$receiverId because Firestore rejected it: ${error.code}',
       );
     } catch (error, stackTrace) {
+      _notificationDebugBlock(
+        activity: source,
+        user: senderLabel,
+        receiver: receiverLabel,
+        notificationId: notificationId,
+        status: 'not sent',
+        error: error.toString(),
+      );
       debugPrint(
         '[SyncNotification] Skipping fan-out for source=$source notification=$notificationId '
         'receiver=$receiverId due to unexpected error: $error',
@@ -2318,9 +2638,16 @@ class SyncService {
 
     var refreshed = 0;
     var failed = 0;
+    _syncTrace('INTERACTION_REFRESH_START', details: {
+      'candidatePosts': postIds.length,
+    });
     for (final postId in postIds) {
       try {
+        _syncTrace('INTERACTION_STEP_FETCH_BEGIN', details: {'postId': postId});
+        final localBefore = await _readLocalInteractionCounts(postId);
         final postRef = FirebaseFirestore.instance.collection('posts').doc(postId);
+        final postDoc =
+            await postRef.get(const GetOptions(source: Source.serverAndCache));
         final likesCountSnap = await postRef.collection('likes').count().get();
         final dislikesCountSnap = await postRef.collection('dislikes').count().get();
         final commentsCountSnap = await FirebaseFirestore.instance
@@ -2328,6 +2655,26 @@ class SyncService {
             .where('post_id', isEqualTo: postId)
             .count()
             .get();
+        final remoteViewRaw = postDoc.data()?['view_count'];
+        final remoteViewCount = remoteViewRaw is int
+            ? remoteViewRaw
+            : (remoteViewRaw is num
+                ? remoteViewRaw.toInt()
+                : (remoteViewRaw is String
+                    ? int.tryParse(remoteViewRaw) ?? localBefore['view_count']!
+                    : localBefore['view_count']!));
+
+        _syncTrace('INTERACTION_STEP_REMOTE_COUNTS', details: {
+          'postId': postId,
+          'remote_like_count': likesCountSnap.count,
+          'remote_dislike_count': dislikesCountSnap.count,
+          'remote_comment_count': commentsCountSnap.count,
+          'remote_view_count': remoteViewCount,
+          'local_before_like_count': localBefore['like_count'],
+          'local_before_dislike_count': localBefore['dislike_count'],
+          'local_before_comment_count': localBefore['comment_count'],
+          'local_before_view_count': localBefore['view_count'],
+        });
 
         await db.update(
           DatabaseSchema.tablePosts,
@@ -2335,17 +2682,36 @@ class SyncService {
             'like_count': likesCountSnap.count,
             'dislike_count': dislikesCountSnap.count,
             'comment_count': commentsCountSnap.count,
+            'view_count': remoteViewCount,
             'updated_at': DateTime.now().toIso8601String(),
           },
           where: 'id = ?',
           whereArgs: [postId],
         );
+        final localAfter = await _readLocalInteractionCounts(postId);
+        debugPrint(
+          '[SyncService][CountDiag] post=$postId '
+          'remote(l=${likesCountSnap.count},d=${dislikesCountSnap.count},c=${commentsCountSnap.count},v=$remoteViewCount) '
+          'local_before(l=${localBefore['like_count']},d=${localBefore['dislike_count']},c=${localBefore['comment_count']},v=${localBefore['view_count']}) '
+          'local_after(l=${localAfter['like_count']},d=${localAfter['dislike_count']},c=${localAfter['comment_count']},v=${localAfter['view_count']})',
+        );
+        _syncTrace('INTERACTION_STEP_LOCAL_UPDATED', details: {
+          'postId': postId,
+          'local_after_like_count': localAfter['like_count'],
+          'local_after_dislike_count': localAfter['dislike_count'],
+          'local_after_comment_count': localAfter['comment_count'],
+          'local_after_view_count': localAfter['view_count'],
+        });
         refreshed++;
       } catch (error) {
         failed++;
         debugPrint(
           '[SyncService] Failed refreshing interaction counts for post=$postId: $error',
         );
+        _syncTrace('INTERACTION_STEP_FAILED', details: {
+          'postId': postId,
+          'error': error.toString(),
+        });
       }
     }
 
@@ -2353,6 +2719,11 @@ class SyncService {
       '[SyncService] Refreshed interaction counts checked=${postIds.length} '
       'updated=$refreshed failed=$failed',
     );
+    _syncTrace('INTERACTION_REFRESH_DONE', details: {
+      'checked': postIds.length,
+      'updated': refreshed,
+      'failed': failed,
+    });
   }
 
   Future<void> _syncRemoteDislikes(
@@ -2812,6 +3183,7 @@ class SyncService {
   }
 
   Future<void> syncCommentsForPost(String postId) async {
+    _syncTrace('COMMENTS_SYNC_START', details: {'postId': postId});
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
     if (currentUid == null || currentUid.isEmpty) {
       debugPrint(
@@ -2847,6 +3219,14 @@ class SyncService {
         });
 
       final remoteIds = <String>{};
+      debugPrint(
+        '[SyncService][CommentDiag] post=$postId remote_comments=${docs.length} fromCache=${snap.metadata.isFromCache}',
+      );
+      _syncTrace('COMMENTS_REMOTE_FETCHED', details: {
+        'postId': postId,
+        'remote_comments': docs.length,
+        'fromCache': snap.metadata.isFromCache,
+      });
 
       for (final doc in docs) {
         remoteIds.add(doc.id);
@@ -2878,9 +3258,27 @@ class SyncService {
         );
       }
 
+      final localCountRow = await db.rawQuery(
+        'SELECT COUNT(*) AS cnt FROM ${DatabaseSchema.tableComments} WHERE post_id = ? AND COALESCE(is_deleted, 0) = 0',
+        [postId],
+      );
+      final localCommentsCount = localCountRow.first['cnt'] as int? ?? 0;
+      debugPrint(
+        '[SyncService][CommentDiag] post=$postId local_comments_after_sync=$localCommentsCount',
+      );
+      _syncTrace('COMMENTS_LOCAL_UPDATED', details: {
+        'postId': postId,
+        'local_comments_after_sync': localCommentsCount,
+      });
+
       await _refreshRemoteInteractionCounts(candidatePostIds: [postId]);
+      _syncTrace('COMMENTS_SYNC_DONE', details: {'postId': postId});
     } catch (error) {
       debugPrint('[SyncService] Comment remote-to-local sync failed: $error');
+      _syncTrace('COMMENTS_SYNC_FAILED', details: {
+        'postId': postId,
+        'error': error.toString(),
+      });
     }
   }
 
@@ -3015,6 +3413,13 @@ class SyncService {
       }
 
       final role = (userSnap.data()?['role'] as String? ?? '').toLowerCase();
+      if (role.isEmpty) {
+        debugPrint(
+          '[SyncService] Delaying $context: users/${authUser.uid} has no role.',
+        );
+        return false;
+      }
+
       final allowed = _emailMatchesRole(role: role, email: email);
       if (!allowed) {
         debugPrint(
@@ -3030,14 +3435,15 @@ class SyncService {
   }
 
   bool _emailMatchesRole({required String role, required String email}) {
+    final normalized = email.toLowerCase();
     if (role == 'student') {
-      return email.endsWith('@std.must.ac.ug');
+      return normalized.endsWith('@std.must.ac.ug');
     }
     if (role == 'staff' || role == 'lecturer') {
-      return email.endsWith('@staff.must.ac.ug');
+      return normalized.endsWith('@staff.must.ac.ug');
     }
     if (role == 'admin' || role == 'super_admin') {
-      return email.endsWith('@must.ac.ug');
+      return normalized.endsWith('@must.ac.ug');
     }
     return false;
   }
