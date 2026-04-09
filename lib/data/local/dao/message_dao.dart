@@ -482,9 +482,16 @@ class MessageDao {
 
   Future<List<CollaborationInboxItem>> getCollaborationRequests({
     required String userId,
+    bool incomingOnly = true,
     int limit = 40,
   }) async {
     final db = await _db.database;
+    final whereClause = incomingOnly
+        ? 'r.receiver_id = ?'
+        : '(r.sender_id = ? OR r.receiver_id = ?)';
+    final whereArgs = incomingOnly
+        ? <Object?>[userId]
+        : <Object?>[userId, userId];
     final rows = await db.rawQuery('''
       SELECT
         r.id,
@@ -505,10 +512,17 @@ class MessageDao {
       LEFT JOIN ${DatabaseSchema.tableUsers} us ON us.id = r.sender_id
       LEFT JOIN ${DatabaseSchema.tableUsers} ur ON ur.id = r.receiver_id
       LEFT JOIN ${DatabaseSchema.tablePosts} p ON p.id = r.post_id
-      WHERE r.sender_id = ? OR r.receiver_id = ?
+      WHERE $whereClause
       ORDER BY COALESCE(r.updated_at, r.created_at) DESC
       LIMIT ?
-    ''', [userId, userId, userId, userId, userId, userId, limit]);
+    ''', [
+      userId,
+      userId,
+      userId,
+      userId,
+      ...whereArgs,
+      limit,
+    ]);
 
     return rows
         .map(

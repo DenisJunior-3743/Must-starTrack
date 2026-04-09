@@ -4298,9 +4298,14 @@ class _CollaborateRequestSheetState extends State<_CollaborateRequestSheet> {
           'post_id': widget.post.id,
           'post_title': widget.post.title,
           'message': message,
+          'status': 'pending',
           'created_at': DateTime.now().toIso8601String(),
         },
       );
+
+      // Push immediately so remote collab + receiver notification are
+      // created now (not only after a connectivity-change event).
+      unawaited(sl<SyncService>().processPendingSync());
       _traceFeedAction(
         userId: currentUserId,
         action: 'collaborate',
