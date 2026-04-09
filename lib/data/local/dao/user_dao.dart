@@ -287,7 +287,7 @@ class UserDao {
     );
   }
 
-  /// Searches users by display name or skills — used in discover + recruiter search.
+  /// Searches users by display name, email, and skills.
   Future<List<UserModel>> searchUsers({
     required String query,
     String? faculty,
@@ -298,12 +298,24 @@ class UserDao {
   }) async {
     final db = await _db.database;
 
+    final normalizedQuery = query.trim().toLowerCase();
+
     final where = <String>[
-      '(u.display_name LIKE ? OR p.skills LIKE ?)',
+      '''(
+        LOWER(COALESCE(u.display_name, '')) LIKE ?
+        OR LOWER(COALESCE(u.email, '')) LIKE ?
+        OR LOWER(COALESCE(SUBSTR(u.email, 1, INSTR(u.email, '@') - 1), '')) LIKE ?
+        OR LOWER(COALESCE(p.skills, '')) LIKE ?
+      )''',
       'u.is_banned = 0',
       "u.role = 'student'",
     ];
-    final args = <Object?>['%$query%', '%$query%'];
+    final args = <Object?>[
+      '%$normalizedQuery%',
+      '%$normalizedQuery%',
+      '%$normalizedQuery%',
+      '%$normalizedQuery%',
+    ];
 
     if (faculty != null && faculty.trim().isNotEmpty) {
       where.add('p.faculty = ?');

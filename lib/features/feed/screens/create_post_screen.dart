@@ -92,10 +92,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   bool get _isGroupProject =>
       (widget.groupId?.isNotEmpty ?? false) || widget.existingPost?.groupId != null;
 
-  bool get _isLecturer =>
-      sl<AuthCubit>().currentUser?.isLecturer == true ||
-      sl<RouteGuards>().currentRole == UserRole.lecturer;
-
   static const int _maxFileSizeBytes = 50 * 1024 * 1024;
   static const int _maxImageSizeBytes = 1536 * 1024; // 1.5 MB
 
@@ -107,6 +103,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   static const _types = [
     ('project', 'Project', Icons.rocket_launch_rounded),
     ('opportunity', 'Opportunity', Icons.work_outline_rounded),
+    ('advert', 'Advert', Icons.campaign_outlined),
   ];
 
   @override
@@ -114,10 +111,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     super.initState();
     _qualificationsCtrl.addListener(() => _qualifications = _qualificationsCtrl.text);
     _seedFromExistingPost();
-    // Lecturers can only post opportunities — lock the type.
-    if (_isLecturer && _type != 'opportunity') {
-      _type = 'opportunity';
-    }
     if (_isGroupProject) {
       _type = 'project';
       _visibility = PostVisibility.public;
@@ -152,8 +145,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       (post.skillsUsed.isNotEmpty ? post.skillsUsed.join(', ') : '');
     _qualificationsCtrl.text = _qualifications;
     _deadline = post.opportunityDeadline;
-    // Seed multi-faculty selection for opportunities.
-    if (_type == 'opportunity' && _faculty != null) {
+    // Seed multi-faculty selection for opportunities and adverts.
+    if ((_type == 'opportunity' || _type == 'advert') && _faculty != null) {
       _selectedFaculties = _faculty!.split(', ').where((f) => f.isNotEmpty).toList();
     }
     _deadlineCtrl.text = _deadline != null ? '${_deadline!.year}-${_deadline!.month.toString().padLeft(2,'0')}-${_deadline!.day.toString().padLeft(2,'0')}' : '';
@@ -345,7 +338,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   }
 
   Future<void> _startImmediateUploads(List<_UploadItem> items) async {
-    if (items.isEmpty || _type != 'project') return;
+    if (items.isEmpty || _type == 'opportunity') return;
 
     final wasOffline = await _isOffline();
     if (wasOffline || !sl<CloudinaryService>().isConfigured) {
@@ -498,7 +491,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     required bool wasOffline,
   }) async {
     final initialUrls = _uploads.map((upload) => upload.source).toList();
-    if (_type != 'project' || _uploads.isEmpty) {
+    if (_type == 'opportunity' || _uploads.isEmpty) {
       return initialUrls;
     }
     if (wasOffline || !sl<CloudinaryService>().isConfigured) {
@@ -564,6 +557,25 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       return;
     }
 
+    if (_type == 'advert' && _selectedFaculties.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Select at least one target faculty (or All Faculties).'),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+      return;
+    }
+    if (_type == 'advert' && _deadline == null) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Please set an advert deadline.'),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+      return;
+    }
+
     setState(() => _publishing = true);
 
     final wasOffline = await _isOffline();
@@ -573,12 +585,19 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     final normalizedOpportunitySkills =
       _normalizeSkillTokensFromText(_qualificationsCtrl.text);
     final normalizedSkillsUsed =
-      _type == 'project' ? normalizedTags : normalizedOpportunitySkills;
+      _type == 'project' ? normalizedTags : (_type == 'opportunity' ? normalizedOpportunitySkills : const <String>[]);
     final normalizedAreaOfExpertise =
       _type == 'opportunity' ? _normalizeExpertiseText(_qualificationsCtrl.text) : null;
-    final moderationStatus = publishingUser.role == UserRole.student
-      ? ModerationStatus.pending
-      : ModerationStatus.approved;
+    final selectedAudience = _selectedFaculties.contains(_FacultyMultiSelect.allFacultiesLabel)
+        ? _FacultyMultiSelect.allFacultiesLabel
+        : (_selectedFaculties.isEmpty ? null : _selectedFaculties.join(', '));
+    // Only project and advert posts by students need admin approval.
+    // Opportunity and group posts go live immediately regardless of role.
+    final requiresModeration = publishingUser.role == UserRole.student &&
+        (_type == 'project' || _type == 'advert');
+    final moderationStatus = requiresModeration
+        ? ModerationStatus.pending
+        : ModerationStatus.approved;
 
     final post = widget.existingPost?.copyWith(
           authorId: publishingUser.id,
@@ -592,19 +611,17 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           type: _type,
           title: _titleCtrl.text.trim(),
           description: _descCtrl.text.trim(),
-          category: _type == 'project' ? _category : null,
-          faculty: _type == 'opportunity'
-              ? (_selectedFaculties.isEmpty ? null : _selectedFaculties.join(', '))
-              : _faculty,
+          category: _type == 'project' ? _category : (_type == 'advert' ? 'advert' : null),
+          faculty: _type == 'project' ? _faculty : selectedAudience,
           tags: _type == 'project' ? normalizedTags : [],
           skillsUsed: normalizedSkillsUsed,
           youtubeUrl: _youtubeCtrl.text.trim().isNotEmpty ? _youtubeCtrl.text.trim() : null,
           visibility: _visibility,
           moderationStatus: moderationStatus,
-          mediaUrls: _type == 'project' ? mediaUrls : [],
+          mediaUrls: _type == 'opportunity' ? [] : mediaUrls,
           externalLinks: _linkItems.map((l) => {'url': l.url, 'description': l.description}).toList(),
           areaOfExpertise: normalizedAreaOfExpertise,
-          opportunityDeadline: _type == 'opportunity' ? _deadline : null,
+          opportunityDeadline: (_type == 'opportunity' || _type == 'advert') ? _deadline : null,
           updatedAt: now,
         ) ??
         PostModel(
@@ -619,19 +636,17 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           type: _type,
           title: _titleCtrl.text.trim(),
           description: _descCtrl.text.trim(),
-          category: _type == 'project' ? _category : null,
-          faculty: _type == 'opportunity'
-              ? (_selectedFaculties.isEmpty ? null : _selectedFaculties.join(', '))
-              : _faculty,
+          category: _type == 'project' ? _category : (_type == 'advert' ? 'advert' : null),
+          faculty: _type == 'project' ? _faculty : selectedAudience,
           tags: _type == 'project' ? normalizedTags : [],
           skillsUsed: normalizedSkillsUsed,
           youtubeUrl: _youtubeCtrl.text.trim().isNotEmpty ? _youtubeCtrl.text.trim() : null,
           visibility: _visibility,
           moderationStatus: moderationStatus,
-          mediaUrls: _type == 'project' ? mediaUrls : [],
+          mediaUrls: _type == 'opportunity' ? [] : mediaUrls,
           externalLinks: _linkItems.map((l) => {'url': l.url, 'description': l.description}).toList(),
           areaOfExpertise: normalizedAreaOfExpertise,
-          opportunityDeadline: _type == 'opportunity' ? _deadline : null,
+          opportunityDeadline: (_type == 'opportunity' || _type == 'advert') ? _deadline : null,
           createdAt: now,
           updatedAt: now,
         );
@@ -742,10 +757,14 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           _isEditing
             ? (_isGroupProject
               ? 'Edit Group Project'
-              : (_type == 'project' ? 'Edit Project' : 'Edit Opportunity'))
+              : (_type == 'project'
+                  ? 'Edit Project'
+                  : (_type == 'opportunity' ? 'Edit Opportunity' : 'Edit Advert')))
             : (_isGroupProject
               ? 'New Group Project'
-              : (_type == 'project' ? 'New Project' : 'New Opportunity')),
+              : (_type == 'project'
+                  ? 'New Project'
+                  : (_type == 'opportunity' ? 'New Opportunity' : 'New Advert'))),
         ),
         actions: _isEditing
             ? const []
@@ -800,8 +819,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                     ),
                   ),
                 ),
-              // Type selector (hidden for lecturers  they can only post opportunities)
-              if (!_isLecturer && !_isGroupProject) ...[
+              // Type selector
+              if (!_isGroupProject) ...[
                 const _SectionHeader('Post Type'),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -854,8 +873,14 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                 child: Column(
                   children: [
                     StTextField(
-                      label: _type == 'project' ? 'Project Title' : 'Project Name',
-                      hint: _type == 'project' ? 'Enter a catchy name for your project' : 'Name of the project needing help',
+                      label: _type == 'project'
+                        ? 'Project Title'
+                        : (_type == 'opportunity' ? 'Project Name' : 'Advert Title'),
+                      hint: _type == 'project'
+                        ? 'Enter a catchy name for your project'
+                        : (_type == 'opportunity'
+                          ? 'Name of the project needing help'
+                          : 'Enter the advert title'),
                       controller: _titleCtrl,
                       textInputAction: TextInputAction.next,
                       validator: (v) => (v == null || v.trim().isEmpty)
@@ -906,18 +931,24 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                       ),
                     ] else ...[
                       // Qualifications
-                      StTextField(
-                        label: 'Qualifications',
-                        hint: 'Required skills or experience',
-                        controller: _qualificationsCtrl,
-                        maxLines: 3,
-                        textInputAction: TextInputAction.next,
-                      ),
-                      const SizedBox(height: AppDimensions.spacingMd),
+                      if (_type == 'opportunity') ...[
+                        StTextField(
+                          label: 'Qualifications',
+                          hint: 'Required skills or experience',
+                          controller: _qualificationsCtrl,
+                          maxLines: 3,
+                          textInputAction: TextInputAction.next,
+                        ),
+                        const SizedBox(height: AppDimensions.spacingMd),
+                      ],
 
-                      // Faculty — multi-select for opportunities
+                      // Faculty audience — multi-select for opportunities/adverts
                       _FacultyMultiSelect(
                         selectedFaculties: _selectedFaculties,
+                        includeAllOption: _type == 'advert',
+                        helperText: _type == 'advert'
+                            ? 'Choose the faculties this advert should target, or select All Faculties.'
+                            : 'Select one or more faculties this opportunity applies to.',
                         onChanged: (faculties) =>
                             setState(() => _selectedFaculties = faculties),
                       ),
@@ -941,7 +972,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                         },
                         child: AbsorbPointer(
                           child: StTextField(
-                            label: 'Deadline',
+                            label: _type == 'advert' ? 'Advert Deadline' : 'Deadline',
                             hint: 'Select deadline date',
                             controller: _deadlineCtrl,
                           ),
@@ -953,8 +984,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
               ),
 
               // â”€â”€ Media upload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-              if (_type == 'project') ...[
-                const _SectionHeader('Project Media'),
+              if (_type != 'opportunity') ...[
+                _SectionHeader(_type == 'advert' ? 'Advert Media' : 'Project Media'),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: _UploadArea(
@@ -1425,11 +1456,17 @@ class _LinkRow extends StatelessWidget {
 class _FacultyMultiSelect extends StatelessWidget {
   final List<String> selectedFaculties;
   final ValueChanged<List<String>> onChanged;
+  final bool includeAllOption;
+  final String helperText;
 
   const _FacultyMultiSelect({
     required this.selectedFaculties,
     required this.onChanged,
+    this.includeAllOption = false,
+    this.helperText = 'Select one or more faculties this opportunity applies to.',
   });
+
+  static const String allFacultiesLabel = 'All Faculties';
 
   static const _faculties = [
     'Computing and Informatics',
@@ -1453,7 +1490,7 @@ class _FacultyMultiSelect extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          'Select one or more faculties this opportunity applies to',
+          helperText,
           style: GoogleFonts.plusJakartaSans(
             fontSize: 11,
             color: AppColors.textSecondaryLight,
@@ -1463,7 +1500,10 @@ class _FacultyMultiSelect extends StatelessWidget {
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: _faculties.map((faculty) {
+          children: [
+            if (includeAllOption) allFacultiesLabel,
+            ..._faculties,
+          ].map((faculty) {
             final selected = selectedFaculties.contains(faculty);
             return FilterChip(
               label: Text(
@@ -1479,7 +1519,14 @@ class _FacultyMultiSelect extends StatelessWidget {
               onSelected: (checked) {
                 final updated = List<String>.from(selectedFaculties);
                 if (checked) {
-                  updated.add(faculty);
+                  if (faculty == allFacultiesLabel) {
+                    updated
+                      ..clear()
+                      ..add(allFacultiesLabel);
+                  } else {
+                    updated.remove(allFacultiesLabel);
+                    updated.add(faculty);
+                  }
                 } else {
                   updated.remove(faculty);
                 }

@@ -151,6 +151,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   int _syncDeadLetters = 0;
   int _weeklyReports = 0;
   int _weeklyActiveUsers = 0;
+  int _advertImpressions = 0;
+  int _advertOpens = 0;
+  int _advertUniqueViewers = 0;
+  String? _advertTopFaculty;
+  double _advertCtr = 0;
   int _unreadNotifCount = 0;
   List<PostModel> _pendingQueue = const [];
   List<UserModel> _allUsers = const [];
@@ -299,6 +304,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       final syncDeadLetters = await _syncQueueDao.getDeadLetterCount();
       final weeklyReports = await _activityLogDao.getActionCountForDays(action: 'report_post', days: 7);
       final weeklyActiveUsers = await _activityLogDao.getActiveUserCountSince(days: 7);
+      final advertAnalytics = await _activityLogDao.getAdvertAnalyticsSummary(days: 30);
 
       final flaggedItems = flaggedRows.map((row) {
         final risk = switch (row['risk']) {
@@ -345,6 +351,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         _syncDeadLetters = syncDeadLetters;
         _weeklyReports = weeklyReports;
         _weeklyActiveUsers = weeklyActiveUsers;
+        _advertImpressions = advertAnalytics['impressions'] as int? ?? 0;
+        _advertOpens = advertAnalytics['opens'] as int? ?? 0;
+        _advertUniqueViewers = advertAnalytics['uniqueViewers'] as int? ?? 0;
+        _advertCtr = (advertAnalytics['ctr'] as num?)?.toDouble() ?? 0;
+        _advertTopFaculty = advertAnalytics['topFaculty'] as String?;
       });
     } finally {
       if (mounted) {
@@ -1180,6 +1191,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               value: _weeklyActiveUsers.toString(),
               label: 'Active Users (7d)',
             ),
+            _SummaryCard(
+              icon: Icons.campaign_rounded,
+              iconColor: AppColors.mustGold,
+              value: _advertImpressions.toString(),
+              label: 'Ad Impressions (30d)',
+            ),
           ]),
           const SizedBox(height: 10),
           ListTile(
@@ -1199,6 +1216,30 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             contentPadding: EdgeInsets.zero,
             title: const Text('Total Users'),
             trailing: Text('$_totalUsers'),
+          ),
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Advert Opens (30d)'),
+            trailing: Text('$_advertOpens'),
+          ),
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Advert CTR (30d)'),
+            trailing: Text('${(_advertCtr * 100).toStringAsFixed(1)}%'),
+          ),
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Advert Unique Viewers (30d)'),
+            trailing: Text('$_advertUniqueViewers'),
+          ),
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Top Advert Target Faculty'),
+            trailing: Text(_advertTopFaculty ?? '-'),
           ),
         ],
       );

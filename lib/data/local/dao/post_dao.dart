@@ -140,6 +140,21 @@ class PostDao {
     );
   }
 
+  Future<Set<String>> getFollowedUserIds(String followerId) async {
+    final db = await _db.database;
+    final rows = await db.query(
+      DatabaseSchema.tableFollows,
+      columns: ['followee_id'],
+      where: 'follower_id = ?',
+      whereArgs: [followerId],
+    );
+
+    return rows
+        .map((row) => (row['followee_id'] as String? ?? '').trim())
+        .where((id) => id.isNotEmpty)
+        .toSet();
+  }
+
   Future<void> persistCollaborationRequest({
     required String senderId,
     required String receiverId,
@@ -396,21 +411,21 @@ class PostDao {
 
     final sql = '''
       SELECT p.*,
-         COALESCE((
+         COALESCE(p.like_count, (
            SELECT COUNT(*)
            FROM ${DatabaseSchema.tableLikes} lk_count
            WHERE lk_count.post_id = p.id
-         ), p.like_count, 0) AS resolved_like_count,
-         COALESCE((
+         ), 0) AS resolved_like_count,
+         COALESCE(p.dislike_count, (
            SELECT COUNT(*)
            FROM ${DatabaseSchema.tableDislikes} dlk_count
            WHERE dlk_count.post_id = p.id
-         ), p.dislike_count, 0) AS resolved_dislike_count,
-         COALESCE((
+         ), 0) AS resolved_dislike_count,
+         COALESCE(p.comment_count, (
            SELECT COUNT(*)
            FROM ${DatabaseSchema.tableComments} cm_count
            WHERE cm_count.post_id = p.id AND COALESCE(cm_count.is_deleted, 0) = 0
-         ), p.comment_count, 0) AS resolved_comment_count,
+         ), 0) AS resolved_comment_count,
          $selectAuthorName,
          $selectAuthorPhoto,
          $selectAuthorRole
@@ -569,21 +584,21 @@ class PostDao {
 
         final fallbackSql = '''
           SELECT p.*,
-             COALESCE((
+             COALESCE(p.like_count, (
                SELECT COUNT(*)
                FROM ${DatabaseSchema.tableLikes} lk_count
                WHERE lk_count.post_id = p.id
-             ), p.like_count, 0) AS resolved_like_count,
-             COALESCE((
+             ), 0) AS resolved_like_count,
+             COALESCE(p.dislike_count, (
                SELECT COUNT(*)
                FROM ${DatabaseSchema.tableDislikes} dlk_count
                WHERE dlk_count.post_id = p.id
-             ), p.dislike_count, 0) AS resolved_dislike_count,
-             COALESCE((
+             ), 0) AS resolved_dislike_count,
+             COALESCE(p.comment_count, (
                SELECT COUNT(*)
                FROM ${DatabaseSchema.tableComments} cm_count
                WHERE cm_count.post_id = p.id AND COALESCE(cm_count.is_deleted, 0) = 0
-             ), p.comment_count, 0) AS resolved_comment_count,
+             ), 0) AS resolved_comment_count,
              $selectAuthorName,
              $selectAuthorPhoto,
              $selectAuthorRole

@@ -43,6 +43,7 @@ import '../../../data/local/dao/message_dao.dart';
 import '../../../data/local/dao/sync_queue_dao.dart';
 import '../../../data/local/dao/user_dao.dart';
 import '../../../data/models/post_model.dart';
+import '../../../data/models/user_model.dart';
 import '../../../data/remote/recommender_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
 import '../../notifications/bloc/notification_cubit.dart';
@@ -71,6 +72,96 @@ _PostKind _kindOf(PostModel post) {
   }
   if (post.mediaUrls.any((u) => !_isVideoUrl(u))) return _PostKind.photo;
   return _PostKind.showcase;
+}
+
+bool _isAdvertPost(PostModel post) => post.type == 'advert';
+
+String _postTypeLabel(PostModel post) {
+  switch (post.type) {
+    case 'opportunity':
+      return 'Opportunity';
+    case 'advert':
+      return 'Advert';
+    default:
+      return 'Project';
+  }
+}
+
+Color _postTypeAccent(PostModel post) {
+  switch (post.type) {
+    case 'opportunity':
+      return AppColors.mustGreen;
+    case 'advert':
+      return AppColors.mustGold;
+    default:
+      return AppColors.primary;
+  }
+}
+
+Color _postTypeTint(PostModel post) {
+  switch (post.type) {
+    case 'opportunity':
+      return AppColors.mustGreenLight;
+    case 'advert':
+      return AppColors.mustGold.withValues(alpha: 0.18);
+    default:
+      return AppColors.primaryTint10;
+  }
+}
+
+List<PostModel> _rankAdvertsForViewerFaculty(
+  List<PostModel> adverts, {
+  String? viewerFaculty,
+}) {
+  if (adverts.isEmpty) return const [];
+
+  final normalizedViewer = viewerFaculty?.trim().toLowerCase();
+  final sorted = [...adverts]
+    ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+  if (normalizedViewer == null || normalizedViewer.isEmpty) {
+    return sorted;
+  }
+
+  final matched = <PostModel>[];
+  final global = <PostModel>[];
+  final others = <PostModel>[];
+
+  for (final advert in sorted) {
+    final faculties = advert.faculties.map((f) => f.toLowerCase()).toSet();
+    if (faculties.contains(normalizedViewer)) {
+      matched.add(advert);
+    } else if (faculties.contains('all faculties') || faculties.contains('all')) {
+      global.add(advert);
+    } else {
+      others.add(advert);
+    }
+  }
+
+  return [...matched, ...global, ...others];
+}
+
+List<PostModel> _injectAdsIntoStream({
+  required List<PostModel> content,
+  required List<PostModel> adverts,
+  int every = 5,
+}) {
+  if (content.isEmpty || adverts.isEmpty || every <= 0) {
+    return content;
+  }
+
+  final injected = <PostModel>[];
+  var adIndex = 0;
+
+  for (var i = 0; i < content.length; i++) {
+    injected.add(content[i]);
+    if ((i + 1) % every == 0) {
+      injected.add(adverts[adIndex % adverts.length]);
+      adIndex++;
+    }
+  }
+
+  return injected;
 }
 
 bool _photoRailHintShown = false;
@@ -212,7 +303,6 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                     ? const SizedBox.shrink()
                     : Column(
                         children: [
-                          _FilterChips(cubit: cubit),
                           const _CollaboratorStrip(),
                           _ContentTabBar(tabCtrl: _tabCtrl),
                         ],
@@ -232,21 +322,55 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                     }
                     if (state is FeedLoaded) {
                       final isGuest = sl<AuthCubit>().currentUser == null;
-                      final visiblePosts = state.filter.groupsOnly
+                      final scopedPosts = state.filter.groupsOnly
                           ? state.posts.where(_isGroupPost).toList(growable: false)
                           : state.posts;
 
-                      final videoPosts = visiblePosts
+                      final advertPool = scopedPosts
+                        .where(_isAdvertPost)
+                        .toList(growable: false);
+                      final contentPool = state.filter.type == 'advert'
+                        ? advertPool
+                        : scopedPosts
+                          .where((post) => !_isAdvertPost(post))
+                          .toList(growable: false);
+
+                      final viewerFaculty =
+                        sl<AuthCubit>().currentUser?.profile?.faculty;
+                      final rankedAdverts = _rankAdvertsForViewerFaculty(
+                      advertPool,
+                      viewerFaculty: viewerFaculty,
+                      );
+
+                      final rawVideoPosts = contentPool
                           .where((p) => _kindOf(p) == _PostKind.video)
                           .toList();
-                      final photoPosts = visiblePosts
+                      final rawPhotoPosts = contentPool
                           .where((p) => _kindOf(p) == _PostKind.photo)
                           .toList();
-                      final showcasePosts = visiblePosts
+                      final rawShowcasePosts = contentPool
                           .where((p) => _kindOf(p) == _PostKind.showcase)
                           .toList();
 
-                      if (visiblePosts.isEmpty) {
+                      final shouldInjectAds =
+                        state.filter.type != 'advert' && !state.filter.groupsOnly;
+
+                      final videoAds = rankedAdverts
+                        .where((p) => _kindOf(p) == _PostKind.video)
+                        .toList(growable: false);
+                      final photoAds = rankedAdverts
+                        .where((p) => _kindOf(p) == _PostKind.photo)
+                        .toList(growable: false);
+
+                      final videoPosts = shouldInjectAds
+                        ? _injectAdsIntoStream(content: rawVideoPosts, adverts: videoAds, every: 5)
+                        : rawVideoPosts;
+                      final photoPosts = shouldInjectAds
+                        ? _injectAdsIntoStream(content: rawPhotoPosts, adverts: photoAds, every: 5)
+                        : rawPhotoPosts;
+                      final showcasePosts = rawShowcasePosts;
+
+                      if (contentPool.isEmpty) {
                         return RefreshIndicator(
                           color: AppColors.primary,
                           onRefresh: cubit.refresh,
@@ -263,44 +387,51 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                         );
                       }
 
-                      return RefreshIndicator(
-                        color: AppColors.primary,
-                        onRefresh: cubit.refresh,
-                        child: TabBarView(
-                          controller: _tabCtrl,
-                          physics: const NeverScrollableScrollPhysics(),
-                          children: [
-                            _VideoFeedTab(
-                              posts: videoPosts,
-                              cubit: cubit,
-                              isGuest: isGuest,
-                              isLoadingMore: state.isLoadingMore,
-                              hasMore: state.hasMore,
-                              onScrollDirectionChanged:
-                                  _handleContentScrollDirection,
+                      return Column(
+                        children: [
+                          _FilterChips(cubit: cubit),
+                          Expanded(
+                            child: RefreshIndicator(
+                              color: AppColors.primary,
+                              onRefresh: cubit.refresh,
+                              child: TabBarView(
+                                controller: _tabCtrl,
+                                physics: const NeverScrollableScrollPhysics(),
+                                children: [
+                                  _VideoFeedTab(
+                                    posts: videoPosts,
+                                    cubit: cubit,
+                                    isGuest: isGuest,
+                                    isLoadingMore: state.isLoadingMore,
+                                    hasMore: state.hasMore,
+                                    onScrollDirectionChanged:
+                                        _handleContentScrollDirection,
+                                  ),
+                                  _PhotoFeedTab(
+                                    posts: photoPosts,
+                                    cubit: cubit,
+                                    isGuest: isGuest,
+                                    scrollCtrl: _photoScrollCtrl,
+                                    isLoadingMore: state.isLoadingMore,
+                                    hasMore: state.hasMore,
+                                    onScrollDirectionChanged:
+                                        _handleContentScrollDirection,
+                                  ),
+                                  _ShowcaseFeedTab(
+                                    posts: showcasePosts,
+                                    cubit: cubit,
+                                    isGuest: isGuest,
+                                    scrollCtrl: _showcaseScrollCtrl,
+                                    isLoadingMore: state.isLoadingMore,
+                                    hasMore: state.hasMore,
+                                    onScrollDirectionChanged:
+                                        _handleContentScrollDirection,
+                                  ),
+                                ],
+                              ),
                             ),
-                            _PhotoFeedTab(
-                              posts: photoPosts,
-                              cubit: cubit,
-                              isGuest: isGuest,
-                              scrollCtrl: _photoScrollCtrl,
-                              isLoadingMore: state.isLoadingMore,
-                              hasMore: state.hasMore,
-                              onScrollDirectionChanged:
-                                  _handleContentScrollDirection,
-                            ),
-                            _ShowcaseFeedTab(
-                              posts: showcasePosts,
-                              cubit: cubit,
-                              isGuest: isGuest,
-                              scrollCtrl: _showcaseScrollCtrl,
-                              isLoadingMore: state.isLoadingMore,
-                              hasMore: state.hasMore,
-                              onScrollDirectionChanged:
-                                  _handleContentScrollDirection,
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       );
                     }
                     return const SizedBox.shrink();
@@ -979,6 +1110,14 @@ class _VideoPageState extends State<_VideoPage>
   @override
   Widget build(BuildContext context) {
     final post = widget.post;
+    final viewerFaculty =
+        sl<AuthCubit>().currentUser?.profile?.faculty?.trim().toLowerCase();
+    final postFaculty = post.faculty?.trim().toLowerCase();
+    final isCrossFacultyPick = viewerFaculty != null &&
+        viewerFaculty.isNotEmpty &&
+        postFaculty != null &&
+        postFaculty.isNotEmpty &&
+        postFaculty != viewerFaculty;
     return GestureDetector(
       onTap: () {
         // Toggle play/pause on tap
@@ -1317,14 +1456,12 @@ class _VideoPageState extends State<_VideoPage>
               padding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: post.type == 'opportunity'
-                    ? AppColors.mustGreen
-                    : AppColors.primary,
+                color: _postTypeAccent(post),
                 borderRadius:
                     BorderRadius.circular(AppDimensions.radiusFull),
               ),
               child: Text(
-                post.type == 'opportunity' ? 'Opportunity' : 'Project',
+                _postTypeLabel(post),
                 style: GoogleFonts.plusJakartaSans(
                   color: Colors.white,
                   fontSize: 10,
@@ -1333,6 +1470,30 @@ class _VideoPageState extends State<_VideoPage>
               ),
             ),
           ),
+
+          if (isCrossFacultyPick)
+            Positioned(
+              top: 42,
+              left: 12,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.52),
+                  borderRadius:
+                      BorderRadius.circular(AppDimensions.radiusFull),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: Text(
+                  'Cross Faculty',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
 
           // ── Background-download progress indicator ────────────────────────
           if (_downloadProgress != null)
@@ -2273,22 +2434,16 @@ class _ShowcaseCard extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: post.type == 'opportunity'
-                              ? AppColors.mustGreenLight
-                              : AppColors.primaryTint10,
+                          color: _postTypeTint(post),
                           borderRadius: BorderRadius.circular(
                               AppDimensions.radiusFull),
                         ),
                         child: Text(
-                          post.type == 'opportunity'
-                              ? 'Opportunity'
-                              : 'Project',
+                          _postTypeLabel(post),
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
-                            color: post.type == 'opportunity'
-                                ? AppColors.mustGreen
-                                : AppColors.primary,
+                            color: _postTypeAccent(post),
                           ),
                         ),
                       ),
@@ -2345,7 +2500,7 @@ class _ShowcaseCard extends StatelessWidget {
                             color: AppColors.textSecondaryLight),
                         const SizedBox(width: 4),
                         Text(
-                          'Deadline: ${_formatDate(post.opportunityDeadline!)}',
+                          '${post.type == 'advert' ? 'Runs until' : 'Deadline'}: ${_formatDate(post.opportunityDeadline!)}',
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 11,
                             color: AppColors.textSecondaryLight,
@@ -3473,6 +3628,24 @@ Future<void> _openPostDetails(
   PostModel post,
   FeedCubit cubit,
 ) async {
+  final currentUser = sl<AuthCubit>().currentUser;
+  if (post.type == 'advert' && currentUser != null) {
+    try {
+      await sl<ActivityLogDao>().logAction(
+        userId: currentUser.id,
+        action: 'open_advert',
+        entityType: 'posts',
+        entityId: post.id,
+        metadata: {
+          'title': post.title,
+          'target_faculty': post.faculty,
+          'deadline': post.opportunityDeadline?.toIso8601String(),
+        },
+      );
+    } catch (e) {
+      debugPrint('[Advert Analytics] open_advert logging failed: $e');
+    }
+  }
   await cubit.recordPostView(post.id);
   if (!context.mounted) return;
   context.push('/project/${post.id}');
@@ -4501,6 +4674,8 @@ class _StaticFeedHeaderState extends State<_StaticFeedHeader>
 // Filter chips (unchanged from original)
 // ─────────────────────────────────────────────────────────────────────────────
 
+enum _FeedTopFilterMode { faculty, following, search }
+
 class _FilterChips extends StatelessWidget {
   final FeedCubit cubit;
   const _FilterChips({required this.cubit});
@@ -4511,66 +4686,440 @@ class _FilterChips extends StatelessWidget {
       builder: (_, state) {
         final current =
             state is FeedLoaded ? state.filter : const FeedFilter();
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: Row(
-            children: [
-              _Chip(
-                label: 'All',
-                active: current.type == null && !current.groupsOnly,
-                onTap: () => cubit.applyFilter(
-                  current.copyWith(
-                    clearType: true,
-                    clearGroupsOnly: true,
+        final feedPosts = state is FeedLoaded ? state.posts : const <PostModel>[];
+        final faculties = <String>{
+          ...feedPosts
+              .map((post) => post.faculty?.trim() ?? '')
+              .where((faculty) => faculty.isNotEmpty),
+          ...feedPosts
+              .expand((post) => post.faculties)
+              .map((faculty) => faculty.trim())
+              .where((faculty) => faculty.isNotEmpty),
+        }.toList()
+          ..sort();
+
+        final topMode = current.followingOnly
+            ? _FeedTopFilterMode.following
+            : (current.searchedUserId != null
+                ? _FeedTopFilterMode.search
+                : _FeedTopFilterMode.faculty);
+
+        return Column(
+          children: [
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Row(
+                children: [
+                  _TopModeChip(
+                    label: 'Faculty',
+                    active: topMode == _FeedTopFilterMode.faculty,
+                    onTap: () => cubit.applyFilter(
+                      current.copyWith(
+                        clearFollowingOnly: true,
+                        clearSearchedUser: true,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              _Chip(
-                label: 'Projects',
-                active: current.type == 'project' && !current.groupsOnly,
-                onTap: () => cubit.applyFilter(
-                  current.copyWith(type: 'project', groupsOnly: false),
-                ),
-              ),
-              _Chip(
-                label: 'Opportunities',
-                active: current.type == 'opportunity' && !current.groupsOnly,
-                onTap: () => cubit.applyFilter(
-                  current.copyWith(type: 'opportunity', groupsOnly: false),
-                ),
-              ),
-              _Chip(
-                label: 'Groups',
-                active: current.groupsOnly,
-                onTap: () => cubit.applyFilter(
-                  current.copyWith(
-                    type: 'project',
-                    groupsOnly: true,
+                  _TopModeChip(
+                    label: 'Following',
+                    active: topMode == _FeedTopFilterMode.following,
+                    onTap: () => cubit.applyFilter(
+                      current.copyWith(
+                        followingOnly: true,
+                        clearFaculty: true,
+                        clearSearchedUser: true,
+                        groupsOnly: false,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              if (current.isActive)
-                Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: ActionChip(
-                    label: const Text('Clear'),
-                    avatar: const Icon(Icons.close, size: 14),
-                    onPressed: cubit.clearFilters,
-                    backgroundColor:
-                        AppColors.danger.withValues(alpha: 0.10),
-                    labelStyle: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        color: AppColors.danger,
-                        fontWeight: FontWeight.w600),
+                  _TopModeChip(
+                    label: 'Search',
+                    active: topMode == _FeedTopFilterMode.search,
+                    onTap: () async {
+                      final selected = await _showFeedUserSearchSheet(context);
+                      if (selected == null) return;
+                      if (!context.mounted) return;
+                      await cubit.applyFilter(
+                        current.copyWith(
+                          searchedUserId: selected.id,
+                          searchedUserName: selected.name,
+                          clearFaculty: true,
+                          clearFollowingOnly: true,
+                          groupsOnly: false,
+                        ),
+                      );
+                    },
                   ),
-                ),
-            ],
-          ),
+                ],
+              ),
+            ),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Row(
+                children: [
+                  _Chip(
+                    label: 'All',
+                    active: current.type == null && !current.groupsOnly,
+                    onTap: () => cubit.applyFilter(
+                      current.copyWith(
+                        clearType: true,
+                        clearGroupsOnly: true,
+                      ),
+                    ),
+                  ),
+                  _Chip(
+                    label: 'Projects',
+                    active: current.type == 'project' && !current.groupsOnly,
+                    onTap: () => cubit.applyFilter(
+                      current.copyWith(type: 'project', groupsOnly: false),
+                    ),
+                  ),
+                  _Chip(
+                    label: 'Opportunities',
+                    active: current.type == 'opportunity' && !current.groupsOnly,
+                    onTap: () => cubit.applyFilter(
+                      current.copyWith(type: 'opportunity', groupsOnly: false),
+                    ),
+                  ),
+                  _Chip(
+                    label: 'Adverts',
+                    active: current.type == 'advert' && !current.groupsOnly,
+                    onTap: () => cubit.applyFilter(
+                      current.copyWith(type: 'advert', groupsOnly: false),
+                    ),
+                  ),
+                  _Chip(
+                    label: 'Groups',
+                    active: current.groupsOnly,
+                    onTap: () => cubit.applyFilter(
+                      current.copyWith(
+                        type: 'project',
+                        groupsOnly: true,
+                      ),
+                    ),
+                  ),
+                  if (topMode == _FeedTopFilterMode.search)
+                    _Chip(
+                      label: current.searchedUserName == null
+                          ? 'Pick User'
+                          : 'User: ${current.searchedUserName}',
+                      active: current.searchedUserId != null,
+                      onTap: () async {
+                        final selected = await _showFeedUserSearchSheet(context);
+                        if (selected == null) return;
+                        if (!context.mounted) return;
+                        await cubit.applyFilter(
+                          current.copyWith(
+                            searchedUserId: selected.id,
+                            searchedUserName: selected.name,
+                            clearFaculty: true,
+                            clearFollowingOnly: true,
+                            groupsOnly: false,
+                          ),
+                        );
+                      },
+                    ),
+                  if (topMode == _FeedTopFilterMode.faculty)
+                    _FacultyDropdown(
+                      faculties: faculties,
+                      selected: current.faculty,
+                      onSelected: (faculty) => cubit.applyFilter(
+                        faculty == null || faculty.isEmpty
+                            ? current.copyWith(clearFaculty: true)
+                            : current.copyWith(
+                                faculty: faculty,
+                                type: 'project',
+                                groupsOnly: false,
+                                clearFollowingOnly: true,
+                                clearSearchedUser: true,
+                              ),
+                      ),
+                    ),
+                  if (current.isActive)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: ActionChip(
+                        label: const Text('Clear'),
+                        avatar: const Icon(Icons.close, size: 14),
+                        onPressed: cubit.clearFilters,
+                        backgroundColor:
+                            AppColors.danger.withValues(alpha: 0.10),
+                        labelStyle: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            color: AppColors.danger,
+                            fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
         );
       },
     );
   }
+}
+
+class _FacultyDropdown extends StatelessWidget {
+  final List<String> faculties;
+  final String? selected;
+  final ValueChanged<String?> onSelected;
+
+  const _FacultyDropdown({
+    required this.faculties,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final options = faculties.toSet().toList()..sort();
+    final hasSelection = selected != null && selected!.trim().isNotEmpty;
+    final selectedValue = hasSelection && options.contains(selected)
+        ? selected
+        : null;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: selectedValue,
+          isDense: true,
+          hint: Text(
+            'Select faculty',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 13,
+              color: AppColors.textSecondaryLight,
+            ),
+          ),
+          items: options
+              .map(
+                (faculty) => DropdownMenuItem<String>(
+                  value: faculty,
+                  child: Text(
+                    faculty,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              )
+              .toList(growable: false),
+          onChanged: onSelected,
+        ),
+      ),
+    );
+  }
+}
+
+class _TopModeChip extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _TopModeChip({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: active,
+        onSelected: (_) => onTap(),
+        selectedColor: AppColors.primary.withValues(alpha: 0.16),
+        labelStyle: GoogleFonts.plusJakartaSans(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: active ? AppColors.primary : AppColors.textSecondaryLight,
+        ),
+        backgroundColor: Theme.of(context).cardColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+          side: BorderSide(
+            color: active ? AppColors.primary : AppColors.borderLight,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FeedUserChoice {
+  final String id;
+  final String name;
+
+  const _FeedUserChoice({required this.id, required this.name});
+}
+
+Future<_FeedUserChoice?> _showFeedUserSearchSheet(BuildContext context) async {
+  final searchCtrl = TextEditingController();
+  final users = ValueNotifier<List<UserModel>>(const <UserModel>[]);
+  final loading = ValueNotifier<bool>(false);
+
+  int matchScore(UserModel user, String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return 0;
+    final display = (user.displayName ?? '').trim().toLowerCase();
+    final email = user.email.trim().toLowerCase();
+    final localPart = email.split('@').first;
+    var score = 0;
+    if (display == q) score += 120;
+    if (email == q) score += 120;
+    if (localPart == q) score += 100;
+    if (display.startsWith(q)) score += 70;
+    if (localPart.startsWith(q)) score += 65;
+    if (email.startsWith(q)) score += 60;
+    if (display.contains(q)) score += 40;
+    if (localPart.contains(q)) score += 35;
+    if (email.contains(q)) score += 30;
+    return score;
+  }
+
+  Future<void> runSearch(String query) async {
+    final safe = query.trim();
+    if (safe.length < 2) {
+      users.value = const <UserModel>[];
+      return;
+    }
+    loading.value = true;
+    try {
+      final found = await sl<UserDao>().searchUsers(query: safe, pageSize: 12);
+      final scored = found
+          .map((user) => (user: user, score: matchScore(user, safe)))
+          .where((entry) => entry.score > 0)
+          .toList()
+        ..sort((a, b) => b.score.compareTo(a.score));
+      users.value = scored.map((entry) => entry.user).toList(growable: false);
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  final selected = await showModalBottomSheet<_FeedUserChoice>(
+    context: context,
+    isScrollControlled: true,
+    builder: (ctx) {
+      return SafeArea(
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 16,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+          ),
+          child: SizedBox(
+            height: 460,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Filter By Searched User',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: searchCtrl,
+                  autofocus: true,
+                  onChanged: runSearch,
+                  decoration: const InputDecoration(
+                    hintText: 'Search by name or email',
+                    prefixIcon: Icon(Icons.search_rounded),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: ValueListenableBuilder<bool>(
+                    valueListenable: loading,
+                    builder: (_, isLoading, __) {
+                      return ValueListenableBuilder<List<UserModel>>(
+                        valueListenable: users,
+                        builder: (_, items, __) {
+                          if (isLoading) {
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          }
+                          if (items.isEmpty) {
+                            return Center(
+                              child: Text(
+                                'Type at least 2 characters to search users.',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondaryLight,
+                                ),
+                              ),
+                            );
+                          }
+                          return ListView.separated(
+                            itemCount: items.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            itemBuilder: (_, index) {
+                              final user = items[index];
+                              final name =
+                                  (user.displayName?.trim().isNotEmpty == true)
+                                      ? user.displayName!.trim()
+                                      : user.email;
+                              final subtitle = [
+                                user.profile?.faculty,
+                                user.profile?.programName,
+                              ].whereType<String>().where((e) => e.trim().isNotEmpty).join(' • ');
+
+                              return ListTile(
+                                onTap: () => Navigator.of(ctx).pop(
+                                  _FeedUserChoice(id: user.id, name: name),
+                                ),
+                                title: Text(
+                                  name,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                subtitle: subtitle.isEmpty
+                                    ? null
+                                    : Text(
+                                        subtitle,
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 12,
+                                          color: AppColors.textSecondaryLight,
+                                        ),
+                                      ),
+                              );
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+
+  searchCtrl.dispose();
+  users.dispose();
+  loading.dispose();
+  return selected;
 }
 
 class _Chip extends StatelessWidget {

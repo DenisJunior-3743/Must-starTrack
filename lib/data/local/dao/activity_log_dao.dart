@@ -493,4 +493,58 @@ class ActivityLogDao {
         )
         .toList();
   }
+
+  Future<Map<String, dynamic>> getAdvertAnalyticsSummary({
+    int days = 30,
+  }) async {
+    final db = await _db.database;
+    final cutoff = DateTime.now().subtract(Duration(days: days)).toIso8601String();
+
+    final rows = await db.query(
+      DatabaseSchema.tableActivityLogs,
+      columns: ['user_id', 'action', 'metadata'],
+      where: 'created_at >= ? AND action IN (?, ?)',
+      whereArgs: [cutoff, 'view_advert', 'open_advert'],
+      orderBy: 'created_at DESC',
+      limit: 5000,
+    );
+
+    var impressions = 0;
+    var opens = 0;
+    final viewers = <String>{};
+    final facultyCounts = <String, int>{};
+
+    for (final row in rows) {
+      final action = (row['action'] as String? ?? '').trim();
+      final userId = (row['user_id'] as String? ?? '').trim();
+      if (action == 'view_advert') {
+        impressions += 1;
+      } else if (action == 'open_advert') {
+        opens += 1;
+      }
+      if (userId.isNotEmpty) {
+        viewers.add(userId);
+      }
+
+      final metadataRaw = row['metadata']?.toString() ?? '{}';
+      final metadata = _tryDecodeMap(metadataRaw) ?? const <String, dynamic>{};
+      final faculty = (metadata['target_faculty']?.toString() ?? '').trim();
+      if (faculty.isNotEmpty) {
+        facultyCounts[faculty] = (facultyCounts[faculty] ?? 0) + 1;
+      }
+    }
+
+    final ctr = impressions > 0 ? (opens / impressions) : 0.0;
+    final topFaculty = facultyCounts.entries.isEmpty
+        ? null
+        : facultyCounts.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
+
+    return {
+      'impressions': impressions,
+      'opens': opens,
+      'uniqueViewers': viewers.length,
+      'ctr': ctr,
+      'topFaculty': topFaculty,
+    };
+  }
 }
