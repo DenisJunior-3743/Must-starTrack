@@ -128,7 +128,7 @@ class SyncQueueDao {
   }
 
   Future<List<SyncQueueItem>> getReadyJobs({int limit = 50}) async {
-    final items = await getPendingItems();
+    final items = await getPendingItems(limit: limit);
     if (items.length <= limit) return items;
     return items.take(limit).toList();
   }
@@ -147,15 +147,16 @@ class SyncQueueDao {
   }
 
   /// Returns all items that are eligible to retry right now.
-  Future<List<SyncQueueItem>> getPendingItems() async {
+  Future<List<SyncQueueItem>> getPendingItems({int limit = 50}) async {
     final db = await _db.database;
     final now = DateTime.now().toIso8601String();
     final rows = await db.query(
       DatabaseSchema.tableSyncQueue,
       where: 'retry_count < max_retries AND (next_retry_at IS NULL OR next_retry_at <= ?)',
       whereArgs: [now],
-      orderBy: 'created_at ASC',
-      limit: 50, // process in batches of 50
+      orderBy:
+          "CASE WHEN entity = 'recommendation_logs' THEN 1 ELSE 0 END ASC, created_at ASC",
+      limit: limit,
     );
     return rows.map(SyncQueueItem.fromMap).toList();
   }
