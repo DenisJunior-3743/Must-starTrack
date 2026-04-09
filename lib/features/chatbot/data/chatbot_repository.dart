@@ -35,6 +35,16 @@ class ChatbotRepository {
       );
     }
 
+    if (_isGreeting(normalized)) {
+      final greetingReply = _greetingResponse(role: role, isGuest: isGuest);
+      return ChatbotResponse(
+        answer: greetingReply,
+        source: ChatbotSource.faq,
+        confidence: 1.0,
+        followUps: ChatbotKnowledgeBase.starterPrompts,
+      );
+    }
+
     final local = _bestFaqMatch(normalized);
     if (local != null && local.score >= 0.42) {
       final entry = local.entry;
@@ -360,6 +370,44 @@ RESPOND WITH ONLY THE JSON, NO ADDITIONAL TEXT.
       }
     }
     return 0.0;
+  }
+
+  static const _greetingTokens = {
+    'hi', 'hey', 'hello', 'hola', 'howdy', 'yo', 'sup', 'heya', 'hiya',
+    'greetings', 'morning', 'afternoon', 'evening', 'wassup', 'whatsup',
+    'salut', 'bonjour', 'hii', 'helo', 'helloo', 'heyy', 'hihi',
+  };
+
+  static const _greetingPhrases = [
+    'good morning', 'good afternoon', 'good evening', 'good day',
+    'what is up', 'how are you', 'how r you', 'how do you do',
+  ];
+
+  bool _isGreeting(String normalized) {
+    for (final phrase in _greetingPhrases) {
+      if (normalized == phrase || normalized.startsWith('$phrase ')) return true;
+    }
+    final tokens = normalized.split(' ').toSet();
+    // Pure greeting: every non-empty token must be a greeting word (allows "hey there", "hi hi")
+    final nonGreeting = tokens.where(
+      (t) => t.isNotEmpty && !_greetingTokens.contains(t) && t != 'there' && t != 'all',
+    );
+    return nonGreeting.isEmpty && tokens.any(_greetingTokens.contains);
+  }
+
+  String _greetingResponse({String? role, required bool isGuest}) {
+    final roleLabel = switch (role) {
+      'lecturer' => 'Lecturer',
+      'admin' || 'superAdmin' => 'Admin',
+      _ => null,
+    };
+    final intro = roleLabel != null
+        ? 'Hey there, $roleLabel! 👋'
+        : 'Hey there! 👋';
+    final context = isGuest
+        ? 'You are browsing as a guest — you can explore posts and profiles, but you will need to sign in to post, message, or apply.'
+        : 'I am here to help you get the most out of MUST StarTrack.';
+    return '$intro $context What would you like help with today?';
   }
 
   String _normalize(String value) {

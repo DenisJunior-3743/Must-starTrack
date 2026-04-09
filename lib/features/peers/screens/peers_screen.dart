@@ -19,6 +19,7 @@ import '../../auth/bloc/auth_cubit.dart';
 import '../../groups/screens/create_group_screen.dart';
 import '../../groups/screens/groups_overview_tab.dart';
 import '../../shared/screens/offline_video_player_screen.dart';
+import '../../shared/widgets/guest_auth_required_view.dart';
 
 class PeersScreen extends StatefulWidget {
   const PeersScreen({super.key});
@@ -153,6 +154,26 @@ class _PeersScreenState extends State<PeersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isGuest = sl<AuthCubit>().currentUser == null;
+
+    if (isGuest) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(
+            'Peers',
+            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+          ),
+        ),
+        body: const GuestAuthRequiredView(
+          icon: Icons.group_off_rounded,
+          title: 'Sign in to access Peers',
+          subtitle:
+              'Authentication is required to view collaborators, respond to requests, and manage groups.',
+          fromRoute: RouteNames.peers,
+        ),
+      );
+    }
+
     if (_loading) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),

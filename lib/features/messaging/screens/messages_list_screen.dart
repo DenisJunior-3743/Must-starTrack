@@ -25,9 +25,11 @@ import 'package:timeago/timeago.dart' as timeago;
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/di/injection_container.dart';
+import '../../../core/router/route_names.dart';
 import '../../../data/local/dao/activity_log_dao.dart';
 import '../../../data/local/dao/message_dao.dart';
 import '../../auth/bloc/auth_cubit.dart';
+import '../../shared/widgets/guest_auth_required_view.dart';
 import '../bloc/message_cubit.dart';
 
 enum _InboxFilter { all, requests, chats }
@@ -59,6 +61,26 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isGuest = sl<AuthCubit>().currentUser == null;
+
+    if (isGuest) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(
+            'Inbox',
+            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+          ),
+        ),
+        body: const GuestAuthRequiredView(
+          icon: Icons.mark_chat_unread_rounded,
+          title: 'Sign in to access Inbox',
+          subtitle:
+              'Please authenticate to send messages, view conversations, and manage collaboration requests.',
+          fromRoute: RouteNames.inbox,
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Inbox',

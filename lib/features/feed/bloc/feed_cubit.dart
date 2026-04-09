@@ -235,7 +235,7 @@ class FeedCubit extends Cubit<FeedState> {
       _lastObservedAuthUserId = nextUserId;
       // Always reset to "All" when auth identity changes so the new session
       // starts from an unfiltered feed. Users can then apply filters in UI.
-      unawaited(loadFeed(filter: const FeedFilter()));
+      unawaited(loadFeed(filter: const FeedFilter(), forceSync: true));
     });
   }
 
@@ -274,6 +274,8 @@ class FeedCubit extends Cubit<FeedState> {
     bool forceSync = false,
   }) async {
     _ensureAuthListener();
+    final shouldForceSync =
+        forceSync || (state is FeedInitial && (_activeUserId?.isNotEmpty ?? false));
     _emitIfOpen(const FeedLoading());
     try {
       final requestedFilter = filter ?? const FeedFilter();
@@ -286,7 +288,7 @@ class FeedCubit extends Cubit<FeedState> {
       );
       final f = requestedFilter;
 
-      if (forceSync) {
+      if (shouldForceSync) {
         await _syncService?.syncRemoteToLocal(postLimit: _pageSize * 2);
         if (isClosed) return;
         final syncEndTime = DateTime.now();
@@ -314,7 +316,7 @@ class FeedCubit extends Cubit<FeedState> {
         filter: f,
       ));
 
-      if (!forceSync) {
+      if (!shouldForceSync) {
         unawaited(_syncFeedInBackground(filter: f));
       }
     } catch (e) {
@@ -461,9 +463,13 @@ class FeedCubit extends Cubit<FeedState> {
       useHybrid: afterCursor == null,
     );
 
-    final finalPosts = rankedPosts.isEmpty && collectedPosts.isNotEmpty
+    var finalPosts = rankedPosts.isEmpty && collectedPosts.isNotEmpty
         ? collectedPosts
         : rankedPosts;
+
+    if (filter.faculty != null && filter.faculty!.trim().isNotEmpty) {
+      finalPosts = [...finalPosts]..shuffle(Random());
+    }
 
     debugPrint(
       '[FeedCubit] ✅ batch ready — '
@@ -1224,6 +1230,25 @@ class FeedCubit extends Cubit<FeedState> {
 
   Future<void> clearFilters() async {
     await loadFeed(filter: const FeedFilter());
+  }
+
+  Future<void> refreshPostFromLocal(String postId) async {
+    final current = state;
+    if (current is! FeedLoaded) return;
+
+    final index = current.posts.indexWhere((post) => post.id == postId);
+    if (index == -1) return;
+
+    try {
+      final latest =
+          await _postDao.getPostById(postId, currentUserId: _activeUserId);
+      if (latest == null) return;
+
+      final updated = List<PostModel>.from(current.posts)..[index] = latest;
+      _emitIfOpen(current.copyWith(posts: updated));
+    } catch (e) {
+      debugPrint('[FeedCubit] refreshPostFromLocal failed for post=$postId: $e');
+    }
   }
 
   // ── Optimistic Like ────────────────────────────────────────────────────────
