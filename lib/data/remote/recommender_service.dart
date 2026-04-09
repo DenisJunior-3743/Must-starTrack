@@ -101,6 +101,26 @@ class RecommenderService {
         reasons.add('opportunity_fit');
       }
 
+      if (post.type == 'advert') {
+        final advertFaculties = post.faculties
+            .map((faculty) => faculty.toLowerCase())
+            .toSet();
+        final targetsAll = advertFaculties.contains('all');
+        final facultyMatch = userFaculty != null &&
+            advertFaculties.contains(userFaculty);
+
+        if (targetsAll) {
+          score += 0.06;
+          reasons.add('advert_global_target');
+        } else if (facultyMatch) {
+          score += 0.18;
+          reasons.add('advert_faculty_match');
+        } else {
+          score -= 0.06;
+          reasons.add('advert_faculty_mismatch');
+        }
+      }
+
       final lecturerRating = lecturerRatingsByPost[post.id];
       final studentRating = studentRatingsByPost[post.id];
       final ratingBlend = _blendRoleRatings(

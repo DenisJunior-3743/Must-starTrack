@@ -19,6 +19,7 @@
 //   • hasMore flag stops unnecessary calls
 
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
@@ -111,6 +112,9 @@ class FeedFilter extends Equatable {
   final String? type; // 'project' | 'opportunity' | null = all
   final String? recency;
   final bool groupsOnly;
+  final bool followingOnly;
+  final String? searchedUserId;
+  final String? searchedUserName;
 
   const FeedFilter({
     this.faculty,
@@ -118,10 +122,19 @@ class FeedFilter extends Equatable {
     this.type,
     this.recency,
     this.groupsOnly = false,
+    this.followingOnly = false,
+    this.searchedUserId,
+    this.searchedUserName,
   });
 
   bool get isActive =>
-      faculty != null || category != null || type != null || recency != null || groupsOnly;
+      faculty != null ||
+      category != null ||
+      type != null ||
+      recency != null ||
+      groupsOnly ||
+      followingOnly ||
+      searchedUserId != null;
 
   FeedFilter copyWith({
     String? faculty,
@@ -129,11 +142,16 @@ class FeedFilter extends Equatable {
     String? type,
     String? recency,
     bool? groupsOnly,
+    bool? followingOnly,
+    String? searchedUserId,
+    String? searchedUserName,
     bool clearFaculty = false,
     bool clearCategory = false,
     bool clearType = false,
     bool clearRecency = false,
     bool clearGroupsOnly = false,
+    bool clearFollowingOnly = false,
+    bool clearSearchedUser = false,
   }) =>
       FeedFilter(
         faculty: clearFaculty ? null : faculty ?? this.faculty,
@@ -141,10 +159,26 @@ class FeedFilter extends Equatable {
         type: clearType ? null : type ?? this.type,
         recency: clearRecency ? null : recency ?? this.recency,
         groupsOnly: clearGroupsOnly ? false : groupsOnly ?? this.groupsOnly,
+        followingOnly:
+            clearFollowingOnly ? false : followingOnly ?? this.followingOnly,
+        searchedUserId:
+            clearSearchedUser ? null : searchedUserId ?? this.searchedUserId,
+        searchedUserName: clearSearchedUser
+            ? null
+            : searchedUserName ?? this.searchedUserName,
       );
 
   @override
-  List<Object?> get props => [faculty, category, type, recency, groupsOnly];
+  List<Object?> get props => [
+        faculty,
+        category,
+        type,
+        recency,
+        groupsOnly,
+        followingOnly,
+        searchedUserId,
+        searchedUserName,
+      ];
 }
 
 // ── Cubit ─────────────────────────────────────────────────────────────────────
@@ -357,6 +391,18 @@ class FeedCubit extends Cubit<FeedState> {
 
     var cursor = afterCursor;
     var hasMore = true;
+    final currentUserId = _activeUserId;
+
+    Set<String> followedAuthorIds = const <String>{};
+    if (filter.followingOnly) {
+      if (currentUserId == null || currentUserId.isEmpty) {
+        return const _FeedBatchResult(posts: <PostModel>[], hasMore: false);
+      }
+      followedAuthorIds = await _postDao.getFollowedUserIds(currentUserId);
+      if (followedAuthorIds.isEmpty) {
+        return const _FeedBatchResult(posts: <PostModel>[], hasMore: false);
+      }
+    }
 
     for (var page = 0; page < _maxPrefetchPages; page++) {
       final pagePosts = await _postDao.getFeedPage(
@@ -375,7 +421,22 @@ class FeedCubit extends Cubit<FeedState> {
         break;
       }
 
-      for (final post in pagePosts) {
+      var scopedPagePosts = pagePosts;
+      if (filter.followingOnly) {
+        scopedPagePosts = scopedPagePosts
+            .where((post) => followedAuthorIds.contains(post.authorId))
+            .toList(growable: false);
+      }
+      if (filter.searchedUserId != null && filter.searchedUserId!.isNotEmpty) {
+        scopedPagePosts = scopedPagePosts
+            .where((post) => post.authorId == filter.searchedUserId)
+            .toList(growable: false);
+      }
+      scopedPagePosts = scopedPagePosts
+          .where((post) => !_isExpiredAdvert(post))
+          .toList(growable: false);
+
+      for (final post in scopedPagePosts) {
         if (seenPostIds.add(post.id)) {
           collectedPosts.add(post);
           seenAuthorIds.add(post.authorId);
@@ -548,7 +609,27 @@ class FeedCubit extends Cubit<FeedState> {
       return sorted;
     }
 
-    log.writeln('  ✓ Serving  : ${ranked.length} posts (ranked order)');
+    final rankedPosts = ranked.map((entry) => entry.post).toList();
+    final fairnessAdjusted = _injectCrossFacultyVideoFairness(
+      posts: rankedPosts,
+      homeFaculty: profile.faculty,
+    );
+
+    final movedSlots = _countMovedSlots(rankedPosts, fairnessAdjusted);
+    if (movedSlots > 0) {
+      await _activityLogDao.logAction(
+        userId: currentUserId,
+        action: 'feed_fairness_injected',
+        entityType: DatabaseSchema.tablePosts,
+        metadata: {
+          'strategy': 'cross_faculty_video_3_to_1',
+          'movedSlots': movedSlots,
+          'candidateCount': rankedPosts.length,
+        },
+      );
+    }
+
+    log.writeln('  ✓ Serving  : ${fairnessAdjusted.length} posts (ranked order)');
     log.writeln('══════════════════════════════════════════════════════');
     debugPrint(log.toString());
 
@@ -571,7 +652,100 @@ class FeedCubit extends Cubit<FeedState> {
       );
     }
 
-    return ranked.map((entry) => entry.post).toList();
+    return fairnessAdjusted;
+  }
+
+  List<PostModel> _injectCrossFacultyVideoFairness({
+    required List<PostModel> posts,
+    required String? homeFaculty,
+  }) {
+    final normalizedHomeFaculty = homeFaculty?.trim().toLowerCase();
+    if (normalizedHomeFaculty == null || normalizedHomeFaculty.isEmpty) {
+      return posts;
+    }
+
+    final videoIndexes = <int>[];
+    final videos = <PostModel>[];
+    for (var i = 0; i < posts.length; i++) {
+      final post = posts[i];
+      if (_isVideoPost(post)) {
+        videoIndexes.add(i);
+        videos.add(post);
+      }
+    }
+
+    if (videos.length < 4) return posts;
+
+    final sameFacultyVideos = <PostModel>[];
+    final otherFacultyVideos = <PostModel>[];
+    for (final video in videos) {
+      final postFaculty = video.faculty?.trim().toLowerCase();
+      if (postFaculty?.isNotEmpty == true && postFaculty != normalizedHomeFaculty) {
+        otherFacultyVideos.add(video);
+      } else {
+        sameFacultyVideos.add(video);
+      }
+    }
+
+    if (otherFacultyVideos.isEmpty || sameFacultyVideos.length < 3) {
+      return posts;
+    }
+
+    otherFacultyVideos.shuffle(Random());
+    final reorderedVideos = <PostModel>[];
+    var sameCounter = 0;
+
+    while (sameFacultyVideos.isNotEmpty || otherFacultyVideos.isNotEmpty) {
+      if (sameCounter >= 3 && otherFacultyVideos.isNotEmpty) {
+        reorderedVideos.add(otherFacultyVideos.removeAt(0));
+        sameCounter = 0;
+        continue;
+      }
+
+      if (sameFacultyVideos.isNotEmpty) {
+        reorderedVideos.add(sameFacultyVideos.removeAt(0));
+        sameCounter++;
+      } else if (otherFacultyVideos.isNotEmpty) {
+        reorderedVideos.add(otherFacultyVideos.removeAt(0));
+        sameCounter = 0;
+      }
+    }
+
+    final rebuilt = List<PostModel>.from(posts);
+    for (var i = 0; i < videoIndexes.length && i < reorderedVideos.length; i++) {
+      rebuilt[videoIndexes[i]] = reorderedVideos[i];
+    }
+    return rebuilt;
+  }
+
+  bool _isVideoPost(PostModel post) {
+    if (post.youtubeUrl != null && post.youtubeUrl!.trim().isNotEmpty) {
+      return true;
+    }
+    for (final url in post.mediaUrls) {
+      if (isVideoMediaPath(url)) return true;
+      final lower = url.toLowerCase();
+      if (RegExp(r'\.(mp4|mov|m4v|3gp|webm|mkv)(\?|$)').hasMatch(lower)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  int _countMovedSlots(List<PostModel> original, List<PostModel> adjusted) {
+    if (original.length != adjusted.length) return 0;
+    var moved = 0;
+    for (var i = 0; i < original.length; i++) {
+      if (original[i].id != adjusted[i].id) moved++;
+    }
+    return moved;
+  }
+
+  bool _isExpiredAdvert(PostModel post) {
+    if (post.type != 'advert') return false;
+    final deadline = post.opportunityDeadline;
+    if (deadline == null) return false;
+    return deadline.isBefore(DateTime.now());
   }
 
   Future<void> ratePost({
@@ -753,6 +927,20 @@ class FeedCubit extends Cubit<FeedState> {
           'viewCount': optimistic.viewCount,
         },
       );
+
+      if (original.type == 'advert') {
+        await _activityLogDao.logAction(
+          userId: currentUserId,
+          action: 'view_advert',
+          entityType: DatabaseSchema.tablePosts,
+          entityId: original.id,
+          metadata: {
+            'post_title': original.title,
+            'target_faculty': original.faculty,
+            'deadline': original.opportunityDeadline?.toIso8601String(),
+          },
+        );
+      }
 
       await _syncQueue.enqueue(
         operation: 'create',
@@ -1002,6 +1190,35 @@ class FeedCubit extends Cubit<FeedState> {
   // ── Apply filters ──────────────────────────────────────────────────────────
 
   Future<void> applyFilter(FeedFilter filter) async {
+    final userId = _activeUserId;
+    if (userId != null && userId.isNotEmpty) {
+      final previous = state is FeedLoaded
+          ? (state as FeedLoaded).filter
+          : const FeedFilter();
+      await _activityLogDao.logAction(
+        userId: userId,
+        action: 'feed_filter_applied',
+        entityType: DatabaseSchema.tablePosts,
+        entityId: filter.searchedUserId,
+        metadata: {
+          'from': {
+            'faculty': previous.faculty,
+            'type': previous.type,
+            'groupsOnly': previous.groupsOnly,
+            'followingOnly': previous.followingOnly,
+            'searchedUserId': previous.searchedUserId,
+          },
+          'to': {
+            'faculty': filter.faculty,
+            'type': filter.type,
+            'groupsOnly': filter.groupsOnly,
+            'followingOnly': filter.followingOnly,
+            'searchedUserId': filter.searchedUserId,
+            'searchedUserName': filter.searchedUserName,
+          },
+        },
+      );
+    }
     await loadFeed(filter: filter);
   }
 
@@ -1061,6 +1278,7 @@ class FeedCubit extends Cubit<FeedState> {
       );
 
       // 4. Enqueue for Firestore sync
+      final actionAtIso = DateTime.now().toIso8601String();
       await _syncQueue.enqueue(
         operation: wasLiked ? 'delete' : 'create',
         entity: 'likes',
@@ -1069,6 +1287,7 @@ class FeedCubit extends Cubit<FeedState> {
           'post_id': postId,
           'user_id': currentUserId,
           'is_liking': !wasLiked,
+          'liked_at': actionAtIso,
           'like_count': newCount,
           'author_id': original.authorId,
           'post_title': original.title,
@@ -1077,6 +1296,18 @@ class FeedCubit extends Cubit<FeedState> {
               'Someone',
         },
       );
+      if (!wasLiked && original.isDislikedByMe) {
+        await _syncQueue.enqueue(
+          operation: 'delete',
+          entity: 'dislikes',
+          entityId: '${currentUserId}_$postId',
+          payload: {
+            'post_id': postId,
+            'user_id': currentUserId,
+            'is_disliking': false,
+          },
+        );
+      }
       debugPrint(
         '[FeedCubit] Like queued for post=$postId user=$currentUserId isLiking=${!wasLiked} localCount=$newCount',
       );
@@ -1146,6 +1377,18 @@ class FeedCubit extends Cubit<FeedState> {
           'author_id': original.authorId,
         },
       );
+      if (!wasDisliked && original.isLikedByMe) {
+        await _syncQueue.enqueue(
+          operation: 'delete',
+          entity: 'likes',
+          entityId: '${currentUserId}_$postId',
+          payload: {
+            'post_id': postId,
+            'user_id': currentUserId,
+            'is_liking': false,
+          },
+        );
+      }
       unawaited(_syncService?.processPendingSync());
       final confirmed = current.posts.toList()
         ..[index] = optimistic.copyWith(dislikeCount: newCount);

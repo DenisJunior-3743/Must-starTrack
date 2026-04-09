@@ -532,6 +532,12 @@ class SyncService {
             () => _syncRemoteDislikes(currentUid,
                 candidatePostIds: syncedPostIds));
         await _runHydrationStep(
+          'interaction_counts',
+          () => _refreshRemoteInteractionCounts(
+            candidatePostIds: syncedPostIds,
+          ),
+        );
+        await _runHydrationStep(
             'post_views', () => _syncRemotePostViews(currentUid));
         await _runHydrationStep(
             'collab_requests', () => _syncRemoteCollabRequests(currentUid));
@@ -825,6 +831,21 @@ class SyncService {
         continue;
       }
       try {
+        // Protect a locally-active membership from being downgraded to 'pending'
+        // by a stale remote snapshot (e.g. when processPendingSync and
+        // syncRemoteToLocal race and the accept-invite write hasn't reached
+        // Firestore yet).
+        if (member.status != 'active') {
+          final local = await _groupMemberDao.getMemberById(member.id);
+          if (local != null && local.status == 'active') {
+            debugPrint(
+              '[SyncService] Protecting active membership ${member.id} '
+              'from remote status=${member.status} downgrade',
+            );
+            upsertedMembers++;
+            continue;
+          }
+        }
         await _groupMemberDao.upsertMember(member);
         upsertedMembers++;
       } catch (error, stackTrace) {
@@ -1034,6 +1055,30 @@ class SyncService {
                   }));
         if (member == null) return true;
         await _firestore.setGroupMember(member);
+
+        // Notify the invited user when a new pending invite is written to Firestore
+        // so their device receives a push alert and the invite card appears immediately.
+        if (job.operation == 'create' &&
+            member.status == 'pending' &&
+            member.invitedBy != null &&
+            member.invitedBy!.isNotEmpty &&
+            member.userId != member.invitedBy) {
+          // group_name is not stored in the group_members SQLite column; look it up.
+          final groupName = member.groupName ??
+              (await _groupDao.getGroupById(member.groupId))?.name ??
+              'a group';
+          final inviterName = member.invitedByName ?? 'Someone';
+          await _bestEffortUserNotification(
+            source: 'group_invite',
+            notificationId: 'group_invite_${member.id}',
+            receiverId: member.userId,
+            senderId: member.invitedBy!,
+            senderName: inviterName,
+            type: 'group_invite',
+            body: '$inviterName invited you to join "$groupName"',
+            entityId: member.groupId,
+          );
+        }
         return true;
       case 'delete':
         await _firestore.deleteGroupMember(job.entityId);
@@ -1197,9 +1242,13 @@ class SyncService {
       await _firestore.follow(followerId: followerId, followingId: followingId);
       final followerName = payload['follower_name'] as String? ?? 'Someone';
       if (followingId != followerId) {
+        final followedAtToken = (payload['followed_at'] as String?)
+                ?.replaceAll(RegExp(r'[^0-9A-Za-z]'), '') ??
+            DateTime.now().millisecondsSinceEpoch.toString();
         await _bestEffortUserNotification(
           source: 'follow',
-          notificationId: 'follow_${followerId}_$followingId',
+          notificationId:
+              'follow_${followerId}_${followingId}_$followedAtToken',
           receiverId: followingId,
           senderId: followerId,
           senderName: followerName,
@@ -1338,9 +1387,12 @@ class SyncService {
     if (isLiking && authorId != null && authorId != userId) {
       final actorName = payload['actor_name'] as String? ?? 'Someone';
       final postTitle = payload['post_title'] as String? ?? 'your project';
+      final likedAtToken = (payload['liked_at'] as String?)
+              ?.replaceAll(RegExp(r'[^0-9A-Za-z]'), '') ??
+          DateTime.now().millisecondsSinceEpoch.toString();
       await _bestEffortUserNotification(
         source: 'like',
-        notificationId: 'like_${userId}_$postId',
+        notificationId: 'like_${userId}_${postId}_$likedAtToken',
         receiverId: authorId,
         senderId: userId,
         senderName: actorName,
@@ -2237,6 +2289,63 @@ class SyncService {
     debugPrint(
       '[SyncService] Hydrated like flags for user=$currentUid checkedPosts=${postIds.length} '
       'insertedOrUpdated=$inserted removed=$removed skippedMissingPosts=$skippedMissingPosts',
+    );
+  }
+
+  Future<void> _refreshRemoteInteractionCounts({
+    Iterable<String> candidatePostIds = const [],
+  }) async {
+    final db = await DatabaseHelper.instance.database;
+    final postIds = <String>{...candidatePostIds.where((id) => id.isNotEmpty)};
+
+    if (postIds.isEmpty) {
+      final localRows = await db.query(
+        DatabaseSchema.tablePosts,
+        columns: ['id'],
+        orderBy: 'created_at DESC',
+        limit: 100,
+      );
+      postIds.addAll(localRows
+          .map((row) => row['id'] as String? ?? '')
+          .where((id) => id.isNotEmpty));
+    }
+
+    var refreshed = 0;
+    var failed = 0;
+    for (final postId in postIds) {
+      try {
+        final postRef = FirebaseFirestore.instance.collection('posts').doc(postId);
+        final likesCountSnap = await postRef.collection('likes').count().get();
+        final dislikesCountSnap = await postRef.collection('dislikes').count().get();
+        final commentsCountSnap = await FirebaseFirestore.instance
+            .collection('comments')
+            .where('post_id', isEqualTo: postId)
+            .count()
+            .get();
+
+        await db.update(
+          DatabaseSchema.tablePosts,
+          {
+            'like_count': likesCountSnap.count,
+            'dislike_count': dislikesCountSnap.count,
+            'comment_count': commentsCountSnap.count,
+            'updated_at': DateTime.now().toIso8601String(),
+          },
+          where: 'id = ?',
+          whereArgs: [postId],
+        );
+        refreshed++;
+      } catch (error) {
+        failed++;
+        debugPrint(
+          '[SyncService] Failed refreshing interaction counts for post=$postId: $error',
+        );
+      }
+    }
+
+    debugPrint(
+      '[SyncService] Refreshed interaction counts checked=${postIds.length} '
+      'updated=$refreshed failed=$failed',
     );
   }
 

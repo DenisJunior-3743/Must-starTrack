@@ -83,6 +83,19 @@ class FcmService {
     // Request permissions
     await _requestPermission();
 
+    // Ensure foreground delivery behavior is explicit on Apple platforms.
+    await _messaging.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    // Warm up token generation early so login can persist it immediately.
+    final startupToken = await _messaging.getToken();
+    if (startupToken != null && startupToken.isNotEmpty) {
+      debugPrint('[FCM] token ready');
+    }
+
     // Subscribe to foreground messages
     FirebaseMessaging.onMessage.listen(
       (msg) => unawaited(_handleForegroundMessage(msg)));
