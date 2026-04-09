@@ -29,6 +29,9 @@
 
 import 'dart:async';
 
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -55,6 +58,9 @@ class FcmService {
   final FlutterLocalNotificationsPlugin _localNotif;
   final NotificationPreferencesService _preferences;
 
+    // Stored so local-notification taps can navigate without a BuildContext.
+    GoRouter? _router;
+
   // Android notification channel (must match AndroidManifest.xml)
   static const _channelId = 'startrack_main';
   static const _channelName = 'StarTrack Notifications';
@@ -74,6 +80,8 @@ class FcmService {
 
   /// Call once in main() after Firebase.initializeApp().
   Future<void> init(BuildContext context, GoRouter router) async {
+      _router = router;
+
     // Register background handler (must be top-level function)
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
@@ -139,21 +147,38 @@ class FcmService {
     await _localNotif.initialize(
       const InitializationSettings(
           android: androidSettings, iOS: iosSettings),
-    );
+        // Wire up tap-to-navigate for local notifications shown while
+        // the app is open or in the background.
+        onDidReceiveNotificationResponse: _onLocalNotifTap,
+      );
 
-    // Create high-importance channel for Android
-    await _localNotif
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(
-          const AndroidNotificationChannel(
-            _channelId,
-            _channelName,
-            description: _channelDesc,
-            importance: Importance.high,
-          ),
-        );
-  }
+      final androidPlugin = _localNotif
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+
+      // Channel for FCM foreground messages.
+      await androidPlugin?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          _channelId,
+          _channelName,
+          description: _channelDesc,
+          importance: Importance.high,
+        ),
+      );
+
+      // Channel used by SyncService for realtime activity alerts.
+      // Must be created here so it exists before SyncService.startListening()
+      // triggers its first notification show() call.
+      await androidPlugin?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          'must_startrack_events',
+          'Activity Alerts',
+          description:
+              'Alerts for follows, comments, views, likes, and collaborations.',
+          importance: Importance.max,
+        ),
+      );
+    }
 
   // ── Get and save device token ─────────────────────────────────────────────
 
@@ -240,7 +265,11 @@ class FcmService {
           presentSound: true,
         ),
       ),
-    );
+      payload: jsonEncode({
+        'type': type,
+        'entity_id': message.data['entity_id'],
+      }),
+      );
   }
 
   // ── Route from notification tap ───────────────────────────────────────────
@@ -249,7 +278,31 @@ class FcmService {
     final data = message.data;
     final type = data['type'] as String?;
     final entityId = data['entity_id'] as String?;
+    _routeToScreen(type: type, entityId: entityId, router: router);
+  }
 
+  // ── Local notification tap ────────────────────────────────────────────────
+
+  void _onLocalNotifTap(NotificationResponse response) {
+    final router = _router;
+    if (router == null) return;
+    final raw = response.payload;
+    if (raw == null || raw.isEmpty) return;
+    try {
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      _routeToScreen(
+        type: data['type'] as String?,
+        entityId: data['entity_id'] as String?,
+        router: router,
+      );
+    } catch (_) {}
+  }
+
+  void _routeToScreen({
+    required String? type,
+    required String? entityId,
+    required GoRouter router,
+  }) {
     switch (type) {
       case 'message':
         if (entityId != null) {
@@ -279,7 +332,7 @@ class FcmService {
   String _platform() {
     // Returns platform identifier for token doc
     try {
-      return 'android'; // Platform.isIOS ? 'ios' : 'android'
+      return Platform.isIOS ? 'ios' : 'android';
     } catch (_) {
       return 'unknown';
     }

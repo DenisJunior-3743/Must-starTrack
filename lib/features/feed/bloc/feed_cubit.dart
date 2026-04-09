@@ -195,6 +195,7 @@ class FeedCubit extends Cubit<FeedState> {
   final AuthCubit? _authCubit;
   StreamSubscription<AuthState>? _authSub;
   String? _lastObservedAuthUserId;
+  DateTime? _lastSuccessfulLoadAt;
   static const _pageSize = 40;
   static const _targetAuthorGroups = 12;
   static const _maxPrefetchPages = 6;
@@ -269,6 +270,30 @@ class FeedCubit extends Cubit<FeedState> {
 
   // ── Load first page ────────────────────────────────────────────────────────
 
+  Future<void> ensureLoaded({Duration staleAfter = const Duration(minutes: 2)}) async {
+    _ensureAuthListener();
+
+    final current = state;
+    if (current is FeedInitial || current is FeedError) {
+      await loadFeed();
+      return;
+    }
+
+    if (current is! FeedLoaded) return;
+
+    final loadedAt = _lastSuccessfulLoadAt;
+    if (loadedAt == null) {
+      _lastSuccessfulLoadAt = DateTime.now();
+      unawaited(_syncFeedInBackground(filter: current.filter));
+      return;
+    }
+
+    final age = DateTime.now().difference(loadedAt);
+    if (age >= staleAfter) {
+      unawaited(_syncFeedInBackground(filter: current.filter));
+    }
+  }
+
   Future<void> loadFeed({
     FeedFilter? filter,
     bool forceSync = false,
@@ -315,6 +340,7 @@ class FeedCubit extends Cubit<FeedState> {
         hasMore: batch.hasMore,
         filter: f,
       ));
+      _lastSuccessfulLoadAt = DateTime.now();
 
       if (!shouldForceSync) {
         unawaited(_syncFeedInBackground(filter: f));
@@ -348,6 +374,7 @@ class FeedCubit extends Cubit<FeedState> {
           posts: refreshedBatch.posts,
           hasMore: refreshedBatch.hasMore,
         ));
+        _lastSuccessfulLoadAt = DateTime.now();
       }
     } catch (e) {
       debugPrint('[FeedCubit] background sync failed: $e');

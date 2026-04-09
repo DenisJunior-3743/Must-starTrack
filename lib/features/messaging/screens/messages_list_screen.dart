@@ -49,7 +49,11 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<MessageCubit>().loadConversations();
+      if (mounted) {
+        context.read<MessageCubit>().ensureConversationsLoaded(
+          staleAfter: const Duration(minutes: 2),
+        );
+      }
     });
   }
 

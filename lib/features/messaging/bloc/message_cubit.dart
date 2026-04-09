@@ -144,6 +144,7 @@ class MessageCubit extends Cubit<MessageState> {
   final FirestoreService _firestore;
   final RecommenderService _recommenderService;
   StreamSubscription<List<MessageModel>>? _threadSub;
+  DateTime? _lastConversationsLoadedAt;
 
   String? get currentUserId => _authCubit.currentUser?.id;
   String? get _currentUserId => _authCubit.currentUser?.id;
@@ -173,6 +174,31 @@ class MessageCubit extends Cubit<MessageState> {
   void _emitIfOpen(MessageState next) {
     if (!isClosed) {
       emit(next);
+    }
+  }
+
+  Future<void> ensureConversationsLoaded({
+    Duration staleAfter = const Duration(minutes: 2),
+  }) async {
+    final current = state;
+
+    if (current is MessageInitial || current is MessageError) {
+      await loadConversations();
+      return;
+    }
+
+    if (current is! ConversationsLoaded) return;
+
+    final loadedAt = _lastConversationsLoadedAt;
+    if (loadedAt == null) {
+      _lastConversationsLoadedAt = DateTime.now();
+      unawaited(_refreshConversationsInBackground());
+      return;
+    }
+
+    final age = DateTime.now().difference(loadedAt);
+    if (age >= staleAfter) {
+      unawaited(_refreshConversationsInBackground());
     }
   }
 
@@ -207,8 +233,42 @@ class MessageCubit extends Cubit<MessageState> {
         requests: rankedRequests,
         hasMore: convos.length == _pageSize,
       ));
+      _lastConversationsLoadedAt = DateTime.now();
     } catch (e) {
       _emitIfOpen(MessageError('Failed to load conversations: $e'));
+    }
+  }
+
+  Future<void> _refreshConversationsInBackground() async {
+    final uid = _currentUserId;
+    if (uid == null || uid.isEmpty) return;
+
+    try {
+      await _syncService.syncRemoteToLocal();
+      final convos = await _messageDao.getConversations(
+        userId: uid,
+        pageSize: _pageSize,
+      );
+      final requests = await _messageDao.getCollaborationRequests(
+        userId: uid,
+        limit: _pageSize,
+      );
+      final rankedRequests = await _attachRequestRanking(
+        viewerId: uid,
+        requests: requests,
+      );
+
+      final latest = state;
+      if (latest is ConversationsLoaded) {
+        _emitIfOpen(ConversationsLoaded(
+          conversations: convos,
+          requests: rankedRequests,
+          hasMore: convos.length == _pageSize,
+        ));
+        _lastConversationsLoadedAt = DateTime.now();
+      }
+    } catch (_) {
+      // Keep existing inbox view when silent refresh fails.
     }
   }
 

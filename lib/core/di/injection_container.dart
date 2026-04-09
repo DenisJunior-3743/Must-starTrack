@@ -110,9 +110,42 @@ class InjectionContainer {
     );
 
     // Local notifications plugin (used by FcmService foreground handler)
-    sl.registerSingleton<FlutterLocalNotificationsPlugin>(
-      FlutterLocalNotificationsPlugin(),
+    // Initialise the plugin here — before SyncService.startListening() — so
+    // both Android channels exist the moment the notification watcher fires.
+    // FcmService.init() will re-initialise with the tap callback once the
+    // router is available (addPostFrameCallback in app.dart).
+    final localNotifPlugin = FlutterLocalNotificationsPlugin();
+    await localNotifPlugin.initialize(
+      const InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        iOS: DarwinInitializationSettings(
+          requestAlertPermission: false,
+          requestBadgePermission: false,
+          requestSoundPermission: false,
+        ),
+      ),
     );
+    final androidNotifPlugin = localNotifPlugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    await androidNotifPlugin?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        'startrack_main',
+        'StarTrack Notifications',
+        description: 'Collaboration requests, messages, and updates',
+        importance: Importance.high,
+      ),
+    );
+    await androidNotifPlugin?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        'must_startrack_events',
+        'Activity Alerts',
+        description:
+            'Alerts for follows, comments, views, likes, and collaborations.',
+        importance: Importance.max,
+      ),
+    );
+    sl.registerSingleton<FlutterLocalNotificationsPlugin>(localNotifPlugin);
 
     // ── 2. Firebase instances ───────────────────────────────────────────────
 

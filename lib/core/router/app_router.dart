@@ -111,6 +111,29 @@ import '../../data/models/post_model.dart';
 class AppRouter {
   AppRouter._();
 
+  static FeedCubit? _homeFeedCubit;
+  static MessageCubit? _inboxMessageCubit;
+
+  static FeedCubit _resolveHomeFeedCubit() {
+    final cubit = _homeFeedCubit;
+    if (cubit != null && !cubit.isClosed) {
+      return cubit;
+    }
+    final freshCubit = sl<FeedCubit>();
+    _homeFeedCubit = freshCubit;
+    return freshCubit;
+  }
+
+  static MessageCubit _resolveInboxMessageCubit() {
+    final cubit = _inboxMessageCubit;
+    if (cubit != null && !cubit.isClosed) {
+      return cubit;
+    }
+    final freshCubit = sl<MessageCubit>();
+    _inboxMessageCubit = freshCubit;
+    return freshCubit;
+  }
+
   /// Builds the GoRouter. Call once in app.dart.
   static GoRouter router({required RouteGuards guards}) {
     // refreshListenable wraps the AuthCubit stream so GoRouter
@@ -293,10 +316,16 @@ class AppRouter {
             // Home feed
             GoRoute(
               path: Routes.home,
-              builder: (_, __) => BlocProvider(
-                create: (_) => sl<FeedCubit>()..loadFeed(),
+              builder: (_, __) {
+                final homeFeedCubit = _resolveHomeFeedCubit();
+                homeFeedCubit.ensureLoaded(
+                  staleAfter: const Duration(minutes: 2),
+                );
+                return BlocProvider.value(
+                  value: homeFeedCubit,
                 child: const HomeFeedScreen(),
-              ),
+                );
+              },
             ),
             // Discover
             GoRoute(
@@ -311,10 +340,16 @@ class AppRouter {
             // Inbox (messages list)
             GoRoute(
               path: Routes.inbox,
-              builder: (_, __) => BlocProvider(
-                create: (_) => sl<MessageCubit>()..loadConversations(),
-                child: const MessagesListScreen(),
-              ),
+              builder: (_, __) {
+                final inboxCubit = _resolveInboxMessageCubit();
+                inboxCubit.ensureConversationsLoaded(
+                  staleAfter: const Duration(minutes: 2),
+                );
+                return BlocProvider.value(
+                  value: inboxCubit,
+                  child: const MessagesListScreen(),
+                );
+              },
             ),
             // Notifications (mapped to /projects slot as 5th tab)
             GoRoute(

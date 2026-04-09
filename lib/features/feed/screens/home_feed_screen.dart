@@ -856,8 +856,12 @@ class _VideoPage extends StatefulWidget {
 
 class _VideoPageState extends State<_VideoPage>
     with RouteAware, WidgetsBindingObserver {
+  static const Duration _candidateInitTimeout = Duration(seconds: 8);
+  static const Duration _inactiveDisposeDelay = Duration(seconds: 12);
+
   VideoPlayerController? _ctrl;
   ModalRoute<dynamic>? _modalRoute;
+  Timer? _disposeTimer;
   bool _ready = false;
   bool _error = false;
   bool _isMuted = false;
@@ -880,6 +884,7 @@ class _VideoPageState extends State<_VideoPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     if (widget.isActive) {
+      _cancelDeferredDispose();
       _initController();
     }
   }
@@ -903,6 +908,7 @@ class _VideoPageState extends State<_VideoPage>
     super.didUpdateWidget(old);
 
     if (widget.post.id != old.post.id) {
+      _cancelDeferredDispose();
       _ctrl?.dispose();
       _ctrl = null;
       _ready = false;
@@ -918,16 +924,14 @@ class _VideoPageState extends State<_VideoPage>
     // allocation failures on low-end devices when multiple players coexist.
     if (widget.isActive != old.isActive) {
       if (widget.isActive) {
+        _cancelDeferredDispose();
         if (_ctrl == null && !_ready && !_error) {
           _initController();
         } else {
           _syncPlayback();
         }
       } else {
-        _ctrl?.dispose();
-        _ctrl = null;
-        _ready = false;
-        _downloadProgress = null;
+        _scheduleDeferredDispose();
       }
       return;
     }
@@ -994,6 +998,7 @@ class _VideoPageState extends State<_VideoPage>
   }
 
   Future<void> _initController() async {
+    _cancelDeferredDispose();
     final rawUrl = _videoUrl;
     if (rawUrl == null) {
       if (mounted) setState(() => _error = true);
@@ -1028,7 +1033,7 @@ class _VideoPageState extends State<_VideoPage>
           }
         }
 
-        await ctrl.initialize();
+        await ctrl.initialize().timeout(_candidateInitTimeout);
         if (!mounted) {
           await ctrl.dispose();
           return;
@@ -1055,6 +1060,22 @@ class _VideoPageState extends State<_VideoPage>
 
     debugPrint('[VideoPage] all playback sources failed: $lastError');
     if (mounted) setState(() => _error = true);
+  }
+
+  void _scheduleDeferredDispose() {
+    _disposeTimer?.cancel();
+    _disposeTimer = Timer(_inactiveDisposeDelay, () {
+      if (!mounted) return;
+      _ctrl?.dispose();
+      _ctrl = null;
+      _ready = false;
+      _downloadProgress = null;
+    });
+  }
+
+  void _cancelDeferredDispose() {
+    _disposeTimer?.cancel();
+    _disposeTimer = null;
   }
 
   /// Downloads [url] to the local cache in the background while playback
@@ -1165,6 +1186,7 @@ class _VideoPageState extends State<_VideoPage>
 
   @override
   void dispose() {
+    _cancelDeferredDispose();
     WidgetsBinding.instance.removeObserver(this);
     if (_modalRoute is PageRoute<dynamic>) {
       appRouteObserver.unsubscribe(this);
