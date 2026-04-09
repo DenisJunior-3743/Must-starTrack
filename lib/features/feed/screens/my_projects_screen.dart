@@ -18,6 +18,7 @@ import '../../../data/models/post_model.dart';
 import '../../../data/remote/sync_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
 import '../../shared/screens/offline_video_player_screen.dart';
+import '../../shared/widgets/guest_auth_required_view.dart';
 
 enum _MyProjectsFilter { all, active, opportunities, applied, archived }
 
@@ -250,7 +251,26 @@ class _MyProjectsScreenState extends State<MyProjectsScreen> {
   @override
   Widget build(BuildContext context) {
     final guards = sl<RouteGuards>();
+    final isGuest = sl<AuthCubit>().currentUser == null;
     final posts = _visiblePosts;
+
+    if (isGuest) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(
+            'My Projects',
+            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+          ),
+        ),
+        body: const GuestAuthRequiredView(
+          icon: Icons.lock_outline_rounded,
+          title: 'Sign in to access My Projects',
+          subtitle:
+              'You need an account to manage your project posts, applications, and archived work.',
+          fromRoute: RouteNames.projects,
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(

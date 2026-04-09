@@ -39,12 +39,14 @@ import '../../../core/utils/media_path_utils.dart';
 import '../../../core/utils/video_cache_utils.dart';
 import '../../../data/local/dao/activity_log_dao.dart';
 import '../../../data/local/dao/comment_dao.dart';
+import '../../../data/local/dao/faculty_dao.dart';
 import '../../../data/local/dao/message_dao.dart';
 import '../../../data/local/dao/sync_queue_dao.dart';
 import '../../../data/local/dao/user_dao.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/models/user_model.dart';
 import '../../../data/remote/recommender_service.dart';
+import '../../../data/remote/sync_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
 import '../../notifications/bloc/notification_cubit.dart';
 import '../../shared/widgets/settings_drawer.dart';
@@ -237,10 +239,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
 
   void _onTabChanged() {
     if (!mounted || _tabCtrl.indexIsChanging || _immersiveMode) return;
-    final shouldCollapse = _tabCtrl.index == 0;
-    if (_controlsCollapsed != shouldCollapse) {
-      setState(() => _controlsCollapsed = shouldCollapse);
-    }
+    setState(() => _controlsCollapsed = _tabCtrl.index == 0);
   }
 
   @override
@@ -371,27 +370,84 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                       final showcasePosts = rawShowcasePosts;
 
                       if (contentPool.isEmpty) {
-                        return RefreshIndicator(
-                          color: AppColors.primary,
-                          onRefresh: cubit.refresh,
-                          child: ListView(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            children: [
-                              SizedBox(height: MediaQuery.of(context).size.height * 0.35),
-                              _EmptyFeed(
-                                isGuest: isGuest,
-                                groupsOnly: state.filter.groupsOnly,
+                        return Stack(
+                          children: [
+                            RefreshIndicator(
+                              color: AppColors.primary,
+                              onRefresh: cubit.refresh,
+                              child: ListView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                children: [
+                                  SizedBox(height: MediaQuery.of(context).size.height * 0.28),
+                                  if (state.filter.isActive) ...[
+                                    Center(
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(Icons.search_off_rounded,
+                                                size: 56, color: AppColors.primary),
+                                            const SizedBox(height: 14),
+                                            Text(
+                                              state.filter.searchedUserName != null
+                                                  ? 'No posts from "${state.filter.searchedUserName}"'
+                                                  : state.filter.followingOnly
+                                                      ? 'No posts from people you follow'
+                                                      : state.filter.faculty != null
+                                                          ? 'No posts in "${state.filter.faculty}"'
+                                                          : 'No posts match your filters',
+                                              style: GoogleFonts.plusJakartaSans(
+                                                  fontSize: 16, fontWeight: FontWeight.w700),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              'Try a different filter or clear to see all posts.',
+                                              style: GoogleFonts.plusJakartaSans(
+                                                  fontSize: 13,
+                                                  color: AppColors.textSecondaryLight),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                            const SizedBox(height: 20),
+                                            FilledButton.icon(
+                                              onPressed: cubit.clearFilters,
+                                              icon: const Icon(Icons.clear_all_rounded, size: 18),
+                                              label: const Text('Clear filters'),
+                                              style: FilledButton.styleFrom(
+                                                backgroundColor: AppColors.primary,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ] else
+                                    _EmptyFeed(
+                                      isGuest: isGuest,
+                                      groupsOnly: state.filter.groupsOnly,
+                                    ),
+                                ],
                               ),
-                            ],
-                          ),
+                            ),
+                            Positioned(
+                              top: _immersiveMode
+                                  ? MediaQuery.of(context).padding.top + 4
+                                  : 4,
+                              left: 8,
+                              right: 8,
+                              child: _FilterChips(
+                                cubit: cubit,
+                                currentTabIndex: _tabCtrl.index,
+                              ),
+                            ),
+                          ],
                         );
                       }
 
-                      return Column(
+                      return Stack(
                         children: [
-                          _FilterChips(cubit: cubit),
-                          Expanded(
-                            child: RefreshIndicator(
+                          RefreshIndicator(
                               color: AppColors.primary,
                               onRefresh: cubit.refresh,
                               child: TabBarView(
@@ -429,6 +485,16 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                                   ),
                                 ],
                               ),
+                            ),
+                          Positioned(
+                            top: _immersiveMode
+                                ? MediaQuery.of(context).padding.top + 4
+                                : 4,
+                            left: 8,
+                            right: 8,
+                            child: _FilterChips(
+                              cubit: cubit,
+                              currentTabIndex: _tabCtrl.index,
                             ),
                           ),
                         ],
@@ -1606,7 +1672,10 @@ class _PhotoFeedTabState extends State<_PhotoFeedTab> {
   }
 
   Widget _buildGrid(List<PostModel> posts) {
-    final children = <Widget>[_buildToolbar()];
+    final children = <Widget>[
+      const SizedBox(height: 92),
+      _buildToolbar(),
+    ];
 
     children.add(
       _FeaturedPhotoCard(post: posts.first, cubit: widget.cubit, isGuest: widget.isGuest),
@@ -1650,7 +1719,10 @@ class _PhotoFeedTabState extends State<_PhotoFeedTab> {
     }
 
     final renderedRailAuthors = <String>{};
-    final sections = <Widget>[_buildToolbar()];
+    final sections = <Widget>[
+      const SizedBox(height: 92),
+      _buildToolbar(),
+    ];
 
     for (final post in posts) {
       final authorPosts = grouped[post.authorId] ?? const <PostModel>[];
@@ -2328,7 +2400,7 @@ class _ShowcaseFeedTab extends StatelessWidget {
         physics: const BouncingScrollPhysics(
           parent: AlwaysScrollableScrollPhysics(),
         ),
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+        padding: const EdgeInsets.fromLTRB(12, 98, 12, 24),
         itemCount: itemCount,
         itemBuilder: (ctx, i) {
           if (i == ctaAt) {
@@ -3687,10 +3759,20 @@ class _CommentSheetState extends State<_CommentSheet> {
   final _commentCtrl = TextEditingController();
   bool _submitting = false;
 
+  Future<List<CommentRecord>> _loadComments({
+    bool syncRemote = true,
+  }) async {
+    if (syncRemote) {
+      await sl<SyncService>().syncCommentsForPost(widget.post.id);
+      await widget.cubit.refreshPostFromLocal(widget.post.id);
+    }
+    return sl<CommentDao>().getCommentsForPost(widget.post.id);
+  }
+
   @override
   void initState() {
     super.initState();
-    _commentsFuture = sl<CommentDao>().getCommentsForPost(widget.post.id);
+    _commentsFuture = _loadComments(syncRemote: true);
   }
 
   @override
@@ -3819,8 +3901,7 @@ class _CommentSheetState extends State<_CommentSheet> {
         );
         // Refresh comments
         setState(() {
-          _commentsFuture =
-              sl<CommentDao>().getCommentsForPost(widget.post.id);
+          _commentsFuture = _loadComments(syncRemote: false);
         });
       }
     } catch (e) {
@@ -3901,12 +3982,27 @@ class _CommentSheetState extends State<_CommentSheet> {
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 24),
                       child: Center(
-                        child: Text(
-                          'No comments yet. Be the first!',
-                          style: GoogleFonts.plusJakartaSans(
-                            color: AppColors.textSecondaryLight,
-                            fontSize: 13,
-                          ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'No comments yet. Be the first!',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: AppColors.textSecondaryLight,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _commentsFuture = _loadComments(syncRemote: true);
+                                });
+                              },
+                              icon: const Icon(Icons.refresh_rounded, size: 16),
+                              label: const Text('Refresh comments'),
+                            ),
+                          ],
                         ),
                       ),
                     );
@@ -4676,9 +4772,39 @@ class _StaticFeedHeaderState extends State<_StaticFeedHeader>
 
 enum _FeedTopFilterMode { faculty, following, search }
 
-class _FilterChips extends StatelessWidget {
+class _FilterChips extends StatefulWidget {
   final FeedCubit cubit;
-  const _FilterChips({required this.cubit});
+  final int currentTabIndex;
+  const _FilterChips({required this.cubit, this.currentTabIndex = 0});
+
+  @override
+  State<_FilterChips> createState() => _FilterChipsState();
+}
+
+class _FilterChipsState extends State<_FilterChips> {
+  List<String> _dbFaculties = const <String>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFacultiesFromDatabase();
+  }
+
+  Future<void> _loadFacultiesFromDatabase() async {
+    try {
+      final faculties = await sl<FacultyDao>().getAllFaculties(activeOnly: true);
+      final names = faculties
+          .map((f) => f.name.trim())
+          .where((name) => name.isNotEmpty)
+          .toSet()
+          .toList()
+        ..sort();
+      if (!mounted) return;
+      setState(() => _dbFaculties = names);
+    } catch (e) {
+      debugPrint('[FilterChips] failed to load faculties from DB: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -4687,7 +4813,7 @@ class _FilterChips extends StatelessWidget {
         final current =
             state is FeedLoaded ? state.filter : const FeedFilter();
         final feedPosts = state is FeedLoaded ? state.posts : const <PostModel>[];
-        final faculties = <String>{
+        final fallbackFaculties = <String>{
           ...feedPosts
               .map((post) => post.faculty?.trim() ?? '')
               .where((faculty) => faculty.isNotEmpty),
@@ -4697,6 +4823,7 @@ class _FilterChips extends StatelessWidget {
               .where((faculty) => faculty.isNotEmpty),
         }.toList()
           ..sort();
+              final faculties = _dbFaculties.isNotEmpty ? _dbFaculties : fallbackFaculties;
 
         final topMode = current.followingOnly
             ? _FeedTopFilterMode.following
@@ -4704,43 +4831,75 @@ class _FilterChips extends StatelessWidget {
                 ? _FeedTopFilterMode.search
                 : _FeedTopFilterMode.faculty);
 
+        // Video tab (0) = dark background → white text; others = light → dark text
+        final onDark = widget.currentTabIndex == 0;
+        final activeColor = onDark ? Colors.white : Colors.black87;
+        final inactiveColor = onDark ? Colors.white70 : Colors.black54;
+        final textShadows = onDark
+            ? const <Shadow>[
+                Shadow(color: Colors.black54, blurRadius: 6),
+                Shadow(color: Colors.black26, blurRadius: 12),
+              ]
+            : const <Shadow>[
+                Shadow(color: Colors.white70, blurRadius: 4),
+              ];
+
         return Column(
           children: [
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            // ── TikTok-style top row: bare text labels + search icon ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 8, 0),
               child: Row(
                 children: [
-                  _TopModeChip(
-                    label: 'Faculty',
-                    active: topMode == _FeedTopFilterMode.faculty,
-                    onTap: () => cubit.applyFilter(
-                      current.copyWith(
-                        clearFollowingOnly: true,
-                        clearSearchedUser: true,
-                      ),
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _TopModeChip(
+                          label: 'Faculty',
+                          active: topMode == _FeedTopFilterMode.faculty,
+                          onTap: () {
+                            if (_dbFaculties.isEmpty) {
+                              unawaited(_loadFacultiesFromDatabase());
+                            }
+                            widget.cubit.applyFilter(
+                              current.copyWith(
+                                clearFollowingOnly: true,
+                                clearSearchedUser: true,
+                              ),
+                            );
+                          },
+                          compact: true,
+                          activeColor: activeColor,
+                          inactiveColor: inactiveColor,
+                          shadows: textShadows,
+                        ),
+                        const SizedBox(width: 22),
+                        _TopModeChip(
+                          label: 'Following',
+                          active: topMode == _FeedTopFilterMode.following,
+                          onTap: () => widget.cubit.applyFilter(
+                            current.copyWith(
+                              followingOnly: true,
+                              clearFaculty: true,
+                              clearSearchedUser: true,
+                              groupsOnly: false,
+                            ),
+                          ),
+                          compact: true,
+                          activeColor: activeColor,
+                          inactiveColor: inactiveColor,
+                          shadows: textShadows,
+                        ),
+                      ],
                     ),
                   ),
-                  _TopModeChip(
-                    label: 'Following',
-                    active: topMode == _FeedTopFilterMode.following,
-                    onTap: () => cubit.applyFilter(
-                      current.copyWith(
-                        followingOnly: true,
-                        clearFaculty: true,
-                        clearSearchedUser: true,
-                        groupsOnly: false,
-                      ),
-                    ),
-                  ),
-                  _TopModeChip(
-                    label: 'Search',
-                    active: topMode == _FeedTopFilterMode.search,
+                  GestureDetector(
                     onTap: () async {
                       final selected = await _showFeedUserSearchSheet(context);
                       if (selected == null) return;
                       if (!context.mounted) return;
-                      await cubit.applyFilter(
+                      await widget.cubit.applyFilter(
                         current.copyWith(
                           searchedUserId: selected.id,
                           searchedUserName: selected.name,
@@ -4750,19 +4909,31 @@ class _FilterChips extends StatelessWidget {
                         ),
                       );
                     },
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Icon(
+                        Icons.search_rounded,
+                        size: 24,
+                        color: topMode == _FeedTopFilterMode.search
+                            ? activeColor
+                            : inactiveColor,
+                        shadows: textShadows,
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
               child: Row(
                 children: [
                   _Chip(
                     label: 'All',
                     active: current.type == null && !current.groupsOnly,
-                    onTap: () => cubit.applyFilter(
+                    onDark: onDark,
+                    onTap: () => widget.cubit.applyFilter(
                       current.copyWith(
                         clearType: true,
                         clearGroupsOnly: true,
@@ -4772,28 +4943,32 @@ class _FilterChips extends StatelessWidget {
                   _Chip(
                     label: 'Projects',
                     active: current.type == 'project' && !current.groupsOnly,
-                    onTap: () => cubit.applyFilter(
+                    onDark: onDark,
+                    onTap: () => widget.cubit.applyFilter(
                       current.copyWith(type: 'project', groupsOnly: false),
                     ),
                   ),
                   _Chip(
                     label: 'Opportunities',
                     active: current.type == 'opportunity' && !current.groupsOnly,
-                    onTap: () => cubit.applyFilter(
+                    onDark: onDark,
+                    onTap: () => widget.cubit.applyFilter(
                       current.copyWith(type: 'opportunity', groupsOnly: false),
                     ),
                   ),
                   _Chip(
                     label: 'Adverts',
                     active: current.type == 'advert' && !current.groupsOnly,
-                    onTap: () => cubit.applyFilter(
+                    onDark: onDark,
+                    onTap: () => widget.cubit.applyFilter(
                       current.copyWith(type: 'advert', groupsOnly: false),
                     ),
                   ),
                   _Chip(
                     label: 'Groups',
                     active: current.groupsOnly,
-                    onTap: () => cubit.applyFilter(
+                    onDark: onDark,
+                    onTap: () => widget.cubit.applyFilter(
                       current.copyWith(
                         type: 'project',
                         groupsOnly: true,
@@ -4806,11 +4981,12 @@ class _FilterChips extends StatelessWidget {
                           ? 'Pick User'
                           : 'User: ${current.searchedUserName}',
                       active: current.searchedUserId != null,
+                      onDark: onDark,
                       onTap: () async {
                         final selected = await _showFeedUserSearchSheet(context);
                         if (selected == null) return;
                         if (!context.mounted) return;
-                        await cubit.applyFilter(
+                        await widget.cubit.applyFilter(
                           current.copyWith(
                             searchedUserId: selected.id,
                             searchedUserName: selected.name,
@@ -4825,12 +5001,13 @@ class _FilterChips extends StatelessWidget {
                     _FacultyDropdown(
                       faculties: faculties,
                       selected: current.faculty,
-                      onSelected: (faculty) => cubit.applyFilter(
+                      onDark: onDark,
+                      onSelected: (faculty) => widget.cubit.applyFilter(
                         faculty == null || faculty.isEmpty
                             ? current.copyWith(clearFaculty: true)
                             : current.copyWith(
                                 faculty: faculty,
-                                type: 'project',
+                                clearType: true,
                                 groupsOnly: false,
                                 clearFollowingOnly: true,
                                 clearSearchedUser: true,
@@ -4839,17 +5016,34 @@ class _FilterChips extends StatelessWidget {
                     ),
                   if (current.isActive)
                     Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: ActionChip(
-                        label: const Text('Clear'),
-                        avatar: const Icon(Icons.close, size: 14),
-                        onPressed: cubit.clearFilters,
-                        backgroundColor:
-                            AppColors.danger.withValues(alpha: 0.10),
-                        labelStyle: GoogleFonts.plusJakartaSans(
-                            fontSize: 12,
-                            color: AppColors.danger,
-                            fontWeight: FontWeight.w600),
+                      padding: const EdgeInsets.only(left: 6),
+                      child: GestureDetector(
+                        onTap: widget.cubit.clearFilters,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent.withValues(alpha: 0.25),
+                            borderRadius: BorderRadius.circular(
+                                AppDimensions.radiusFull),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.close, size: 12,
+                                  color: Colors.redAccent),
+                              const SizedBox(width: 3),
+                              Text(
+                                'Clear',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 11,
+                                  color: Colors.redAccent,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                 ],
@@ -4866,11 +5060,13 @@ class _FacultyDropdown extends StatelessWidget {
   final List<String> faculties;
   final String? selected;
   final ValueChanged<String?> onSelected;
+  final bool onDark;
 
   const _FacultyDropdown({
     required this.faculties,
     required this.selected,
     required this.onSelected,
+    this.onDark = true,
   });
 
   @override
@@ -4881,22 +5077,31 @@ class _FacultyDropdown extends StatelessWidget {
         ? selected
         : null;
 
+    final bgColor = onDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.05);
+    final textColor = onDark ? Colors.white : Colors.black87;
+    final hintColor = onDark ? Colors.white60 : Colors.black45;
+    final dropBg = onDark ? const Color(0xFF1A1A2E) : Colors.white;
+    final iconColor = onDark ? Colors.white70 : Colors.black54;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        color: bgColor,
         borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
-        border: Border.all(color: AppColors.borderLight),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: selectedValue,
           isDense: true,
+          dropdownColor: dropBg,
+          iconEnabledColor: iconColor,
           hint: Text(
-            'Select faculty',
+            'Faculty',
             style: GoogleFonts.plusJakartaSans(
-              fontSize: 13,
-              color: AppColors.textSecondaryLight,
+              fontSize: 12,
+              color: hintColor,
             ),
           ),
           items: options
@@ -4907,8 +5112,9 @@ class _FacultyDropdown extends StatelessWidget {
                     faculty,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
+                      color: textColor,
                     ),
                   ),
                 ),
@@ -4925,15 +5131,64 @@ class _TopModeChip extends StatelessWidget {
   final String label;
   final bool active;
   final VoidCallback onTap;
+  final bool compact;
+  final Color? activeColor;
+  final Color? inactiveColor;
+  final List<Shadow>? shadows;
 
   const _TopModeChip({
     required this.label,
     required this.active,
     required this.onTap,
+    this.compact = false,
+    this.activeColor,
+    this.inactiveColor,
+    this.shadows,
   });
 
   @override
   Widget build(BuildContext context) {
+    final aColor = activeColor ?? Colors.white;
+    final iColor = inactiveColor ?? Colors.white70;
+
+    if (compact) {
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 15,
+                  fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                  color: active ? aColor : iColor,
+                  shadows: shadows,
+                ),
+              ),
+              const SizedBox(height: 3),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                width: active ? 26 : 0,
+                height: 2,
+                decoration: BoxDecoration(
+                  color: aColor,
+                  borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+                  boxShadow: shadows != null
+                      ? [BoxShadow(color: shadows!.first.color, blurRadius: 4)]
+                      : null,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: ChoiceChip(
@@ -5126,34 +5381,45 @@ class _Chip extends StatelessWidget {
   final String label;
   final bool active;
   final VoidCallback onTap;
+  final bool onDark;
 
-  const _Chip(
-      {required this.label, required this.active, required this.onTap});
+  const _Chip({
+    required this.label,
+    required this.active,
+    required this.onTap,
+    this.onDark = true,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final bgActive = onDark
+        ? Colors.white.withValues(alpha: 0.18)
+        : Colors.black.withValues(alpha: 0.10);
+    final bgInactive = onDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.05);
+    final textActive = onDark ? Colors.white : Colors.black87;
+    final textInactive = onDark ? Colors.white70 : Colors.black54;
+
     return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: ChoiceChip(
-        label: Text(label),
-        selected: active,
-        onSelected: (_) => onTap(),
-        selectedColor: AppColors.primary,
-        labelStyle: GoogleFonts.plusJakartaSans(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: active ? Colors.white : AppColors.textSecondaryLight,
-        ),
-        backgroundColor: Theme.of(context).cardColor,
-        shape: RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.circular(AppDimensions.radiusFull),
-          side: BorderSide(
-            color: active ? AppColors.primary : AppColors.borderLight,
+      padding: const EdgeInsets.only(right: 6),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: active ? bgActive : bgInactive,
+            borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+          ),
+          child: Text(
+            label,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 12,
+              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+              color: active ? textActive : textInactive,
+            ),
           ),
         ),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       ),
     );
   }

@@ -538,6 +538,12 @@ class SyncService {
           ),
         );
         await _runHydrationStep(
+          'comments_for_visible_posts',
+          () => _syncRemoteCommentsForPosts(
+            candidatePostIds: syncedPostIds,
+          ),
+        );
+        await _runHydrationStep(
             'post_views', () => _syncRemotePostViews(currentUid));
         await _runHydrationStep(
             'collab_requests', () => _syncRemoteCollabRequests(currentUid));
@@ -2443,6 +2449,88 @@ class SyncService {
     );
   }
 
+  Future<void> _syncRemoteCommentsForPosts({
+    Iterable<String> candidatePostIds = const [],
+    int perPostLimit = 80,
+  }) async {
+    final db = await DatabaseHelper.instance.database;
+    final postIds = <String>{...candidatePostIds.where((id) => id.isNotEmpty)};
+
+    if (postIds.isEmpty) {
+      final localRows = await db.query(
+        DatabaseSchema.tablePosts,
+        columns: ['id'],
+        orderBy: 'created_at DESC',
+        limit: 50,
+      );
+      postIds.addAll(localRows
+          .map((row) => row['id'] as String? ?? '')
+          .where((id) => id.isNotEmpty));
+    }
+
+    var syncedPosts = 0;
+    var syncedComments = 0;
+    for (final postId in postIds) {
+      try {
+        final snap = await FirebaseFirestore.instance
+            .collection('comments')
+            .where('post_id', isEqualTo: postId)
+            .limit(perPostLimit)
+            .get(const GetOptions(source: Source.serverAndCache));
+
+        final docs = [...snap.docs]..sort((a, b) {
+            final aTs = a.data()['created_at'];
+            final bTs = b.data()['created_at'];
+            final aMs = aTs is Timestamp ? aTs.millisecondsSinceEpoch : 0;
+            final bMs = bTs is Timestamp ? bTs.millisecondsSinceEpoch : 0;
+            return bMs.compareTo(aMs);
+          });
+
+        final remoteIds = <String>{};
+        for (final doc in docs) {
+          remoteIds.add(doc.id);
+          final data = doc.data();
+          final createdAt = data['created_at'] is Timestamp
+              ? (data['created_at'] as Timestamp).toDate()
+              : DateTime.now();
+          await _commentDao.upsertRemoteComment(
+            commentId: doc.id,
+            postId: data['post_id'] as String? ?? postId,
+            authorId: data['author_id'] as String? ?? '',
+            content: data['content'] as String? ?? '',
+            createdAt: createdAt,
+            parentCommentId: data['parent_comment_id'] as String?,
+          );
+          syncedComments++;
+        }
+
+        if (remoteIds.isNotEmpty) {
+          final placeholders = List.filled(remoteIds.length, '?').join(',');
+          await db.rawDelete(
+            '''
+            DELETE FROM ${DatabaseSchema.tableComments}
+            WHERE post_id = ?
+              AND COALESCE(sync_status, 1) = 1
+              AND id NOT IN ($placeholders)
+            ''',
+            [postId, ...remoteIds],
+          );
+        }
+
+        syncedPosts++;
+      } catch (error) {
+        debugPrint(
+          '[SyncService] Failed syncing comments for post=$postId: $error',
+        );
+      }
+    }
+
+    debugPrint(
+      '[SyncService] Hydrated comments for posts=${postIds.length} '
+      'syncedPosts=$syncedPosts syncedComments=$syncedComments',
+    );
+  }
+
   Future<void> _syncRemotePostViews(String currentUid) async {
     final db = await DatabaseHelper.instance.database;
 
@@ -2758,7 +2846,10 @@ class SyncService {
           return bMs.compareTo(aMs);
         });
 
+      final remoteIds = <String>{};
+
       for (final doc in docs) {
+        remoteIds.add(doc.id);
         final data = doc.data();
         final createdAt = data['created_at'] is Timestamp
             ? (data['created_at'] as Timestamp).toDate()
@@ -2772,6 +2863,22 @@ class SyncService {
           parentCommentId: data['parent_comment_id'] as String?,
         );
       }
+
+      final db = await DatabaseHelper.instance.database;
+      if (remoteIds.isNotEmpty) {
+        final placeholders = List.filled(remoteIds.length, '?').join(',');
+        await db.rawDelete(
+          '''
+          DELETE FROM ${DatabaseSchema.tableComments}
+          WHERE post_id = ?
+            AND COALESCE(sync_status, 1) = 1
+            AND id NOT IN ($placeholders)
+          ''',
+          [postId, ...remoteIds],
+        );
+      }
+
+      await _refreshRemoteInteractionCounts(candidatePostIds: [postId]);
     } catch (error) {
       debugPrint('[SyncService] Comment remote-to-local sync failed: $error');
     }
