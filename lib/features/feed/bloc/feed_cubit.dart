@@ -33,6 +33,7 @@ import '../../../data/local/dao/sync_queue_dao.dart';
 import '../../../data/local/dao/user_dao.dart';
 import '../../../core/router/route_guards.dart';
 import '../../../data/models/post_model.dart';
+import '../../../data/remote/firestore_service.dart';
 import '../../../data/remote/recommender_service.dart';
 import '../../../data/remote/sync_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
@@ -193,7 +194,10 @@ class FeedCubit extends Cubit<FeedState> {
   final SyncService? _syncService;
   final String? _currentUserId;
   final AuthCubit? _authCubit;
+  final FirestoreService? _firestore;
   StreamSubscription<AuthState>? _authSub;
+  StreamSubscription<int>? _feedRealtimeSub;
+  Timer? _feedRefreshDebounce;
   String? _lastObservedAuthUserId;
   DateTime? _lastSuccessfulLoadAt;
   static const _pageSize = 40;
@@ -208,6 +212,7 @@ class FeedCubit extends Cubit<FeedState> {
     RecommendationLogDao? recLogDao,
     SyncQueueDao? syncQueue,
     SyncService? syncService,
+    FirestoreService? firestore,
     String? currentUserId,
     AuthCubit? authCubit,
   })  : _postDao = postDao ?? PostDao(),
@@ -217,6 +222,7 @@ class FeedCubit extends Cubit<FeedState> {
         _recLogDao = recLogDao,
         _syncQueue = syncQueue ?? SyncQueueDao(),
         _syncService = syncService,
+        _firestore = firestore,
         _currentUserId = currentUserId,
         _authCubit = authCubit,
         super(const FeedInitial());
@@ -341,6 +347,7 @@ class FeedCubit extends Cubit<FeedState> {
         filter: f,
       ));
       _lastSuccessfulLoadAt = DateTime.now();
+      _startFeedRealtimeWatcher();
 
       if (!shouldForceSync) {
         unawaited(_syncFeedInBackground(filter: f));
@@ -1180,6 +1187,10 @@ class FeedCubit extends Cubit<FeedState> {
           'followed_at': DateTime.now().toIso8601String(),
         },
       );
+
+      // Push follow immediately so receiver notifications are created
+      // without waiting for a later connectivity event.
+      unawaited(_syncService?.processPendingSync());
       _traceAction(
         'follow',
         'remote_queued',
@@ -1528,8 +1539,29 @@ class FeedCubit extends Cubit<FeedState> {
     await loadFeed(filter: currentFilter, forceSync: true);
   }
 
+  void _startFeedRealtimeWatcher() {
+    if (_feedRealtimeSub != null || _firestore == null) return;
+    _feedRealtimeSub = _firestore.watchRecentPostActivityTicks().listen((_) {
+      _feedRefreshDebounce?.cancel();
+      _feedRefreshDebounce = Timer(const Duration(milliseconds: 800), () {
+        final current = state;
+        if (current is FeedLoaded) {
+          unawaited(_syncFeedInBackground(filter: current.filter));
+        }
+      });
+    });
+  }
+
+  void _stopFeedRealtimeWatcher() {
+    _feedRefreshDebounce?.cancel();
+    _feedRefreshDebounce = null;
+    _feedRealtimeSub?.cancel();
+    _feedRealtimeSub = null;
+  }
+
   @override
   Future<void> close() async {
+    _stopFeedRealtimeWatcher();
     await _authSub?.cancel();
     _authSub = null;
     return super.close();

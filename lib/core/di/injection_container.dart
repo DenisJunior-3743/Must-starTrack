@@ -296,6 +296,7 @@ class InjectionContainer {
         recommenderService: sl<RecommenderService>(),
         syncQueue: sl<SyncQueueDao>(),
         syncService: sl<SyncService>(),
+        firestore: sl<FirestoreService>(),
         currentUserId: sl<AuthCubit>().currentUser?.id,
         authCubit: sl<AuthCubit>(),
         recLogDao: sl<RecommendationLogDao>(),

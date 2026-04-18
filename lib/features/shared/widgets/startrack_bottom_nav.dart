@@ -20,6 +20,7 @@ class StarTrackBottomNav extends StatelessWidget {
     required this.onAddTap,
     required this.onInboxTap,
     required this.onProjectsTap,
+    this.unreadMessageCount = 0,
   });
 
   final StarTrackNavTab activeTab;
@@ -28,6 +29,7 @@ class StarTrackBottomNav extends StatelessWidget {
   final VoidCallback onAddTap;
   final VoidCallback onInboxTap;
   final VoidCallback onProjectsTap;
+  final int unreadMessageCount;
 
   @override
   Widget build(BuildContext context) {
@@ -94,6 +96,7 @@ class StarTrackBottomNav extends StatelessWidget {
                 label: 'Inbox',
                 active: activeTab == StarTrackNavTab.inbox,
                 onTap: onInboxTap,
+                badgeCount: unreadMessageCount,
               ),
             ),
             Expanded(
@@ -117,12 +120,14 @@ class _NavItem extends StatelessWidget {
     required this.label,
     required this.active,
     required this.onTap,
+    this.badgeCount = 0,
   });
 
   final IconData icon;
   final String label;
   final bool active;
   final VoidCallback onTap;
+  final int badgeCount;
 
   @override
   Widget build(BuildContext context) {
@@ -135,10 +140,14 @@ class _NavItem extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            icon,
-            size: 22,
-            color: active ? activeColor : idleColor,
+          Badge(
+            isLabelVisible: badgeCount > 0,
+            label: Text(badgeCount > 99 ? '99+' : '$badgeCount'),
+            child: Icon(
+              icon,
+              size: 22,
+              color: active ? activeColor : idleColor,
+            ),
           ),
           const SizedBox(height: 2),
           FittedBox(
