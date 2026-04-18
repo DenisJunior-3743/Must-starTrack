@@ -26,6 +26,8 @@
 //    backoff. This means the app works fully offline — users on
 //    3G in Mbarara still get a great experience."
 
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
@@ -53,6 +55,8 @@ class FirestoreService {
       _db.collection('conversations');
   CollectionReference<Map<String, dynamic>> get _notifications =>
       _db.collection('notifications');
+    CollectionReference<Map<String, dynamic>> get _collabRequests =>
+      _db.collection('collab_requests');
   CollectionReference<Map<String, dynamic>> get _follows =>
       _db.collection('follows');
   CollectionReference<Map<String, dynamic>> get _faculties =>
@@ -813,6 +817,86 @@ class FirestoreService {
         .where('is_read', isEqualTo: false)
         .snapshots()
         .map((s) => s.size);
+  }
+
+  /// Emits lightweight ticks whenever inbox-relevant Firestore collections
+  /// change for the current user.
+  Stream<int> watchInboxSyncTicks(String userId) {
+    late final StreamController<int> controller;
+    final subscriptions = <StreamSubscription<dynamic>>[];
+    var seq = 0;
+
+    void emitTick() {
+      if (!controller.isClosed) {
+        controller.add(++seq);
+      }
+    }
+
+    void handleError(Object error, StackTrace stackTrace) {
+      if (!controller.isClosed) {
+        controller.addError(error, stackTrace);
+      }
+    }
+
+    controller = StreamController<int>.broadcast(
+      onListen: () {
+        subscriptions.add(
+          _conversations
+              .where('user_id', isEqualTo: userId)
+              .snapshots()
+              .listen(
+                (_) => emitTick(),
+                onError: handleError,
+              ),
+        );
+        subscriptions.add(
+          _conversations
+              .where('peer_id', isEqualTo: userId)
+              .snapshots()
+              .listen(
+                (_) => emitTick(),
+                onError: handleError,
+              ),
+        );
+        subscriptions.add(
+          _collabRequests
+              .where('sender_id', isEqualTo: userId)
+              .snapshots()
+              .listen(
+                (_) => emitTick(),
+                onError: handleError,
+              ),
+        );
+        subscriptions.add(
+          _collabRequests
+              .where('receiver_id', isEqualTo: userId)
+              .snapshots()
+              .listen(
+                (_) => emitTick(),
+                onError: handleError,
+              ),
+        );
+      },
+      onCancel: () async {
+        for (final sub in subscriptions) {
+          await sub.cancel();
+        }
+        subscriptions.clear();
+      },
+    );
+
+    return controller.stream;
+  }
+
+  /// Emits ticks when recent approved posts change so feed can refresh quickly.
+  Stream<int> watchRecentPostActivityTicks({int limit = 120}) {
+    return _posts
+        .where('is_archived', isEqualTo: false)
+        .where('moderation_status', isEqualTo: 'approved')
+        .orderBy('created_at', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((_) => DateTime.now().millisecondsSinceEpoch);
   }
 
   // ── Follow operations ─────────────────────────────────────────────────────

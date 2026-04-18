@@ -1048,10 +1048,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             label: _isEditing
               ? (_isGroupProject
                 ? 'Save Group Project'
-                : (_type == 'project' ? 'Save Project Changes' : 'Save Opportunity Changes'))
+                : (_type == 'project' ? 'Save Project Changes' : (_type == 'advert' ? 'Save Advert Changes' : 'Save Opportunity Changes')))
               : (_isGroupProject
                 ? 'Publish Group Project'
-                : (_type == 'project' ? 'Publish Project' : 'Publish Opportunity')),
+                : (_type == 'project' ? 'Publish Project' : (_type == 'advert' ? 'Publish Advert' : 'Publish Opportunity'))),
             trailingIcon: Icons.rocket_launch_rounded,
             isLoading: _publishing,
             onPressed: _publish,

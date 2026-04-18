@@ -144,6 +144,10 @@ class MessageCubit extends Cubit<MessageState> {
   final FirestoreService _firestore;
   final RecommenderService _recommenderService;
   StreamSubscription<List<MessageModel>>? _threadSub;
+  StreamSubscription<int>? _inboxRealtimeSub;
+  StreamSubscription<AuthState>? _authSub;
+  Timer? _inboxRefreshDebounce;
+  String? _realtimeInboxUserId;
   DateTime? _lastConversationsLoadedAt;
 
   String? get currentUserId => _authCubit.currentUser?.id;
@@ -169,7 +173,16 @@ class MessageCubit extends Cubit<MessageState> {
         _cloudinary = cloudinary,
         _firestore = firestore,
         _recommenderService = recommenderService,
-        super(const MessageInitial());
+        super(const MessageInitial()) {
+    _authSub = _authCubit.stream.listen((authState) {
+      if (authState is AuthAuthenticated) {
+        unawaited(loadConversations());
+      } else if (authState is AuthUnauthenticated) {
+        _stopRealtimeInboxWatcher();
+        _emitIfOpen(const ConversationsLoaded(conversations: [], requests: []));
+      }
+    });
+  }
 
   void _emitIfOpen(MessageState next) {
     if (!isClosed) {
@@ -229,6 +242,7 @@ class MessageCubit extends Cubit<MessageState> {
         viewerId: uid,
         requests: requests,
       );
+      _startRealtimeInboxWatcher(uid);
       _emitIfOpen(ConversationsLoaded(
         conversations: convos,
         requests: rankedRequests,
@@ -272,6 +286,39 @@ class MessageCubit extends Cubit<MessageState> {
     } catch (_) {
       // Keep existing inbox view when silent refresh fails.
     }
+  }
+
+  void _startRealtimeInboxWatcher(String userId) {
+    if (_realtimeInboxUserId == userId && _inboxRealtimeSub != null) {
+      return;
+    }
+
+    _stopRealtimeInboxWatcher();
+    _realtimeInboxUserId = userId;
+    _inboxRealtimeSub = _firestore.watchInboxSyncTicks(userId).listen((_) {
+      _inboxRefreshDebounce?.cancel();
+      _inboxRefreshDebounce = Timer(const Duration(milliseconds: 450), () {
+        unawaited(_refreshInboxFromRealtimeTick());
+      });
+    });
+  }
+
+  Future<void> _refreshInboxFromRealtimeTick() async {
+    final uid = _currentUserId;
+    if (uid == null || uid.isEmpty) {
+      return;
+    }
+
+    await _syncService.syncRealtimeInboxSlices();
+    await _refreshConversationsInBackground();
+  }
+
+  void _stopRealtimeInboxWatcher() {
+    _inboxRefreshDebounce?.cancel();
+    _inboxRefreshDebounce = null;
+    _realtimeInboxUserId = null;
+    unawaited(_inboxRealtimeSub?.cancel());
+    _inboxRealtimeSub = null;
   }
 
   Future<List<CollaborationInboxItem>> _attachRequestRanking({
@@ -778,6 +825,12 @@ class MessageCubit extends Cubit<MessageState> {
 
   @override
   Future<void> close() async {
+    _inboxRefreshDebounce?.cancel();
+    _inboxRefreshDebounce = null;
+    await _authSub?.cancel();
+    _authSub = null;
+    await _inboxRealtimeSub?.cancel();
+    _inboxRealtimeSub = null;
     await _threadSub?.cancel();
     return super.close();
   }

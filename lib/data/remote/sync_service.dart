@@ -726,6 +726,53 @@ class SyncService {
     }
   }
 
+  /// Fast path used by realtime inbox listeners.
+  /// Pulls only conversation/message/collaboration slices instead of a full
+  /// hydration pass.
+  Future<void> syncRealtimeInboxSlices() async {
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUid == null || currentUid.isEmpty) {
+      return;
+    }
+
+    try {
+      await processPendingSync();
+      await _syncRemoteMessages(currentUid);
+      await _syncRemoteCollabRequests(currentUid);
+    } catch (error) {
+      debugPrint('[SyncService] syncRealtimeInboxSlices failed: $error');
+    }
+  }
+
+  /// Fast path used by realtime feed listeners for likes/dislikes/comments/
+  /// ratings updates without forcing a full remote hydration.
+  Future<void> syncRealtimeInteractionSlices({
+    Iterable<String> candidatePostIds = const [],
+  }) async {
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+
+    try {
+      await _refreshRemoteInteractionCounts(
+        candidatePostIds: candidatePostIds,
+      );
+      await _syncRemoteCommentsForPosts(
+        candidatePostIds: candidatePostIds,
+      );
+      if (currentUid != null && currentUid.isNotEmpty) {
+        await _syncRemoteLikes(
+          currentUid,
+          candidatePostIds: candidatePostIds,
+        );
+        await _syncRemoteDislikes(
+          currentUid,
+          candidatePostIds: candidatePostIds,
+        );
+      }
+    } catch (error) {
+      debugPrint('[SyncService] syncRealtimeInteractionSlices failed: $error');
+    }
+  }
+
   Future<void> _runHydrationStep(
       String label, Future<void> Function() action) async {
     try {
@@ -1316,8 +1363,26 @@ class SyncService {
       case 'create':
       case 'update':
         final payload = job.payloadJson;
-        final raterId = payload['user_id'] as String?;
+        final payloadRaterId = payload['user_id'] as String?;
+        final currentUid = FirebaseAuth.instance.currentUser?.uid;
+        if (currentUid == null || currentUid.isEmpty) {
+          debugPrint(
+            '[SyncRating] No active auth session for job ${job.id}; will retry.',
+          );
+          return false;
+        }
+        final raterId = currentUid;
+        if (payloadRaterId != null && payloadRaterId != currentUid) {
+          debugPrint(
+            '[SyncRating] user_id mismatch on job ${job.id}: '
+            'payload=$payloadRaterId auth=$currentUid; normalizing to auth uid.',
+          );
+        }
         final raterName = payload['rater_name'] as String?;
+        final normalizedPayload = <String, dynamic>{
+          ...payload,
+          'user_id': raterId,
+        };
         _uplinkTrace('RATING_WRITE_START', details: {
           'jobId': job.id,
           'operation': job.operation,
@@ -1329,12 +1394,12 @@ class SyncService {
         });
         debugPrint(
           '[SyncRating] Writing rating id=${job.entityId} '
-          'post=${job.payloadJson['post_id']} user=${job.payloadJson['user_id']} '
-          'stars=${job.payloadJson['stars']}',
+          'post=${normalizedPayload['post_id']} user=${normalizedPayload['user_id']} '
+          'stars=${normalizedPayload['stars']}',
         );
         await _firestore.setPostRating(
           ratingId: job.entityId,
-          payload: job.payloadJson,
+          payload: normalizedPayload,
         );
         await _verifyUplinkDoc(
           action: 'RATING',
@@ -1352,7 +1417,6 @@ class SyncService {
         );
         final authorId = payload['author_id'] as String?;
         if (authorId != null &&
-            raterId != null &&
             authorId.isNotEmpty &&
             raterId.isNotEmpty &&
             authorId != raterId) {
@@ -1418,11 +1482,11 @@ class SyncService {
 
   Future<bool> _syncFollow(SyncJob job) async {
     final payload = job.payloadJson;
-    final followerId = payload['follower_id'] as String?;
+    final payloadFollowerId = payload['follower_id'] as String?;
     final followingId =
         (payload['following_id'] ?? payload['followed_id']) as String?;
 
-    if (followerId == null || followingId == null) {
+    if (payloadFollowerId == null || followingId == null) {
       debugPrint(
           '[SyncFollow] Skipping malformed job id=${job.id} payload=$payload');
       return true;
@@ -1432,10 +1496,18 @@ class SyncService {
     // queued under a different account (e.g. during testing), skip it so it
     // doesn't block the queue or generate misleading PERMISSION_DENIED logs.
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
-    if (currentUid != followerId) {
-      debugPrint('[SyncService] ⚠️ Skipping follow job ${job.id}: '
-          'follower=$followerId but current uid=$currentUid — removing from queue.');
-      return true; // drop the job; it can never succeed for this session
+    if (currentUid == null || currentUid.isEmpty) {
+      debugPrint(
+        '[SyncFollow] No active auth session for job ${job.id}; will retry.',
+      );
+      return false;
+    }
+    final followerId = currentUid;
+    if (payloadFollowerId != currentUid) {
+      debugPrint(
+        '[SyncFollow] follower_id mismatch on job ${job.id}: '
+        'payload=$payloadFollowerId auth=$currentUid; normalizing to auth uid.',
+      );
     }
 
     if (job.operation == 'create') {
@@ -1558,26 +1630,32 @@ class SyncService {
 
   Future<bool> _syncLike(SyncJob job) async {
     final payload = job.payloadJson;
-    final userId = payload['user_id'] as String?;
+    final payloadUserId = payload['user_id'] as String?;
     final actorName =
       (payload['actor_name'] ?? payload['user_name'] ?? payload['author_name'])
         as String?;
     final postId = payload['post_id'] as String?;
     final isLiking = payload['is_liking'] as bool? ?? true;
 
-    if (userId == null || postId == null) {
+    if (payloadUserId == null || postId == null) {
       debugPrint(
           '[SyncLike] Skipping malformed job id=${job.id} payload=$payload');
       return true;
     }
 
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
-    if (currentUid != userId) {
+    if (currentUid == null || currentUid.isEmpty) {
       debugPrint(
-        '[SyncService] ⚠️ Skipping like job ${job.id}: '
-        'payload user=$userId but current uid=$currentUid — removing from queue.',
+        '[SyncLike] No active auth session for job ${job.id}; will retry.',
       );
-      return true;
+      return false;
+    }
+    final userId = currentUid;
+    if (payloadUserId != currentUid) {
+      debugPrint(
+        '[SyncLike] user_id mismatch on job ${job.id}: '
+        'payload=$payloadUserId auth=$currentUid; normalizing to auth uid.',
+      );
     }
 
     debugPrint(
@@ -1699,24 +1777,30 @@ class SyncService {
 
   Future<bool> _syncComment(SyncJob job) async {
     final payload = job.payloadJson;
-    final authorId = payload['author_id'] as String?;
+    final payloadAuthorId = payload['author_id'] as String?;
     final authorName =
         (payload['commenter_name'] ?? payload['author_name']) as String?;
     final postId = payload['post_id'] as String?;
     final content = payload['content'] as String? ?? '';
     final parentCommentId = payload['parent_comment_id'] as String?;
 
-    if (authorId == null || postId == null || content.trim().isEmpty) {
+    if (payloadAuthorId == null || postId == null || content.trim().isEmpty) {
       return true;
     }
 
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
-    if (currentUid != authorId) {
+    if (currentUid == null || currentUid.isEmpty) {
       debugPrint(
-        '[SyncService] ⚠️ Skipping comment job ${job.id}: '
-        'author=$authorId but current uid=$currentUid — removing from queue.',
+        '[SyncComment] No active auth session for job ${job.id}; will retry.',
       );
-      return true;
+      return false;
+    }
+    final authorId = currentUid;
+    if (payloadAuthorId != currentUid) {
+      debugPrint(
+        '[SyncComment] author_id mismatch on job ${job.id}: '
+        'payload=$payloadAuthorId auth=$currentUid; normalizing to auth uid.',
+      );
     }
 
     final hasValidSession = await _hasValidMustSession(
@@ -1795,31 +1879,41 @@ class SyncService {
 
   Future<bool> _syncPostView(SyncJob job) async {
     final payload = job.payloadJson;
-    final viewerId = payload['viewer_id'] as String?;
+    final payloadViewerId = payload['viewer_id'] as String?;
     final viewerName = payload['viewer_name'] as String?;
     final postId = payload['post_id'] as String?;
 
-    if (viewerId == null || postId == null) {
+    if (payloadViewerId == null || postId == null) {
       debugPrint(
           '[SyncView] Skipping malformed view job id=${job.id} payload=$payload');
       return true;
     }
 
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
-    if (currentUid != viewerId) {
+    if (currentUid == null || currentUid.isEmpty) {
       debugPrint(
-        '[SyncService] ⚠️ Skipping post view job ${job.id}: '
-        'viewer=$viewerId but current uid=$currentUid — removing from queue.',
+        '[SyncView] No active auth session for job ${job.id}; will retry.',
       );
-      return true;
+      return false;
+    }
+    final viewerId = currentUid;
+    if (payloadViewerId != currentUid) {
+      debugPrint(
+        '[SyncView] viewer_id mismatch on job ${job.id}: '
+        'payload=$payloadViewerId auth=$currentUid; normalizing to auth uid.',
+      );
     }
 
+    final normalizedViewId = payloadViewerId == currentUid
+        ? job.entityId
+        : '${viewerId}_$postId';
+
     final docRef =
-        FirebaseFirestore.instance.collection('post_views').doc(job.entityId);
+        FirebaseFirestore.instance.collection('post_views').doc(normalizedViewId);
     _uplinkTrace('VIEW_WRITE_START', details: {
       'jobId': job.id,
       'operation': job.operation,
-      'viewId': job.entityId,
+      'viewId': normalizedViewId,
       'postId': postId,
       'userName': _uplinkUserLabel(name: viewerName, id: viewerId),
       'viewerId': viewerId,
@@ -1832,7 +1926,7 @@ class SyncService {
         'updated_at': FieldValue.serverTimestamp(),
       });
       debugPrint(
-        '[SyncView] Remote view updated viewId=${job.entityId} post=$postId viewer=$viewerId',
+        '[SyncView] Remote view updated viewId=$normalizedViewId post=$postId viewer=$viewerId',
       );
     } on FirebaseException catch (error) {
       if (error.code != 'not-found') {
@@ -1840,7 +1934,7 @@ class SyncService {
       }
 
       await docRef.set({
-        'id': job.entityId,
+        'id': normalizedViewId,
         'viewer_id': viewerId,
         'viewer_name': payload['viewer_name'] as String?,
         'author_id': payload['author_id'] as String?,
@@ -1850,7 +1944,7 @@ class SyncService {
         'updated_at': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
       debugPrint(
-        '[SyncView] Remote view created viewId=${job.entityId} post=$postId viewer=$viewerId',
+        '[SyncView] Remote view created viewId=$normalizedViewId post=$postId viewer=$viewerId',
       );
     }
 
@@ -1860,7 +1954,7 @@ class SyncService {
       expectedExists: true,
       details: {
         'jobId': job.id,
-        'viewId': job.entityId,
+        'viewId': normalizedViewId,
         'postId': postId,
         'userName': _uplinkUserLabel(name: viewerName, id: viewerId),
         'viewerId': viewerId,
@@ -2005,7 +2099,8 @@ class SyncService {
       return true;
     }
 
-    final senderId = (payload['sender_id'] ?? payload['from_user_id']) as String?;
+    final payloadSenderId =
+      (payload['sender_id'] ?? payload['from_user_id']) as String?;
     final receiverId =
       (payload['receiver_id'] ?? payload['to_user_id']) as String?;
     final postId = payload['post_id'] as String?;
@@ -2013,21 +2108,30 @@ class SyncService {
     final status = payload['status'] as String? ?? 'pending';
 
     debugPrint(
-        '[SyncCollab] Payload — sender=$senderId receiver=$receiverId postId=$postId status=$status');
+        '[SyncCollab] Payload — sender=$payloadSenderId receiver=$receiverId postId=$postId status=$status');
 
-    if (senderId == null || receiverId == null) {
+    if (payloadSenderId == null || receiverId == null) {
       debugPrint('[SyncCollab] ⚠️ Missing sender or receiver — skipping job');
       return true;
     }
 
     final authUser = FirebaseAuth.instance.currentUser;
     final currentUid = authUser?.uid;
-    if (currentUid != senderId) {
+    if (currentUid == null || currentUid.isEmpty) {
       debugPrint(
-        '[SyncCollab] ⚠️ Skipping collab job ${job.id}: '
-        'sender=$senderId but current uid=$currentUid — removing from queue.',
+        '[SyncCollab] ⚠️ No active Firebase auth for job ${job.id}; will retry later.',
       );
-      return true;
+      return false;
+    }
+
+    // Use active Firebase uid for remote writes so security rules
+    // (sender_id == uid()) are always satisfied.
+    final senderId = currentUid;
+    if (payloadSenderId != currentUid) {
+      debugPrint(
+        '[SyncCollab] sender_id mismatch on job ${job.id}: '
+        'payload=$payloadSenderId auth=$currentUid; normalizing to auth uid.',
+      );
     }
 
     debugPrint(
@@ -2137,6 +2241,12 @@ class SyncService {
         '[SyncNotification] Skipping fan-out for source=$source notification=$notificationId '
         'receiver=$receiverId because Firestore rejected it: ${error.code}',
       );
+      // Keep permission issues non-retry so the queue can continue, but
+      // retry transient Firebase failures (unavailable, deadline-exceeded,
+      // aborted, etc.) by bubbling the exception to processPendingSync().
+      if (error.code != 'permission-denied') {
+        rethrow;
+      }
     } catch (error, stackTrace) {
       _notificationDebugBlock(
         activity: source,
@@ -2151,6 +2261,9 @@ class SyncService {
         'receiver=$receiverId due to unexpected error: $error',
       );
       debugPrint('[SyncNotification] Fan-out stacktrace: $stackTrace');
+      // Non-Firebase exceptions are treated as transient so the parent sync
+      // job retries instead of silently dropping the notification write.
+      rethrow;
     }
   }
 
@@ -2658,28 +2771,80 @@ class SyncService {
         final postRef = FirebaseFirestore.instance.collection('posts').doc(postId);
         final postDoc =
             await postRef.get(const GetOptions(source: Source.serverAndCache));
-        final likesCountSnap = await postRef.collection('likes').count().get();
-        final dislikesCountSnap = await postRef.collection('dislikes').count().get();
-        final commentsCountSnap = await FirebaseFirestore.instance
-            .collection('comments')
-            .where('post_id', isEqualTo: postId)
-            .count()
-            .get();
-        final remoteViewRaw = postDoc.data()?['view_count'];
-        final remoteViewCount = remoteViewRaw is int
-            ? remoteViewRaw
-            : (remoteViewRaw is num
-                ? remoteViewRaw.toInt()
-                : (remoteViewRaw is String
-                    ? int.tryParse(remoteViewRaw) ?? localBefore['view_count']!
-                    : localBefore['view_count']!));
+        final postData = postDoc.data() ?? const <String, dynamic>{};
+
+        int parseCount(dynamic raw, int fallback) {
+          if (raw is int) return raw;
+          if (raw is num) return raw.toInt();
+          if (raw is String) return int.tryParse(raw) ?? fallback;
+          return fallback;
+        }
+
+        final localLikesRow = await db.rawQuery(
+          'SELECT COUNT(*) AS cnt FROM ${DatabaseSchema.tableLikes} WHERE post_id = ?',
+          [postId],
+        );
+        final localDislikesRow = await db.rawQuery(
+          'SELECT COUNT(*) AS cnt FROM ${DatabaseSchema.tableDislikes} WHERE post_id = ?',
+          [postId],
+        );
+        final localCommentsRow = await db.rawQuery(
+          'SELECT COUNT(*) AS cnt FROM ${DatabaseSchema.tableComments} WHERE post_id = ? AND COALESCE(is_deleted, 0) = 0',
+          [postId],
+        );
+
+        final localLikeCount = localLikesRow.first['cnt'] as int? ?? 0;
+        final localDislikeCount = localDislikesRow.first['cnt'] as int? ?? 0;
+        final localCommentCount = localCommentsRow.first['cnt'] as int? ?? 0;
+
+        int remoteLikeCount;
+        try {
+          final likesCountSnap = await postRef.collection('likes').count().get();
+          remoteLikeCount = likesCountSnap.count ??
+              parseCount(postData['like_count'], localLikeCount);
+        } catch (_) {
+          remoteLikeCount = parseCount(postData['like_count'], localLikeCount);
+        }
+
+        int remoteDislikeCount;
+        try {
+          final dislikesCountSnap =
+              await postRef.collection('dislikes').count().get();
+          remoteDislikeCount = dislikesCountSnap.count ??
+              parseCount(postData['dislike_count'], localDislikeCount);
+        } catch (_) {
+          remoteDislikeCount =
+              parseCount(postData['dislike_count'], localDislikeCount);
+        }
+
+        int remoteCommentCount;
+        try {
+          final commentsCountSnap = await FirebaseFirestore.instance
+              .collection('comments')
+              .where('post_id', isEqualTo: postId)
+              .count()
+              .get();
+          remoteCommentCount = commentsCountSnap.count ??
+              parseCount(postData['comment_count'], localCommentCount);
+        } catch (_) {
+          remoteCommentCount =
+              parseCount(postData['comment_count'], localCommentCount);
+        }
+
+        final remoteViewCount = parseCount(
+          postData['view_count'],
+          localBefore['view_count']!,
+        );
 
         _syncTrace('INTERACTION_STEP_REMOTE_COUNTS', details: {
           'postId': postId,
-          'remote_like_count': likesCountSnap.count,
-          'remote_dislike_count': dislikesCountSnap.count,
-          'remote_comment_count': commentsCountSnap.count,
+          'remote_like_count': remoteLikeCount,
+          'remote_dislike_count': remoteDislikeCount,
+          'remote_comment_count': remoteCommentCount,
           'remote_view_count': remoteViewCount,
+          'local_like_count': localLikeCount,
+          'local_dislike_count': localDislikeCount,
+          'local_comment_count': localCommentCount,
           'local_before_like_count': localBefore['like_count'],
           'local_before_dislike_count': localBefore['dislike_count'],
           'local_before_comment_count': localBefore['comment_count'],
@@ -2689,9 +2854,9 @@ class SyncService {
         await db.update(
           DatabaseSchema.tablePosts,
           {
-            'like_count': likesCountSnap.count,
-            'dislike_count': dislikesCountSnap.count,
-            'comment_count': commentsCountSnap.count,
+            'like_count': remoteLikeCount,
+            'dislike_count': remoteDislikeCount,
+            'comment_count': remoteCommentCount,
             'view_count': remoteViewCount,
             'updated_at': DateTime.now().toIso8601String(),
           },
@@ -2701,7 +2866,7 @@ class SyncService {
         final localAfter = await _readLocalInteractionCounts(postId);
         debugPrint(
           '[SyncService][CountDiag] post=$postId '
-          'remote(l=${likesCountSnap.count},d=${dislikesCountSnap.count},c=${commentsCountSnap.count},v=$remoteViewCount) '
+          'remote(l=$remoteLikeCount,d=$remoteDislikeCount,c=$remoteCommentCount,v=$remoteViewCount) '
           'local_before(l=${localBefore['like_count']},d=${localBefore['dislike_count']},c=${localBefore['comment_count']},v=${localBefore['view_count']}) '
           'local_after(l=${localAfter['like_count']},d=${localAfter['dislike_count']},c=${localAfter['comment_count']},v=${localAfter['view_count']})',
         );
@@ -3305,37 +3470,15 @@ class SyncService {
     final docRef = FirebaseFirestore.instance
         .collection('notifications')
         .doc(notificationId);
-    final updateData = <String, Object?>{
-      'sender_name': senderName,
-      'body': body,
-      'detail': detail,
-      'entity_id': entityId,
-    };
-
     debugPrint(
       '[SyncNotification] Upsert start notification=$notificationId '
       'receiver=$receiverId sender=$senderId type=$type',
     );
 
-    try {
-      await docRef.update(updateData);
-      debugPrint(
-          '[SyncNotification] Updated existing notification=$notificationId for receiver=$receiverId keys=${updateData.keys.toList()}');
-      return;
-    } on FirebaseException catch (error) {
-      if (error.code != 'not-found') {
-        debugPrint(
-          '[SyncNotification] Update failed notification=$notificationId '
-          'receiver=$receiverId type=$type code=${error.code}',
-        );
-        rethrow;
-      }
-      debugPrint(
-        '[SyncNotification] Existing notification not found, creating new notification=$notificationId',
-      );
-    }
-
-    final createData = <String, Object?>{
+    // IMPORTANT: sender may not have read permission on receiver notifications,
+    // so never pre-read the document here. Use a direct merge write instead.
+    // Security rules validate sender ownership on create/update paths.
+    final upsertData = <String, Object?>{
       'id': notificationId,
       'user_id': receiverId,
       'type': type,
@@ -3347,10 +3490,11 @@ class SyncService {
       'is_read': false,
       'created_at': FieldValue.serverTimestamp(),
     };
-
-    await docRef.set(createData);
+    await docRef.set(upsertData, SetOptions(merge: true));
     debugPrint(
-    '[SyncNotification] Created notification=$notificationId for receiver=$receiverId type=$type payloadKeys=${createData.keys.toList()}');
+      '[SyncNotification] Upserted notification=$notificationId '
+      'for receiver=$receiverId type=$type payloadKeys=${upsertData.keys.toList()}',
+    );
   }
 
   Future<void> _showLocalAlertForNotification(Map<String, Object?> row) async {

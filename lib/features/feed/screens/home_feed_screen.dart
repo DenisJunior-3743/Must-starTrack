@@ -3882,6 +3882,9 @@ class _CommentSheetState extends State<_CommentSheet> {
           'post_title': widget.post.title,
         },
       );
+
+      // Push immediately so the post author receives notification now.
+      unawaited(sl<SyncService>().processPendingSync());
       _traceFeedAction(
         userId: userId,
         action: 'comment',

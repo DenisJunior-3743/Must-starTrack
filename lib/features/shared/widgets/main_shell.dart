@@ -15,12 +15,14 @@
 // for proper M3 indicator animation and theming.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/router/route_guards.dart';
+import '../../messaging/bloc/message_cubit.dart';
 import 'lecturer_bottom_nav.dart';
 import 'startrack_bottom_nav.dart';
 
@@ -167,6 +169,14 @@ class MainShell extends StatelessWidget {
     final location = GoRouterState.of(context).matchedLocation;
     final role = sl<RouteGuards>().currentRole;
 
+    final unreadCount = () {
+      final msgState = context.watch<MessageCubit>().state;
+      if (msgState is ConversationsLoaded) {
+        return msgState.conversations.fold<int>(0, (sum, c) => sum + c.unreadCount);
+      }
+      return 0;
+    }();
+
     // Lecturers get their own nav bar with role-specific destinations.
     if (role == UserRole.lecturer) {
       return Scaffold(
@@ -178,6 +188,7 @@ class MainShell extends StatelessWidget {
           onAddTap: () => _handleAddTap(context),
           onSearchTap: () => context.go(RouteNames.lecturerSearch),
           onInboxTap: () => context.go(RouteNames.inbox),
+          unreadMessageCount: unreadCount,
         ),
       );
     }
@@ -193,6 +204,7 @@ class MainShell extends StatelessWidget {
         onAddTap: () => _handleAddTap(context),
         onInboxTap: () => context.go(RouteNames.inbox),
         onProjectsTap: () => context.go(RouteNames.projects),
+        unreadMessageCount: unreadCount,
       ),
     );
   }
