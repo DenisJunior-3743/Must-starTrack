@@ -117,8 +117,9 @@ class _ChatbotViewState extends State<_ChatbotView> {
                   _ => const <ChatbotMessage>[],
                 };
 
-                final starterPrompts =
-                    state is ChatbotIdle ? state.starterPrompts : const <String>[];
+                final starterPrompts = state is ChatbotIdle
+                    ? state.starterPrompts
+                    : const <String>[];
 
                 return ListView(
                   controller: _scrollCtrl,
@@ -154,7 +155,8 @@ class _ChatbotViewState extends State<_ChatbotView> {
                       textInputAction: TextInputAction.send,
                       onSubmitted: (v) => _submit(context, v),
                       decoration: InputDecoration(
-                        hintText: 'Ask about navigation, features, or settings...',
+                        hintText:
+                            'Ask about navigation, features, or settings...',
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -169,6 +171,11 @@ class _ChatbotViewState extends State<_ChatbotView> {
                   ),
                   const SizedBox(width: 8),
                   FilledButton(
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(44, 44),
+                      padding: EdgeInsets.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                     onPressed: () => _submit(context, _inputCtrl.text),
                     child: const Icon(Icons.send_rounded),
                   ),
@@ -274,20 +281,22 @@ class _MessageBubble extends StatelessWidget {
                     ChoiceChip(
                       label: const Text('Helpful'),
                       selected: message.isHelpful == true,
-                      onSelected: (_) => context.read<ChatbotCubit>().markHelpful(
-                            interactionId: message.interactionId!,
-                            isHelpful: true,
-                            actorUserId: sl<AuthCubit>().currentUser?.id,
-                          ),
+                      onSelected: (_) =>
+                          context.read<ChatbotCubit>().markHelpful(
+                                interactionId: message.interactionId!,
+                                isHelpful: true,
+                                actorUserId: sl<AuthCubit>().currentUser?.id,
+                              ),
                     ),
                     ChoiceChip(
                       label: const Text('Not Helpful'),
                       selected: message.isHelpful == false,
-                      onSelected: (_) => context.read<ChatbotCubit>().markHelpful(
-                            interactionId: message.interactionId!,
-                            isHelpful: false,
-                            actorUserId: sl<AuthCubit>().currentUser?.id,
-                          ),
+                      onSelected: (_) =>
+                          context.read<ChatbotCubit>().markHelpful(
+                                interactionId: message.interactionId!,
+                                isHelpful: false,
+                                actorUserId: sl<AuthCubit>().currentUser?.id,
+                              ),
                     ),
                   ],
                 ),
@@ -324,7 +333,7 @@ class _MessageBubble extends StatelessWidget {
                                 suggestion,
                                 isGuest: sl<AuthCubit>().currentUser == null,
                                 role: sl<AuthCubit>().currentUser?.role.name,
-                              userId: sl<AuthCubit>().currentUser?.id,
+                                userId: sl<AuthCubit>().currentUser?.id,
                               ),
                         ),
                       )

@@ -96,12 +96,12 @@ class LecturerBottomNav extends StatelessWidget {
                     width: 52,
                     height: 52,
                     decoration: const BoxDecoration(
-                      color: AppColors.primary,
+                      color: AppColors.institutionalYellow,
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
                       Icons.add_rounded,
-                      color: Colors.white,
+                      color: AppColors.institutionalTextDark,
                       size: 34,
                     ),
                   ),
@@ -149,7 +149,7 @@ class _LecturerNavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const activeColor = AppColors.primary;
+    const activeColor = AppColors.institutionalGreen;
     final idleColor = AppColors.textSecondary(context);
 
     return InkWell(
@@ -161,7 +161,8 @@ class _LecturerNavItem extends StatelessWidget {
           Badge(
             isLabelVisible: badgeCount > 0,
             label: Text(badgeCount > 99 ? '99+' : '$badgeCount'),
-            child: Icon(icon, size: 22, color: active ? activeColor : idleColor),
+            child:
+                Icon(icon, size: 22, color: active ? activeColor : idleColor),
           ),
           const SizedBox(height: 2),
           FittedBox(

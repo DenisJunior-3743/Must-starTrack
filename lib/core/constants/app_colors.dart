@@ -30,14 +30,30 @@ abstract final class AppColors {
 
   // ── MUST University Accent Colors ─────────────────────────────────────────
   /// Institutional green — achievement badges, success highlights, MUST branding.
-  static const Color mustGreen       = Color(0xFF1B8A4B);
-  static const Color mustGreenLight  = Color(0xFFE8F5EE);
-  static const Color mustGreenDark   = Color(0xFF0D5C30);
+  static const Color mustGreen = Color(0xFF1B8A4B);
+  static const Color mustGreenLight = Color(0xFFE8F5EE);
+  static const Color mustGreenDark = Color(0xFF0D5C30);
 
   /// Gold accent — active nav indicator, streak highlights, premium badges.
-  static const Color mustGold        = Color(0xFFFFB300);
-  static const Color mustGoldLight   = Color(0xFFFFF8E1);
-  static const Color mustGoldDark    = Color(0xFFE65100);
+  static const Color mustGold = Color(0xFFFFB300);
+  static const Color mustGoldLight = Color(0xFFFFF8E1);
+  static const Color mustGoldDark = Color(0xFFE65100);
+
+  // ── Institutional Palette (UI direction) ─────────────────────────────────
+  /// Main brand green for highlights and active media accents.
+  static const Color institutionalGreen = Color(0xFF8BC34A);
+
+  /// Supporting deep blue for footer/secondary sections.
+  static const Color institutionalBlue = Color(0xFF0D1B8F);
+
+  /// Golden accent for CTA emphasis.
+  static const Color institutionalYellow = Color(0xFFFFB300);
+
+  /// Neutral light background for light surfaces.
+  static const Color institutionalBackground = Color(0xFFF5F5F5);
+
+  /// Strong readable dark text for light surfaces.
+  static const Color institutionalTextDark = Color(0xFF1A1A1A);
 
   // ── Backgrounds ──────────────────────────────────────────────────────────
   /// Light mode scaffold/page background.
