@@ -9,7 +9,6 @@
 //   Scaffold.of(context).openEndDrawer();
 // (The hosting screen must declare `endDrawer: const SettingsDrawer()`.)
 
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -245,8 +244,7 @@ class SettingsDrawer extends StatelessWidget {
     if (user == null) return;
 
     final now = DateTime.now();
-    final requestId =
-        '${user.id}_deletion_${now.microsecondsSinceEpoch}';
+    final requestId = '${user.id}_deletion_${now.microsecondsSinceEpoch}';
     try {
       await sl<FirestoreService>().flagAccountForDeletion(
         requestId: requestId,
@@ -491,9 +489,8 @@ class _AppFeedbackSheetState extends State<_AppFeedbackSheet> {
           children: List.generate(5, (index) {
             final filled = index < _stars;
             return IconButton(
-              onPressed: _submitting
-                  ? null
-                  : () => setState(() => _stars = index + 1),
+              onPressed:
+                  _submitting ? null : () => setState(() => _stars = index + 1),
               icon: Icon(
                 filled ? Icons.star_rounded : Icons.star_border_rounded,
                 size: 34,
@@ -868,8 +865,8 @@ class _DrawerHeader extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: isDark
-              ? [const Color(0xFF0D1B3E), const Color(0xFF1152D4)]
-              : [const Color(0xFF1152D4), const Color(0xFF0D3FA8)],
+              ? [AppColors.mustGreenDark, const Color(0xFF124D2E)]
+              : [AppColors.institutionalGreen, AppColors.mustGreen],
         ),
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(20),
@@ -894,10 +891,17 @@ class _DrawerHeader extends StatelessWidget {
                     width: 1.5,
                   ),
                 ),
-                child: const Icon(
-                  Icons.auto_awesome_rounded,
-                  color: Colors.white,
-                  size: 28,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.asset(
+                    'assets/images/must-logo.png',
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Icon(
+                      Icons.auto_awesome_rounded,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 14),
@@ -957,19 +961,22 @@ class _ThemeModeSelector extends StatelessWidget {
                   icon: Icons.light_mode_rounded,
                   label: 'Light',
                   active: mode == ThemeMode.light,
-                  onTap: () => context.read<ThemeCubit>().setMode(ThemeMode.light),
+                  onTap: () =>
+                      context.read<ThemeCubit>().setMode(ThemeMode.light),
                 ),
                 _ModeButton(
                   icon: Icons.settings_suggest_outlined,
                   label: 'System',
                   active: mode == ThemeMode.system,
-                  onTap: () => context.read<ThemeCubit>().setMode(ThemeMode.system),
+                  onTap: () =>
+                      context.read<ThemeCubit>().setMode(ThemeMode.system),
                 ),
                 _ModeButton(
                   icon: Icons.dark_mode_rounded,
                   label: 'Dark',
                   active: mode == ThemeMode.dark,
-                  onTap: () => context.read<ThemeCubit>().setMode(ThemeMode.dark),
+                  onTap: () =>
+                      context.read<ThemeCubit>().setMode(ThemeMode.dark),
                 ),
               ],
             ),
@@ -1011,9 +1018,7 @@ class _ModeButton extends StatelessWidget {
               Icon(
                 icon,
                 size: 18,
-                color: active
-                    ? Colors.white
-                    : AppColors.textSecondary(context),
+                color: active ? Colors.white : AppColors.textSecondary(context),
               ),
               const SizedBox(height: 2),
               Text(
@@ -1021,7 +1026,8 @@ class _ModeButton extends StatelessWidget {
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
-                  color: active ? Colors.white : AppColors.textSecondary(context),
+                  color:
+                      active ? Colors.white : AppColors.textSecondary(context),
                 ),
               ),
             ],

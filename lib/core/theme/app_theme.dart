@@ -1,4 +1,4 @@
-﻿// lib/core/theme/app_theme.dart
+// lib/core/theme/app_theme.dart
 //
 // MUST StarTrack â€” Theme Configuration
 //
@@ -32,15 +32,17 @@ abstract final class AppTheme {
     return base.copyWith(
       // â”€â”€ Colour Scheme â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       colorScheme: const ColorScheme.light(
-        primary: AppColors.primary,
-        onPrimary: Colors.white,
-        primaryContainer: AppColors.primaryTint20,
-        onPrimaryContainer: AppColors.primaryDark,
-        secondary: AppColors.primary,
+        primary: AppColors.institutionalGreen,
+        onPrimary: AppColors.institutionalTextDark,
+        primaryContainer: Color(0xFFDDEDC6),
+        onPrimaryContainer: AppColors.institutionalTextDark,
+        secondary: AppColors.institutionalBlue,
         onSecondary: Colors.white,
+        tertiary: AppColors.institutionalYellow,
+        onTertiary: AppColors.institutionalTextDark,
         surface: AppColors.surfaceLight,
         onSurface: AppColors.textPrimaryLight,
-        surfaceContainerHighest: AppColors.backgroundLight,
+        surfaceContainerHighest: AppColors.institutionalBackground,
         error: AppColors.danger,
         onError: Colors.white,
         outline: AppColors.borderLight,
@@ -77,21 +79,23 @@ abstract final class AppTheme {
       // â”€â”€ Bottom Navigation Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: AppColors.surfaceLight,
-        indicatorColor: AppColors.primaryTint10,
+        indicatorColor: AppColors.institutionalGreen.withValues(alpha: 0.14),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final isSelected = states.contains(WidgetState.selected);
           return GoogleFonts.plusJakartaSans(
             fontSize: 11,
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
             color: isSelected
-                ? AppColors.primary
+                ? AppColors.institutionalGreen
                 : AppColors.textSecondaryLight,
           );
         }),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           final isSelected = states.contains(WidgetState.selected);
           return IconThemeData(
-            color: isSelected ? AppColors.primary : AppColors.textSecondaryLight,
+            color: isSelected
+                ? AppColors.institutionalGreen
+                : AppColors.textSecondaryLight,
             size: AppDimensions.iconMd,
           );
         }),
@@ -181,9 +185,10 @@ abstract final class AppTheme {
       // â”€â”€ Elevated Button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          minimumSize: const Size(double.infinity, AppDimensions.touchTargetMin),
+          backgroundColor: AppColors.institutionalGreen,
+          foregroundColor: AppColors.institutionalTextDark,
+          minimumSize:
+              const Size(double.infinity, AppDimensions.touchTargetMin),
           elevation: 0,
           shadowColor: Colors.transparent,
           shape: RoundedRectangleBorder(
@@ -197,12 +202,30 @@ abstract final class AppTheme {
         ),
       ),
 
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.institutionalYellow,
+          foregroundColor: AppColors.institutionalTextDark,
+          minimumSize:
+              const Size(double.infinity, AppDimensions.touchTargetMin),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+          ),
+          textStyle: GoogleFonts.plusJakartaSans(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+
       // â”€â”€ Outlined Button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.primary,
-          minimumSize: const Size(double.infinity, AppDimensions.touchTargetMin),
-          side: const BorderSide(color: AppColors.primary, width: 1.2),
+          foregroundColor: AppColors.institutionalGreen,
+          minimumSize:
+              const Size(double.infinity, AppDimensions.touchTargetMin),
+          side:
+              const BorderSide(color: AppColors.institutionalGreen, width: 1.2),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
           ),
@@ -216,7 +239,7 @@ abstract final class AppTheme {
       // â”€â”€ Text Button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: AppColors.primary,
+          foregroundColor: AppColors.institutionalBlue,
           textStyle: GoogleFonts.plusJakartaSans(
             fontSize: 14,
             fontWeight: FontWeight.w600,
@@ -226,13 +249,14 @@ abstract final class AppTheme {
 
       // â”€â”€ Chip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       chipTheme: ChipThemeData(
-        backgroundColor: AppColors.primaryTint10,
+        backgroundColor: AppColors.institutionalGreen.withValues(alpha: 0.16),
         labelStyle: GoogleFonts.plusJakartaSans(
           fontSize: 12,
-          fontWeight: FontWeight.w500,
-          color: AppColors.primary,
+          fontWeight: FontWeight.w600,
+          color: AppColors.institutionalTextDark,
         ),
-        side: BorderSide(color: AppColors.primary.withValues(alpha: 0.15)),
+        side: BorderSide(
+            color: AppColors.institutionalGreen.withValues(alpha: 0.34)),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
         ),
@@ -298,8 +322,8 @@ abstract final class AppTheme {
 
       // â”€â”€ FloatingActionButton â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
+        backgroundColor: AppColors.institutionalYellow,
+        foregroundColor: AppColors.institutionalTextDark,
         elevation: 2,
         shape: CircleBorder(),
       ),
@@ -324,12 +348,14 @@ abstract final class AppTheme {
     return lightTheme.copyWith(
       brightness: Brightness.dark,
       colorScheme: const ColorScheme.dark(
-        primary: AppColors.primary,
-        onPrimary: Colors.white,
-        primaryContainer: Color(0xFF0D2B6E),
-        onPrimaryContainer: Color(0xFFBBCCF8),
-        secondary: AppColors.primary,
+        primary: AppColors.institutionalGreen,
+        onPrimary: AppColors.institutionalTextDark,
+        primaryContainer: Color(0xFF365022),
+        onPrimaryContainer: Color(0xFFE2F2CE),
+        secondary: AppColors.institutionalBlue,
         onSecondary: Colors.white,
+        tertiary: AppColors.institutionalYellow,
+        onTertiary: AppColors.institutionalTextDark,
         surface: AppColors.surfaceDark,
         onSurface: AppColors.textPrimaryDark,
         surfaceContainerHighest: AppColors.backgroundDark,
@@ -338,7 +364,6 @@ abstract final class AppTheme {
         outline: AppColors.borderDark,
       ),
       scaffoldBackgroundColor: AppColors.backgroundDark,
-
       appBarTheme: lightTheme.appBarTheme.copyWith(
         backgroundColor: AppColors.surfaceDark.withValues(alpha: 0.92),
         foregroundColor: AppColors.textPrimaryDark,
@@ -353,29 +378,29 @@ abstract final class AppTheme {
         ),
         systemOverlayStyle: SystemUiOverlayStyle.light,
       ),
-
       navigationBarTheme: lightTheme.navigationBarTheme.copyWith(
         backgroundColor: AppColors.surfaceDark,
-        indicatorColor: AppColors.primaryTint20,
+        indicatorColor: AppColors.institutionalGreen.withValues(alpha: 0.22),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final isSelected = states.contains(WidgetState.selected);
           return GoogleFonts.plusJakartaSans(
             fontSize: 11,
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
             color: isSelected
-                ? AppColors.primary
+                ? AppColors.institutionalGreen
                 : AppColors.textSecondaryDark,
           );
         }),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           final isSelected = states.contains(WidgetState.selected);
           return IconThemeData(
-            color: isSelected ? AppColors.primary : AppColors.textSecondaryDark,
+            color: isSelected
+                ? AppColors.institutionalGreen
+                : AppColors.textSecondaryDark,
             size: AppDimensions.iconMd,
           );
         }),
       ),
-
       cardTheme: lightTheme.cardTheme.copyWith(
         color: AppColors.surfaceDark,
         shape: RoundedRectangleBorder(
@@ -386,7 +411,6 @@ abstract final class AppTheme {
           ),
         ),
       ),
-
       inputDecorationTheme: lightTheme.inputDecorationTheme.copyWith(
         fillColor: AppColors.surfaceDark,
         hintStyle: GoogleFonts.plusJakartaSans(
@@ -402,18 +426,61 @@ abstract final class AppTheme {
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
           borderSide: BorderSide(
-            color: AppColors.primary.withValues(alpha: 0.20),
+            color: AppColors.institutionalGreen.withValues(alpha: 0.30),
             width: AppDimensions.cardBorderWidth,
           ),
         ),
       ),
-
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.institutionalGreen,
+          foregroundColor: AppColors.institutionalTextDark,
+          minimumSize:
+              const Size(double.infinity, AppDimensions.touchTargetMin),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+          ),
+          textStyle: GoogleFonts.plusJakartaSans(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.01,
+          ),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.institutionalYellow,
+          foregroundColor: AppColors.institutionalTextDark,
+          minimumSize:
+              const Size(double.infinity, AppDimensions.touchTargetMin),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+          ),
+          textStyle: GoogleFonts.plusJakartaSans(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+      chipTheme: lightTheme.chipTheme.copyWith(
+        backgroundColor: AppColors.institutionalGreen.withValues(alpha: 0.28),
+        labelStyle: GoogleFonts.plusJakartaSans(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: Colors.white,
+        ),
+        side: BorderSide(
+            color: AppColors.institutionalGreen.withValues(alpha: 0.42)),
+      ),
+      floatingActionButtonTheme: lightTheme.floatingActionButtonTheme.copyWith(
+        backgroundColor: AppColors.institutionalYellow,
+        foregroundColor: AppColors.institutionalTextDark,
+      ),
       dividerTheme: const DividerThemeData(
         color: AppColors.borderDark,
         thickness: 0.8,
         space: 0,
       ),
-
       dialogTheme: lightTheme.dialogTheme.copyWith(
         backgroundColor: AppColors.surfaceDark,
         titleTextStyle: GoogleFonts.plusJakartaSans(
@@ -427,20 +494,16 @@ abstract final class AppTheme {
           height: 1.5,
         ),
       ),
-
       bottomSheetTheme: lightTheme.bottomSheetTheme.copyWith(
         backgroundColor: AppColors.surfaceDark,
       ),
-
       snackBarTheme: lightTheme.snackBarTheme.copyWith(
         backgroundColor: AppColors.surfaceDark2,
       ),
-
       iconTheme: const IconThemeData(
         color: AppColors.textSecondaryDark,
         size: AppDimensions.iconMd,
       ),
-
       textTheme: _buildTextTheme(Brightness.dark),
     );
   }
@@ -533,4 +596,3 @@ abstract final class AppTheme {
     );
   }
 }
-

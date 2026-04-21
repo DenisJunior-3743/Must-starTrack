@@ -84,6 +84,7 @@ class PostDao {
     int? myRatingStars,
     bool? isFollowingAuthor,
     bool? hasCollaborationRequest,
+    bool? isSavedByMe,
   }) async {
     final db = await _db.database;
     final rawMap = <String, Object?>{
@@ -93,6 +94,7 @@ class PostDao {
         'is_following_author': isFollowingAuthor ? 1 : 0,
       if (hasCollaborationRequest != null)
         'has_collaboration_request': hasCollaborationRequest ? 1 : 0,
+      if (isSavedByMe != null) 'is_saved_by_me': isSavedByMe ? 1 : 0,
       'updated_at': DateTime.now().toIso8601String(),
       'sync_status': 0,
     };
@@ -166,7 +168,8 @@ class PostDao {
     final existing = await db.query(
       DatabaseSchema.tableCollabRequests,
       columns: ['id'],
-      where: 'sender_id = ? AND receiver_id = ? AND post_id = ? AND COALESCE(status, ?) = ?',
+      where:
+          'sender_id = ? AND receiver_id = ? AND post_id = ? AND COALESCE(status, ?) = ?',
       whereArgs: [senderId, receiverId, postId, 'pending', 'pending'],
       limit: 1,
     );
@@ -359,7 +362,8 @@ class PostDao {
     if (groupsOnly && postColumns.contains('group_id')) {
       conditions.add("COALESCE(p.group_id, '') != ''");
     }
-    if (filterGroupId != null && filterGroupId.isNotEmpty &&
+    if (filterGroupId != null &&
+        filterGroupId.isNotEmpty &&
         postColumns.contains('group_id')) {
       conditions.add('p.group_id = ?');
       args.add(filterGroupId);
@@ -369,20 +373,20 @@ class PostDao {
 
     // Left-join user interaction state so we get per-user action flags in one query
     final likeJoin = currentUserId != null
-      ? "LEFT JOIN ${DatabaseSchema.tableLikes} lk ON lk.post_id = p.id AND lk.user_id = '$currentUserId'"
-      : '';
+        ? "LEFT JOIN ${DatabaseSchema.tableLikes} lk ON lk.post_id = p.id AND lk.user_id = '$currentUserId'"
+        : '';
     final dislikeJoin = currentUserId != null
-      ? "LEFT JOIN ${DatabaseSchema.tableDislikes} dlk ON dlk.post_id = p.id AND dlk.user_id = '$currentUserId'"
-      : '';
+        ? "LEFT JOIN ${DatabaseSchema.tableDislikes} dlk ON dlk.post_id = p.id AND dlk.user_id = '$currentUserId'"
+        : '';
     final followJoin = currentUserId != null
-      ? "LEFT JOIN ${DatabaseSchema.tableFollows} fl ON fl.followee_id = p.author_id AND fl.follower_id = '$currentUserId'"
-      : '';
+        ? "LEFT JOIN ${DatabaseSchema.tableFollows} fl ON fl.followee_id = p.author_id AND fl.follower_id = '$currentUserId'"
+        : '';
     final collabJoin = currentUserId != null
-      ? "LEFT JOIN ${DatabaseSchema.tableCollabRequests} cr ON cr.post_id = p.id AND cr.sender_id = '$currentUserId' AND COALESCE(cr.status, 'pending') = 'pending'"
-      : '';
+        ? "LEFT JOIN ${DatabaseSchema.tableCollabRequests} cr ON cr.post_id = p.id AND cr.sender_id = '$currentUserId' AND COALESCE(cr.status, 'pending') = 'pending'"
+        : '';
     final viewJoin = currentUserId != null
-      ? "LEFT JOIN ${DatabaseSchema.tableActivityLogs} vw ON vw.entity_id = p.id AND vw.user_id = '$currentUserId' AND vw.action = 'view_post' AND vw.entity_type = '${DatabaseSchema.tablePosts}'"
-      : '';
+        ? "LEFT JOIN ${DatabaseSchema.tableActivityLogs} vw ON vw.entity_id = p.id AND vw.user_id = '$currentUserId' AND vw.action = 'view_post' AND vw.entity_type = '${DatabaseSchema.tablePosts}'"
+        : '';
 
     final userNameColumn = userColumns.contains('display_name')
         ? 'display_name'
@@ -1264,12 +1268,12 @@ class PostDao {
       isArchived:
           parseBool(row['is_archived']) || (row['status'] == 'archived'),
       isLikedByMe: parseBool(row['is_liked_by_me']),
-        isDislikedByMe: parseBool(row['is_disliked_by_me']),
-        isRatedByMe: parseBool(row['is_rated_by_me']),
-        myRatingStars: parseInt(row['my_rating_stars']),
-        isFollowingAuthor: parseBool(row['is_following_author']),
-        hasCollaborationRequest: parseBool(row['has_collaboration_request']),
-        isViewedByMe: parseBool(row['is_viewed_by_me']),
+      isDislikedByMe: parseBool(row['is_disliked_by_me']),
+      isRatedByMe: parseBool(row['is_rated_by_me']),
+      myRatingStars: parseInt(row['my_rating_stars']),
+      isFollowingAuthor: parseBool(row['is_following_author']),
+      hasCollaborationRequest: parseBool(row['has_collaboration_request']),
+      isViewedByMe: parseBool(row['is_viewed_by_me']),
       areaOfExpertise: parseNullableString(row['area_of_expertise']),
       maxParticipants: row['max_participants'] != null
           ? parseInt(row['max_participants'])

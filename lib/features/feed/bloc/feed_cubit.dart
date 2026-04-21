@@ -276,7 +276,8 @@ class FeedCubit extends Cubit<FeedState> {
 
   // ── Load first page ────────────────────────────────────────────────────────
 
-  Future<void> ensureLoaded({Duration staleAfter = const Duration(minutes: 2)}) async {
+  Future<void> ensureLoaded(
+      {Duration staleAfter = const Duration(minutes: 2)}) async {
     _ensureAuthListener();
 
     final current = state;
@@ -305,8 +306,8 @@ class FeedCubit extends Cubit<FeedState> {
     bool forceSync = false,
   }) async {
     _ensureAuthListener();
-    final shouldForceSync =
-        forceSync || (state is FeedInitial && (_activeUserId?.isNotEmpty ?? false));
+    final shouldForceSync = forceSync ||
+        (state is FeedInitial && (_activeUserId?.isNotEmpty ?? false));
     _emitIfOpen(const FeedLoading());
     try {
       final requestedFilter = filter ?? const FeedFilter();
@@ -429,14 +430,19 @@ class FeedCubit extends Cubit<FeedState> {
     var hasMore = true;
     final currentUserId = _activeUserId;
 
+    var enforceFollowingOnly = filter.followingOnly;
     Set<String> followedAuthorIds = const <String>{};
-    if (filter.followingOnly) {
+    if (enforceFollowingOnly) {
       if (currentUserId == null || currentUserId.isEmpty) {
-        return const _FeedBatchResult(posts: <PostModel>[], hasMore: false);
-      }
-      followedAuthorIds = await _postDao.getFollowedUserIds(currentUserId);
-      if (followedAuthorIds.isEmpty) {
-        return const _FeedBatchResult(posts: <PostModel>[], hasMore: false);
+        debugPrint(
+          '[FeedCubit] followingOnly requested for guest; falling back to unfiltered feed.',
+        );
+        enforceFollowingOnly = false;
+      } else {
+        followedAuthorIds = await _postDao.getFollowedUserIds(currentUserId);
+        if (followedAuthorIds.isEmpty) {
+          return const _FeedBatchResult(posts: <PostModel>[], hasMore: false);
+        }
       }
     }
 
@@ -458,7 +464,7 @@ class FeedCubit extends Cubit<FeedState> {
       }
 
       var scopedPagePosts = pagePosts;
-      if (filter.followingOnly) {
+      if (enforceFollowingOnly) {
         scopedPagePosts = scopedPagePosts
             .where((post) => followedAuthorIds.contains(post.authorId))
             .toList(growable: false);
@@ -582,7 +588,8 @@ class FeedCubit extends Cubit<FeedState> {
         await _activityLogDao.getRecentCategorySignals(currentUserId);
     final recentSearchTerms =
         await _activityLogDao.getRecentSearchTerms(currentUserId);
-    final postRatingSignals = await _activityLogDao.getPostRatingSignalsForPosts(
+    final postRatingSignals =
+        await _activityLogDao.getPostRatingSignalsForPosts(
       posts.map((post) => post.id).toList(),
     );
     log.writeln(
@@ -590,7 +597,7 @@ class FeedCubit extends Cubit<FeedState> {
     log.writeln(
         '  Searches   : ${recentSearchTerms.isEmpty ? 'none yet' : recentSearchTerms.take(4).join(', ')}');
     log.writeln(
-      '  Ratings    : lecturer=${postRatingSignals.lecturerRatings.length}, student=${postRatingSignals.studentRatings.length}');
+        '  Ratings    : lecturer=${postRatingSignals.lecturerRatings.length}, student=${postRatingSignals.studentRatings.length}');
     log.writeln(
         '  Mode       : ${useHybrid ? 'hybrid (local + Gemini rerank)' : 'local scoring only'}');
     log.writeln('──────────────────────────────────────────────────────');
@@ -669,7 +676,8 @@ class FeedCubit extends Cubit<FeedState> {
       );
     }
 
-    log.writeln('  ✓ Serving  : ${fairnessAdjusted.length} posts (ranked order)');
+    log.writeln(
+        '  ✓ Serving  : ${fairnessAdjusted.length} posts (ranked order)');
     log.writeln('══════════════════════════════════════════════════════');
     debugPrint(log.toString());
 
@@ -688,8 +696,8 @@ class FeedCubit extends Cubit<FeedState> {
               ))
           .toList();
       _recLogDao.insertBatch(entries).catchError(
-        (e) => debugPrint('[FeedCubit] rec log failed: $e'),
-      );
+            (e) => debugPrint('[FeedCubit] rec log failed: $e'),
+          );
     }
 
     return fairnessAdjusted;
@@ -720,7 +728,8 @@ class FeedCubit extends Cubit<FeedState> {
     final otherFacultyVideos = <PostModel>[];
     for (final video in videos) {
       final postFaculty = video.faculty?.trim().toLowerCase();
-      if (postFaculty?.isNotEmpty == true && postFaculty != normalizedHomeFaculty) {
+      if (postFaculty?.isNotEmpty == true &&
+          postFaculty != normalizedHomeFaculty) {
         otherFacultyVideos.add(video);
       } else {
         sameFacultyVideos.add(video);
@@ -752,7 +761,9 @@ class FeedCubit extends Cubit<FeedState> {
     }
 
     final rebuilt = List<PostModel>.from(posts);
-    for (var i = 0; i < videoIndexes.length && i < reorderedVideos.length; i++) {
+    for (var i = 0;
+        i < videoIndexes.length && i < reorderedVideos.length;
+        i++) {
       rebuilt[videoIndexes[i]] = reorderedVideos[i];
     }
     return rebuilt;
@@ -813,7 +824,8 @@ class FeedCubit extends Cubit<FeedState> {
       myRatingStars: safeStars,
     );
 
-    final updatedPosts = List<PostModel>.from(current.posts)..[index] = optimistic;
+    final updatedPosts = List<PostModel>.from(current.posts)
+      ..[index] = optimistic;
     _emitIfOpen(current.copyWith(posts: updatedPosts));
 
     try {
@@ -833,7 +845,8 @@ class FeedCubit extends Cubit<FeedState> {
       await _syncQueue.enqueue(
         operation: 'create',
         entity: 'post_ratings',
-        entityId: '${currentUserId}_${post.id}_${DateTime.now().millisecondsSinceEpoch}',
+        entityId:
+            '${currentUserId}_${post.id}_${DateTime.now().millisecondsSinceEpoch}',
         payload: {
           'post_id': post.id,
           'user_id': currentUserId,
@@ -879,10 +892,12 @@ class FeedCubit extends Cubit<FeedState> {
       commentCount: original.commentCount + 1,
     );
 
-    final updatedPosts = List<PostModel>.from(current.posts)..[index] = optimistic;
+    final updatedPosts = List<PostModel>.from(current.posts)
+      ..[index] = optimistic;
     _emitIfOpen(current.copyWith(posts: updatedPosts));
-    
-    debugPrint('[FeedCubit] Comment added to post=$postId new count=${optimistic.commentCount}');
+
+    debugPrint(
+        '[FeedCubit] Comment added to post=$postId new count=${optimistic.commentCount}');
   }
 
   Future<void> recordPostView(String postId) async {
@@ -924,7 +939,8 @@ class FeedCubit extends Cubit<FeedState> {
       isViewedByMe: true,
       viewCount: original.viewCount + 1,
     );
-    final updatedPosts = List<PostModel>.from(current.posts)..[index] = optimistic;
+    final updatedPosts = List<PostModel>.from(current.posts)
+      ..[index] = optimistic;
     _emitIfOpen(current.copyWith(posts: updatedPosts));
     _traceAction(
       'view',
@@ -1023,7 +1039,8 @@ class FeedCubit extends Cubit<FeedState> {
   }
 
   /// Sets collaboration request state and emits updated post
-  Future<void> requestCollaborationWithPost(String postId, {String? message}) async {
+  Future<void> requestCollaborationWithPost(String postId,
+      {String? message}) async {
     final current = state;
     if (current is! FeedLoaded) return;
     final currentUserId = _activeUserId;
@@ -1046,7 +1063,8 @@ class FeedCubit extends Cubit<FeedState> {
       hasCollaborationRequest: true,
     );
 
-    final updatedPosts = List<PostModel>.from(current.posts)..[index] = optimistic;
+    final updatedPosts = List<PostModel>.from(current.posts)
+      ..[index] = optimistic;
     _emitIfOpen(current.copyWith(posts: updatedPosts));
     _traceAction(
       'collaborate',
@@ -1126,7 +1144,8 @@ class FeedCubit extends Cubit<FeedState> {
       isFollowingAuthor: true,
     );
 
-    final updatedPosts = List<PostModel>.from(current.posts)..[index] = optimistic;
+    final updatedPosts = List<PostModel>.from(current.posts)
+      ..[index] = optimistic;
     _emitIfOpen(current.copyWith(posts: updatedPosts));
     _traceAction(
       'follow',
@@ -1285,7 +1304,8 @@ class FeedCubit extends Cubit<FeedState> {
       final updated = List<PostModel>.from(current.posts)..[index] = latest;
       _emitIfOpen(current.copyWith(posts: updated));
     } catch (e) {
-      debugPrint('[FeedCubit] refreshPostFromLocal failed for post=$postId: $e');
+      debugPrint(
+          '[FeedCubit] refreshPostFromLocal failed for post=$postId: $e');
     }
   }
 
@@ -1393,6 +1413,52 @@ class FeedCubit extends Cubit<FeedState> {
     }
   }
 
+  Future<void> toggleSavePost(String postId) async {
+    final current = state;
+    if (current is! FeedLoaded) return;
+    final currentUserId = _activeUserId;
+    if (currentUserId == null || currentUserId.isEmpty) {
+      debugPrint(
+        '[FeedCubit] Ignoring save for post=$postId because no authenticated user is available.',
+      );
+      return;
+    }
+
+    final index = current.posts.indexWhere((p) => p.id == postId);
+    if (index == -1) return;
+
+    final original = current.posts[index];
+    final wasSaved = original.isSavedByMe;
+    final optimistic = original.copyWith(isSavedByMe: !wasSaved);
+
+    final updatedPosts = List<PostModel>.from(current.posts)
+      ..[index] = optimistic;
+    _emitIfOpen(current.copyWith(posts: updatedPosts));
+
+    try {
+      await _postDao.updatePostActionState(
+        postId: postId,
+        isSavedByMe: !wasSaved,
+      );
+      await _activityLogDao.logAction(
+        userId: currentUserId,
+        action: wasSaved ? 'unsave_post' : 'save_post',
+        entityType: 'posts',
+        entityId: postId,
+        metadata: {
+          'post_title': original.title,
+          'author_id': original.authorId
+        },
+      );
+    } catch (e) {
+      debugPrint('[FeedCubit] Save toggle failed for post=$postId: $e');
+      if (state is FeedLoaded) {
+        final rolled = (state as FeedLoaded).posts.toList()..[index] = original;
+        _emitIfOpen((state as FeedLoaded).copyWith(posts: rolled));
+      }
+    }
+  }
+
   // ── Optimistic Dislike ─────────────────────────────────────────────────────
 
   Future<void> dislikePost(String postId) async {
@@ -1413,7 +1479,8 @@ class FeedCubit extends Cubit<FeedState> {
           : original.dislikeCount + 1,
     );
 
-    final updatedPosts = List<PostModel>.from(current.posts)..[index] = optimistic;
+    final updatedPosts = List<PostModel>.from(current.posts)
+      ..[index] = optimistic;
     _emitIfOpen(current.copyWith(posts: updatedPosts));
 
     try {
@@ -1426,7 +1493,10 @@ class FeedCubit extends Cubit<FeedState> {
         action: wasDisliked ? 'undislike_post' : 'dislike_post',
         entityType: 'posts',
         entityId: postId,
-        metadata: {'post_title': original.title, 'author_id': original.authorId},
+        metadata: {
+          'post_title': original.title,
+          'author_id': original.authorId
+        },
       );
       await _syncQueue.enqueue(
         operation: wasDisliked ? 'delete' : 'create',

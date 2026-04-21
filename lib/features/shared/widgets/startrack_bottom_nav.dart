@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/constants/app_colors.dart';
@@ -78,12 +78,12 @@ class StarTrackBottomNav extends StatelessWidget {
                     width: 52,
                     height: 52,
                     decoration: const BoxDecoration(
-                      color: AppColors.primary,
+                      color: AppColors.institutionalYellow,
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
                       Icons.add_rounded,
-                      color: Colors.white,
+                      color: AppColors.institutionalTextDark,
                       size: 34,
                     ),
                   ),
@@ -131,7 +131,7 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const activeColor = AppColors.primary;
+    const activeColor = AppColors.institutionalGreen;
     final idleColor = AppColors.textSecondary(context);
 
     return InkWell(
@@ -167,4 +167,3 @@ class _NavItem extends StatelessWidget {
     );
   }
 }
-
