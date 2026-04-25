@@ -1,0 +1,17 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "StarTrack Web Dashboard",
+      "request": "launch",
+      "type": "dart",
+      "deviceId": "chrome",
+      "program": "lib/main.dart",
+      "preLaunchTask": "Start Local OpenAI Proxy",
+      "toolArgs": [
+        "--dart-define=OPENAI_PROXY_URL=http://127.0.0.1:8787/openAiRerank",
+        "--dart-define=FIREBASE_PROJECT_ID=star-track-4ba2b"
+      ]
+    }
+  ]
+}

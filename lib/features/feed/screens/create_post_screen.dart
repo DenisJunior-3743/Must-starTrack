@@ -46,6 +46,7 @@ import '../../../data/remote/sync_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
 import '../../shared/hci_components/st_form_widgets.dart';
 import '../bloc/feed_cubit.dart';
+import 'my_projects_screen.dart';
 
 class CreatePostScreen extends StatefulWidget {
   const CreatePostScreen({
@@ -673,6 +674,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     );
 
     if (result.savedLocally) {
+      MyProjectsScreen.invalidateCache();
       context.pop(true);
     }
   }
@@ -704,7 +706,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         syncedRemotely: false,
         message: wasOffline
             ? 'Changes saved locally and will sync when you are back online.'
-            : 'Changes saved locally. Firebase sync is still pending.',
+            : 'Post updated. Changes will sync to the server shortly.',
       );
     } catch (error) {
       debugPrint('Update post error: $error');

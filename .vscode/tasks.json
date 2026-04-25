@@ -1,0 +1,33 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start Local OpenAI Proxy",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "$projectRoot = 'D:\\start_track\\must_startrack'; Set-Location (Join-Path $projectRoot 'functions'); $env:OPENAI_API_KEY = (Get-Content (Join-Path $projectRoot 'Open API.txt') -Raw).Trim(); if ([string]::IsNullOrWhiteSpace($env:OPENAI_API_KEY)) { throw 'Open API.txt is empty'; }; node .\\local-proxy.js"
+      ],
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "custom",
+        "pattern": {
+          "regexp": "."
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*",
+          "endsPattern": "Local OpenAI proxy listening on http://127.0.0.1:8787/openAiRerank"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    }
+  ]
+}

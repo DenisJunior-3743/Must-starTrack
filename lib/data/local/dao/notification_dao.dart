@@ -152,6 +152,16 @@ class NotificationDao {
     NotificationModel notification, {
     bool checkDuplicate = false,
   }) async {
+    if (notification.senderId != null &&
+        notification.senderId!.trim().isNotEmpty &&
+        notification.senderId!.trim() == notification.userId.trim()) {
+      debugPrint(
+        '[NotificationDao] Skipping self notification '
+        'id=${notification.id} user=${notification.userId}',
+      );
+      return;
+    }
+
     final db = await _db.database;
     
     // Skip if duplicate check is enabled and a similar notification exists
@@ -194,7 +204,10 @@ class NotificationDao {
     final db = await _db.database;
 
     final args = <dynamic>[userId];
-    final filters = <String>['user_id = ?'];
+    final filters = <String>[
+      'user_id = ?',
+      "COALESCE(sender_id, '') != user_id",
+    ];
 
     if (type != null) {
       filters.add('type = ?');
@@ -342,7 +355,9 @@ class NotificationDao {
     final result = await db.rawQuery('''
       SELECT COUNT(*) AS cnt
       FROM notifications
-      WHERE user_id = ? AND is_read = 0
+      WHERE user_id = ?
+        AND is_read = 0
+        AND COALESCE(sender_id, '') != user_id
     ''', [userId]);
     return result.first['cnt'] as int? ?? 0;
   }

@@ -1,4 +1,4 @@
-﻿// lib/features/discover/screens/discover_screen.dart
+// lib/features/discover/screens/discover_screen.dart
 //
 // MUST StarTrack â€” Discover Screen (Phase 3)
 //
@@ -23,6 +23,7 @@ import '../../../core/constants/app_dimensions.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_names.dart';
 import '../../../data/local/dao/activity_log_dao.dart';
+import '../../../data/local/dao/comment_dao.dart';
 import '../../../data/local/dao/post_dao.dart';
 import '../../../data/local/dao/user_dao.dart';
 import '../../../data/models/post_model.dart';
@@ -54,7 +55,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   List<String> _filterSkills = [];
 
   // Recent searches (would persist via SharedPreferences in Phase 4)
-  List<String> _recentSearches = ['AI Ethics', 'Blockchain Research', 'Flutter'];
+  List<String> _recentSearches = [
+    'AI Ethics',
+    'Blockchain Research',
+    'Flutter'
+  ];
 
   static const _trendingSkills = [
     ('AI/ML', Icons.psychology_rounded, Color(0xFF1152D4)),
@@ -65,12 +70,21 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     ('Cloud', Icons.cloud_queue_rounded, Color(0xFF0284C7)),
   ];
 
-  static const _categories = ['Research', 'Mobile App', 'Hardware', 'Data Analysis',
-    'Innovation', 'Software'];
+  static const _categories = [
+    'Research',
+    'Mobile App',
+    'Hardware',
+    'Data Analysis',
+    'Innovation',
+    'Software'
+  ];
 
   static const _faculties = [
-    'Computing & IT', 'Engineering', 'Business Management',
-    'Applied Sciences', 'Medicine',
+    'Computing & IT',
+    'Engineering',
+    'Business Management',
+    'Applied Sciences',
+    'Medicine',
   ];
 
   @override
@@ -101,15 +115,20 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       if (currentUserId != null && currentUserId.isNotEmpty) {
         final currentUser = await sl<UserDao>().getUserById(currentUserId);
         if (currentUser != null && currentUser.profile != null) {
-          final recentCategories =
-              await sl<ActivityLogDao>().getRecentCategorySignals(currentUserId);
+          final recentCategories = await sl<ActivityLogDao>()
+              .getRecentCategorySignals(currentUserId);
           final recentTerms =
               await sl<ActivityLogDao>().getRecentSearchTerms(currentUserId);
+          final commentSnippetsByPost =
+              await sl<CommentDao>().getRecentCommentSnippetsForPosts(
+            results.map((post) => post.id).toList(),
+          );
           final ranked = sl<RecommenderService>().rankLocally(
             user: currentUser,
             candidates: results,
             recentlyViewedCategories: recentCategories,
             recentSearchTerms: recentTerms,
+            commentSnippetsByPost: commentSnippetsByPost,
           );
           results = ranked.map((entry) => entry.post).toList();
         }
@@ -121,7 +140,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           );
         }
       }
-      setState(() { _results = results; _loading = false; });
+      setState(() {
+        _results = results;
+        _loading = false;
+      });
     } catch (_) {
       setState(() => _loading = false);
     }
@@ -137,7 +159,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     setState(() {
       _recentSearches.remove(q);
       _recentSearches.insert(0, q);
-      if (_recentSearches.length > 8) _recentSearches = _recentSearches.take(8).toList();
+      if (_recentSearches.length > 8) {
+        _recentSearches = _recentSearches.take(8).toList();
+      }
     });
   }
 
@@ -151,7 +175,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             pinned: true,
             floating: true,
             snap: true,
-            backgroundColor: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.95),
+            backgroundColor: Theme.of(context)
+                .scaffoldBackgroundColor
+                .withValues(alpha: 0.95),
             elevation: 0,
             expandedHeight: 132,
             flexibleSpace: FlexibleSpaceBar(
@@ -164,13 +190,16 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                       Row(
                         children: [
                           Text('Discover',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 24, fontWeight: FontWeight.w700,
-                              color: AppColors.primary, letterSpacing: -0.3)),
+                              style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.primary,
+                                  letterSpacing: -0.3)),
                           const Spacer(),
                           IconButton(
                             icon: const Icon(Icons.notifications_outlined),
-                            onPressed: () => context.push(RouteNames.notifications),
+                            onPressed: () =>
+                                context.push(RouteNames.notifications),
                           ),
                         ],
                       ),
@@ -186,10 +215,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                                 _search(q);
                               },
                               decoration: InputDecoration(
-                                hintText: 'Search projects, skills, or students',
-                                hintStyle: GoogleFonts.plusJakartaSans(fontSize: 13),
+                                hintText:
+                                    'Search projects, skills, or students',
+                                hintStyle:
+                                    GoogleFonts.plusJakartaSans(fontSize: 13),
                                 prefixIcon: const Icon(Icons.search_rounded),
-                                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                                contentPadding:
+                                    const EdgeInsets.symmetric(vertical: 12),
                               ),
                             ),
                           ),
@@ -197,16 +229,22 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                           // Filter toggle button
                           Material(
                             color: AppColors.primary,
-                            borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+                            borderRadius:
+                                BorderRadius.circular(AppDimensions.radiusMd),
                             child: InkWell(
-                              onTap: () => setState(() => _showFilters = !_showFilters),
-                              borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+                              onTap: () =>
+                                  setState(() => _showFilters = !_showFilters),
+                              borderRadius:
+                                  BorderRadius.circular(AppDimensions.radiusMd),
                               child: Container(
-                                width: 48, height: 48,
+                                width: 48,
+                                height: 48,
                                 alignment: Alignment.center,
                                 child: Icon(
-                                  _showFilters ? Icons.tune_rounded : Icons.tune_rounded,
-                                  color: Colors.white),
+                                    _showFilters
+                                        ? Icons.tune_rounded
+                                        : Icons.tune_rounded,
+                                    color: Colors.white),
                               ),
                             ),
                           ),
@@ -250,25 +288,28 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   duration: const Duration(milliseconds: 300),
                   curve: Curves.easeInOut,
                   child: _showFilters
-                    ? _AdvancedFilters(
-                        faculties: _faculties,
-                        categories: _categories,
-                        selectedFaculty: _filterFaculty,
-                        selectedCategory: _filterCategory,
-                        selectedRecency: _filterRecency,
-                        selectedSkills: _filterSkills,
-                        onFacultyChanged: (v) => setState(() => _filterFaculty = v),
-                        onCategoryChanged: (v) => setState(() {
-                          _filterCategory = _filterCategory == v ? null : v;
-                        }),
-                        onRecencyChanged: (v) => setState(() => _filterRecency = v),
-                        onSkillsChanged: (v) => setState(() => _filterSkills = v),
-                        onApply: () {
-                          setState(() => _showFilters = false);
-                          _search(_searchCtrl.text);
-                        },
-                      )
-                    : const SizedBox.shrink(),
+                      ? _AdvancedFilters(
+                          faculties: _faculties,
+                          categories: _categories,
+                          selectedFaculty: _filterFaculty,
+                          selectedCategory: _filterCategory,
+                          selectedRecency: _filterRecency,
+                          selectedSkills: _filterSkills,
+                          onFacultyChanged: (v) =>
+                              setState(() => _filterFaculty = v),
+                          onCategoryChanged: (v) => setState(() {
+                            _filterCategory = _filterCategory == v ? null : v;
+                          }),
+                          onRecencyChanged: (v) =>
+                              setState(() => _filterRecency = v),
+                          onSkillsChanged: (v) =>
+                              setState(() => _filterSkills = v),
+                          onApply: () {
+                            setState(() => _showFilters = false);
+                            _search(_searchCtrl.text);
+                          },
+                        )
+                      : const SizedBox.shrink(),
                 ),
 
                 // Results header
@@ -280,34 +321,47 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         const Icon(Icons.grid_view_rounded,
                             size: 18, color: AppColors.primary),
                         const SizedBox(width: 8),
-                        Text(_loading ? 'Searchingâ€¦' : '${_results.length} results',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 14, fontWeight: FontWeight.w700)),
+                        Text(
+                            _loading
+                                ? 'Searchingâ€¦'
+                                : '${_results.length} results',
+                            style: GoogleFonts.plusJakartaSans(
+                                fontSize: 14, fontWeight: FontWeight.w700)),
                       ],
                     ),
                   ),
 
                 // Post type filter chips
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: Row(
                     children: [
                       _TypeChip(
                         label: 'All',
                         selected: _filterType == null,
-                        onTap: () { setState(() => _filterType = null); _search(_searchCtrl.text); },
+                        onTap: () {
+                          setState(() => _filterType = null);
+                          _search(_searchCtrl.text);
+                        },
                       ),
                       const SizedBox(width: 8),
                       _TypeChip(
                         label: 'Projects',
                         selected: _filterType == 'project',
-                        onTap: () { setState(() => _filterType = 'project'); _search(_searchCtrl.text); },
+                        onTap: () {
+                          setState(() => _filterType = 'project');
+                          _search(_searchCtrl.text);
+                        },
                       ),
                       const SizedBox(width: 8),
                       _TypeChip(
                         label: 'Opportunities',
                         selected: _filterType == 'opportunity',
-                        onTap: () { setState(() => _filterType = 'opportunity'); _search(_searchCtrl.text); },
+                        onTap: () {
+                          setState(() => _filterType = 'opportunity');
+                          _search(_searchCtrl.text);
+                        },
                       ),
                     ],
                   ),
@@ -372,16 +426,19 @@ class _RecentSearches extends StatelessWidget {
           child: Row(
             children: [
               Text('RECENT SEARCHES',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 11, fontWeight: FontWeight.w700,
-                  color: AppColors.textSecondaryLight, letterSpacing: 0.08)),
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textSecondaryLight,
+                      letterSpacing: 0.08)),
               const Spacer(),
               TextButton(
                 onPressed: onClear,
                 child: Text('Clear All',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12, fontWeight: FontWeight.w600,
-                    color: AppColors.primary)),
+                    style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary)),
               ),
             ],
           ),
@@ -389,26 +446,33 @@ class _RecentSearches extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Wrap(
-            spacing: 8, runSpacing: 8,
-            children: items.map((q) => GestureDetector(
-              onTap: () => onTap(q),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceLight,
-                  borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.history_rounded, size: 14,
-                        color: AppColors.textSecondaryLight),
-                    const SizedBox(width: 6),
-                    Text(q, style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w500)),
-                  ],
-                ),
-              ),
-            )).toList(),
+            spacing: 8,
+            runSpacing: 8,
+            children: items
+                .map((q) => GestureDetector(
+                      onTap: () => onTap(q),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceLight,
+                          borderRadius:
+                              BorderRadius.circular(AppDimensions.radiusFull),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.history_rounded,
+                                size: 14, color: AppColors.textSecondaryLight),
+                            const SizedBox(width: 6),
+                            Text(q,
+                                style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 13, fontWeight: FontWeight.w500)),
+                          ],
+                        ),
+                      ),
+                    ))
+                .toList(),
           ),
         ),
         const SizedBox(height: 8),
@@ -435,9 +499,11 @@ class _TrendingSkills extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
           child: Text('TRENDING SKILLS',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 11, fontWeight: FontWeight.w700,
-              color: AppColors.textSecondaryLight, letterSpacing: 0.08)),
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textSecondaryLight,
+                  letterSpacing: 0.08)),
         ),
         SizedBox(
           height: 90,
@@ -453,7 +519,8 @@ class _TrendingSkills extends StatelessWidget {
                 child: Column(
                   children: [
                     Container(
-                      width: 56, height: 56,
+                      width: 56,
+                      height: 56,
                       decoration: BoxDecoration(
                         color: color.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(16),
@@ -462,8 +529,8 @@ class _TrendingSkills extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(label,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 10, fontWeight: FontWeight.w600)),
+                        style: GoogleFonts.plusJakartaSans(
+                            fontSize: 10, fontWeight: FontWeight.w600)),
                   ],
                 ),
               );
@@ -523,9 +590,11 @@ class _AdvancedFilters extends StatelessWidget {
           Row(
             children: [
               Text('Advanced Filters',
-                style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w700)),
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 16, fontWeight: FontWeight.w700)),
               const Spacer(),
-              const Icon(Icons.expand_less_rounded, color: AppColors.textSecondaryLight),
+              const Icon(Icons.expand_less_rounded,
+                  color: AppColors.textSecondaryLight),
             ],
           ),
           const SizedBox(height: 20),
@@ -535,10 +604,13 @@ class _AdvancedFilters extends StatelessWidget {
           DropdownButtonFormField<String?>(
             // ignore: deprecated_member_use
             initialValue: selectedFaculty,
-            decoration: const InputDecoration(contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
+            decoration: const InputDecoration(
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
             items: [
               const DropdownMenuItem(value: null, child: Text('All faculties')),
-              ...faculties.map((f) => DropdownMenuItem(value: f, child: Text(f))),
+              ...faculties
+                  .map((f) => DropdownMenuItem(value: f, child: Text(f))),
             ],
             onChanged: onFacultyChanged,
           ),
@@ -547,23 +619,30 @@ class _AdvancedFilters extends StatelessWidget {
           // Category grid
           const _FilterLabel('Project Category'),
           Wrap(
-            spacing: 8, runSpacing: 8,
+            spacing: 8,
+            runSpacing: 8,
             children: categories.map((cat) {
               final active = selectedCategory == cat;
               return GestureDetector(
                 onTap: () => onCategoryChanged(cat),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
-                    color: active ? AppColors.primaryTint10 : Colors.transparent,
+                    color:
+                        active ? AppColors.primaryTint10 : Colors.transparent,
                     border: Border.all(
-                      color: active ? AppColors.primary : AppColors.borderLight),
+                        color:
+                            active ? AppColors.primary : AppColors.borderLight),
                     borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
                   ),
                   child: Text(cat,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12, fontWeight: FontWeight.w600,
-                      color: active ? AppColors.primary : AppColors.textSecondaryLight)),
+                      style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: active
+                              ? AppColors.primary
+                              : AppColors.textSecondaryLight)),
                 ),
               );
             }).toList(),
@@ -583,11 +662,23 @@ class _AdvancedFilters extends StatelessWidget {
           const _FilterLabel('Recency'),
           Row(
             children: [
-              _RecencyBtn(label: 'Anytime', value: 'any', selected: selectedRecency, onTap: onRecencyChanged),
+              _RecencyBtn(
+                  label: 'Anytime',
+                  value: 'any',
+                  selected: selectedRecency,
+                  onTap: onRecencyChanged),
               const SizedBox(width: 8),
-              _RecencyBtn(label: 'Last 30 days', value: 'month', selected: selectedRecency, onTap: onRecencyChanged),
+              _RecencyBtn(
+                  label: 'Last 30 days',
+                  value: 'month',
+                  selected: selectedRecency,
+                  onTap: onRecencyChanged),
               const SizedBox(width: 8),
-              _RecencyBtn(label: 'Last 7 days', value: 'week', selected: selectedRecency, onTap: onRecencyChanged),
+              _RecencyBtn(
+                  label: 'Last 7 days',
+                  value: 'week',
+                  selected: selectedRecency,
+                  onTap: onRecencyChanged),
             ],
           ),
           const SizedBox(height: 20),
@@ -598,9 +689,10 @@ class _AdvancedFilters extends StatelessWidget {
             child: ElevatedButton(
               onPressed: onApply,
               style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16)),
+                  padding: const EdgeInsets.symmetric(vertical: 16)),
               child: Text('Apply Filters',
-                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 15)),
+                  style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w700, fontSize: 15)),
             ),
           ),
         ],
@@ -618,9 +710,11 @@ class _FilterLabel extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(label.toUpperCase(),
-        style: GoogleFonts.plusJakartaSans(
-          fontSize: 10, fontWeight: FontWeight.w700,
-          color: AppColors.textSecondaryLight, letterSpacing: 0.08)),
+          style: GoogleFonts.plusJakartaSans(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textSecondaryLight,
+              letterSpacing: 0.08)),
     );
   }
 }
@@ -632,8 +726,10 @@ class _RecencyBtn extends StatelessWidget {
   final ValueChanged<String> onTap;
 
   const _RecencyBtn({
-    required this.label, required this.value,
-    required this.selected, required this.onTap,
+    required this.label,
+    required this.value,
+    required this.selected,
+    required this.onTap,
   });
 
   @override
@@ -649,10 +745,11 @@ class _RecencyBtn extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
           ),
           child: Text(label,
-            textAlign: TextAlign.center,
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 11, fontWeight: FontWeight.w600,
-              color: active ? Colors.white : AppColors.textSecondaryLight)),
+              textAlign: TextAlign.center,
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: active ? Colors.white : AppColors.textSecondaryLight)),
         ),
       ),
     );
@@ -669,13 +766,16 @@ class _EmptyResults extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.search_off_rounded, size: 60, color: AppColors.primary),
+          const Icon(Icons.search_off_rounded,
+              size: 60, color: AppColors.primary),
           const SizedBox(height: 16),
           Text('No results for "$query"',
-            style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w700)),
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 16, fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           Text('Try different keywords or adjust filters.',
-            style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textSecondaryLight)),
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13, color: AppColors.textSecondaryLight)),
         ],
       ),
     );
@@ -686,7 +786,8 @@ class _TypeChip extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
-  const _TypeChip({required this.label, required this.selected, required this.onTap});
+  const _TypeChip(
+      {required this.label, required this.selected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -698,7 +799,7 @@ class _TypeChip extends StatelessWidget {
           color: selected ? AppColors.primary : AppColors.surfaceLight,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: selected ? AppColors.primary : AppColors.borderLight),
+              color: selected ? AppColors.primary : AppColors.borderLight),
         ),
         child: Text(
           label,
@@ -712,4 +813,3 @@ class _TypeChip extends StatelessWidget {
     );
   }
 }
-

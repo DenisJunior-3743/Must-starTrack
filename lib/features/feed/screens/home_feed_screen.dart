@@ -45,6 +45,7 @@ import '../../../data/local/dao/sync_queue_dao.dart';
 import '../../../data/local/dao/user_dao.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/models/user_model.dart';
+import '../../../data/remote/firestore_service.dart';
 import '../../../data/remote/recommender_service.dart';
 import '../../../data/remote/sync_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
@@ -199,6 +200,32 @@ String _bestDisplayName({String? displayName, String? email, String? userId}) {
 // Root screen
 // ─────────────────────────────────────────────────────────────────────────────
 
+class _GuestRemotePostStats {
+  final int likeCount;
+  final int commentCount;
+  final int shareCount;
+  final int viewCount;
+  final int joinCount;
+
+  const _GuestRemotePostStats({
+    required this.likeCount,
+    required this.commentCount,
+    required this.shareCount,
+    required this.viewCount,
+    required this.joinCount,
+  });
+
+  factory _GuestRemotePostStats.fromPost(PostModel post) {
+    return _GuestRemotePostStats(
+      likeCount: post.likeCount,
+      commentCount: post.commentCount,
+      shareCount: post.shareCount,
+      viewCount: post.viewCount,
+      joinCount: post.joinCount,
+    );
+  }
+}
+
 class HomeFeedScreen extends StatefulWidget {
   const HomeFeedScreen({super.key});
 
@@ -214,6 +241,82 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
   FeedCubit? _cubit;
   bool _controlsCollapsed = true;
   final bool _immersiveMode = false;
+  final Map<String, _GuestRemotePostStats> _guestRemoteStatsByPostId =
+      <String, _GuestRemotePostStats>{};
+  bool _guestStatsRefreshInFlight = false;
+  Set<String> _lastGuestStatsPostIds = const <String>{};
+  DateTime? _lastGuestStatsRefreshAt;
+
+  bool _samePostIdSet(Set<String> next) {
+    if (_lastGuestStatsPostIds.length != next.length) return false;
+    for (final id in next) {
+      if (!_lastGuestStatsPostIds.contains(id)) return false;
+    }
+    return true;
+  }
+
+  List<PostModel> _applyGuestRemoteStats(List<PostModel> posts) {
+    if (_guestRemoteStatsByPostId.isEmpty) return posts;
+    return posts.map((post) {
+      final stats = _guestRemoteStatsByPostId[post.id];
+      if (stats == null) return post;
+      return post.copyWith(
+        likeCount: stats.likeCount,
+        commentCount: stats.commentCount,
+        shareCount: stats.shareCount,
+        viewCount: stats.viewCount,
+        joinCount: stats.joinCount,
+      );
+    }).toList(growable: false);
+  }
+
+  Future<void> _refreshGuestRemoteStats(List<PostModel> posts) async {
+    if (_guestStatsRefreshInFlight) return;
+    if (posts.isEmpty) {
+      _lastGuestStatsPostIds = const <String>{};
+      _lastGuestStatsRefreshAt = null;
+      if (_guestRemoteStatsByPostId.isNotEmpty && mounted) {
+        setState(() => _guestRemoteStatsByPostId.clear());
+      }
+      return;
+    }
+
+    final targetIds = posts
+        .map((post) => post.id)
+        .where((id) => id.trim().isNotEmpty)
+        .take(120)
+        .toSet();
+    final refreshedRecently = _lastGuestStatsRefreshAt != null &&
+        DateTime.now().difference(_lastGuestStatsRefreshAt!) <
+            const Duration(seconds: 45);
+    if (targetIds.isEmpty || (_samePostIdSet(targetIds) && refreshedRecently)) {
+      return;
+    }
+
+    _guestStatsRefreshInFlight = true;
+    _lastGuestStatsPostIds = targetIds;
+    try {
+      final remotePosts = await sl<FirestoreService>().getRecentPosts(
+        limit: targetIds.length + 30,
+      );
+      final nextStats = <String, _GuestRemotePostStats>{};
+      for (final post in remotePosts) {
+        if (!targetIds.contains(post.id)) continue;
+        nextStats[post.id] = _GuestRemotePostStats.fromPost(post);
+      }
+      if (!mounted) return;
+      setState(() {
+        _guestRemoteStatsByPostId
+          ..clear()
+          ..addAll(nextStats);
+      });
+      _lastGuestStatsRefreshAt = DateTime.now();
+    } catch (error) {
+      debugPrint('[HomeFeed] Guest remote stats refresh failed: $error');
+    } finally {
+      _guestStatsRefreshInFlight = false;
+    }
+  }
 
   @override
   void initState() {
@@ -306,13 +409,19 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                               .where(_isGroupPost)
                               .toList(growable: false)
                           : state.posts;
+                      if (isGuest) {
+                        unawaited(_refreshGuestRemoteStats(scopedPosts));
+                      }
+                      final visiblePosts = isGuest
+                          ? _applyGuestRemoteStats(scopedPosts)
+                          : scopedPosts;
 
-                      final advertPool = scopedPosts
+                      final advertPool = visiblePosts
                           .where(_isAdvertPost)
                           .toList(growable: false);
                       final contentPool = state.filter.type == 'advert'
                           ? advertPool
-                          : scopedPosts
+                          : visiblePosts
                               .where((post) => !_isAdvertPost(post))
                               .toList(growable: false);
 
@@ -596,6 +705,21 @@ class _VideoFeedTabState extends State<_VideoFeedTab> {
   int _currentPage = 0;
   int _lastHapticPage = 0;
 
+  int _clampPage(int page, int length) {
+    if (length <= 0) return 0;
+    if (page < 0) return 0;
+    final last = length - 1;
+    return page > last ? last : page;
+  }
+
+  void _jumpToPageSilently(int page) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_pageCtrl.hasClients || widget.posts.isEmpty) return;
+      final target = _clampPage(page, widget.posts.length);
+      _pageCtrl.jumpToPage(target);
+    });
+  }
+
   Future<void> _onRefresh() async {
     await widget.cubit.refresh();
     if (!mounted) return;
@@ -621,6 +745,44 @@ class _VideoFeedTabState extends State<_VideoFeedTab> {
   void dispose() {
     _pageCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _VideoFeedTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.posts.isEmpty) {
+      if (_currentPage != 0) {
+        setState(() {
+          _currentPage = 0;
+          _lastHapticPage = 0;
+        });
+      }
+      return;
+    }
+
+    if (oldWidget.posts.isEmpty) {
+      final clamped = _clampPage(_currentPage, widget.posts.length);
+      if (clamped != _currentPage) {
+        setState(() => _currentPage = clamped);
+        _jumpToPageSilently(clamped);
+      }
+      _prefetchAround(clamped);
+      return;
+    }
+
+    final previousIndex = _clampPage(_currentPage, oldWidget.posts.length);
+    final activePostId = oldWidget.posts[previousIndex].id;
+    var nextIndex = widget.posts.indexWhere((post) => post.id == activePostId);
+    if (nextIndex < 0) {
+      nextIndex = _clampPage(previousIndex, widget.posts.length);
+    }
+
+    if (nextIndex != _currentPage) {
+      setState(() => _currentPage = nextIndex);
+      _jumpToPageSilently(nextIndex);
+    }
+
+    _prefetchAround(nextIndex);
   }
 
   void _prefetchAround(int currentIndex) {
@@ -717,6 +879,7 @@ class _VideoFeedTabState extends State<_VideoFeedTab> {
                 return AnimatedBuilder(
                   animation: _pageCtrl,
                   child: _VideoPage(
+                    key: ValueKey(post.id),
                     post: post,
                     isActive: i == _currentPage,
                     isGuest: widget.isGuest,
@@ -777,6 +940,7 @@ class _VideoPage extends StatefulWidget {
   final FeedCubit cubit;
 
   const _VideoPage({
+    super.key,
     required this.post,
     required this.isActive,
     required this.isGuest,
@@ -791,15 +955,19 @@ class _VideoPageState extends State<_VideoPage>
     with RouteAware, WidgetsBindingObserver {
   static const Duration _candidateInitTimeout = Duration(seconds: 8);
   static const Duration _inactiveDisposeDelay = Duration(seconds: 12);
+  static const Duration _viewRecordThreshold = Duration(seconds: 2);
   static const double _bottomNavHeight = 74;
 
   VideoPlayerController? _ctrl;
   ModalRoute<dynamic>? _modalRoute;
   Timer? _disposeTimer;
+  String _cachedLocation = '/';
+  Timer? _viewRecordTimer;
   bool _ready = false;
   bool _error = false;
   final bool _isMuted = false;
   bool _resumeOnForeground = false;
+  bool _viewRecorded = false;
   double? _downloadProgress; // null = not downloading; 0-1 = in progress
   bool _showSeekPreview = false;
   bool _clearDisplay = false;
@@ -824,6 +992,7 @@ class _VideoPageState extends State<_VideoPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _viewRecorded = widget.post.isViewedByMe;
     if (widget.isActive) {
       _cancelDeferredDispose();
       _initController();
@@ -840,8 +1009,10 @@ class _VideoPageState extends State<_VideoPage>
       }
       _modalRoute = route;
       appRouteObserver.subscribe(this, route);
-      _syncPlayback();
     }
+    
+    _cachedLocation = GoRouterState.of(context).matchedLocation;
+    _syncPlayback();
   }
 
   @override
@@ -850,15 +1021,19 @@ class _VideoPageState extends State<_VideoPage>
 
     if (widget.post.id != old.post.id) {
       _cancelDeferredDispose();
-      _ctrl?.dispose();
-      _ctrl = null;
-      _ready = false;
+      _disposeController();
       _error = false;
-      _downloadProgress = null;
+      _viewRecorded = widget.post.isViewedByMe;
+      _cancelViewRecordTimer();
       if (widget.isActive) {
         _initController();
       }
       return;
+    }
+
+    if (widget.post.isViewedByMe && !_viewRecorded) {
+      _viewRecorded = true;
+      _cancelViewRecordTimer();
     }
 
     // Keep only the visible card's decoder alive. This avoids decoder
@@ -881,22 +1056,34 @@ class _VideoPageState extends State<_VideoPage>
   }
 
   bool get _isCurrentRoute {
+    if (!mounted) return false;
     final route = ModalRoute.of(context);
-    return route?.isCurrent ?? true;
+    final isModalCurrent = route?.isCurrent ?? true;
+    final isHomeRoute = _cachedLocation == '/' || _cachedLocation.startsWith('/home');
+    return isModalCurrent && isHomeRoute;
   }
 
   void _syncPlayback() {
-    if (!_ready || _ctrl == null) {
+    final ctrl = _ctrl;
+    if (!_ready || ctrl == null) {
       if (widget.isActive && _ctrl == null && !_error) {
         _initController();
       }
+      _syncViewTracking();
       return;
     }
-    if (widget.isActive && _isCurrentRoute) {
-      _ctrl!.play();
+
+    final shouldPlay = widget.isActive && _isCurrentRoute;
+    if (shouldPlay) {
+      if (!ctrl.value.isPlaying) {
+        ctrl.play();
+      }
     } else {
-      _ctrl!.pause();
+      if (ctrl.value.isPlaying) {
+        ctrl.pause();
+      }
     }
+    _syncViewTracking();
   }
 
   @override
@@ -907,6 +1094,7 @@ class _VideoPageState extends State<_VideoPage>
   @override
   void didPushNext() {
     _ctrl?.pause();
+    _syncViewTracking();
   }
 
   @override
@@ -917,6 +1105,7 @@ class _VideoPageState extends State<_VideoPage>
   @override
   void didPop() {
     _ctrl?.pause();
+    _syncViewTracking();
   }
 
   @override
@@ -936,6 +1125,7 @@ class _VideoPageState extends State<_VideoPage>
       _resumeOnForeground =
           widget.isActive && (_ctrl?.value.isPlaying ?? false);
       _ctrl?.pause();
+      _syncViewTracking();
     }
   }
 
@@ -983,6 +1173,7 @@ class _VideoPageState extends State<_VideoPage>
 
         ctrl.setLooping(true);
         ctrl.setVolume(_isMuted ? 0 : 1);
+        ctrl.addListener(_onControllerValueChanged);
         setState(() {
           _ctrl = ctrl;
           _ready = true;
@@ -1008,16 +1199,81 @@ class _VideoPageState extends State<_VideoPage>
     _disposeTimer?.cancel();
     _disposeTimer = Timer(_inactiveDisposeDelay, () {
       if (!mounted) return;
-      _ctrl?.dispose();
-      _ctrl = null;
-      _ready = false;
-      _downloadProgress = null;
+      _disposeController();
     });
   }
 
   void _cancelDeferredDispose() {
     _disposeTimer?.cancel();
     _disposeTimer = null;
+  }
+
+  void _onControllerValueChanged() {
+    _syncViewTracking();
+  }
+
+  void _disposeController() {
+    final ctrl = _ctrl;
+    if (ctrl != null) {
+      ctrl.removeListener(_onControllerValueChanged);
+      ctrl.dispose();
+    }
+    _ctrl = null;
+    _ready = false;
+    _downloadProgress = null;
+    _cancelViewRecordTimer();
+  }
+
+  void _cancelViewRecordTimer() {
+    _viewRecordTimer?.cancel();
+    _viewRecordTimer = null;
+  }
+
+  void _syncViewTracking() {
+    if (_viewRecorded || widget.post.isViewedByMe || widget.isGuest) {
+      _viewRecorded = true;
+      _cancelViewRecordTimer();
+      return;
+    }
+
+    final ctrl = _ctrl;
+    final canTrackView = widget.isActive &&
+        _isCurrentRoute &&
+        _ready &&
+        ctrl != null &&
+        ctrl.value.isInitialized &&
+        ctrl.value.isPlaying &&
+        !ctrl.value.hasError;
+
+    if (!canTrackView) {
+      _cancelViewRecordTimer();
+      return;
+    }
+
+    _viewRecordTimer ??= Timer(_viewRecordThreshold, _recordViewIfEligible);
+  }
+
+  Future<void> _recordViewIfEligible() async {
+    _viewRecordTimer = null;
+    if (!mounted || _viewRecorded || widget.post.isViewedByMe || widget.isGuest) {
+      return;
+    }
+
+    final ctrl = _ctrl;
+    final stillEligible = widget.isActive &&
+        _isCurrentRoute &&
+        _ready &&
+        ctrl != null &&
+        ctrl.value.isInitialized &&
+        ctrl.value.isPlaying &&
+        !ctrl.value.hasError;
+
+    if (!stillEligible) {
+      return;
+    }
+
+    _viewRecorded = true;
+    await widget.cubit.recordPostView(widget.post.id);
   }
 
   /// Downloads [url] to the local cache in the background while playback
@@ -1351,11 +1607,12 @@ class _VideoPageState extends State<_VideoPage>
   @override
   void dispose() {
     _cancelDeferredDispose();
+    _cancelViewRecordTimer();
     WidgetsBinding.instance.removeObserver(this);
     if (_modalRoute is PageRoute<dynamic>) {
       appRouteObserver.unsubscribe(this);
     }
-    _ctrl?.dispose();
+    _disposeController();
     super.dispose();
   }
 
@@ -1577,164 +1834,170 @@ class _VideoPageState extends State<_VideoPage>
           if (!_clearDisplay)
             Positioned(
               right: 6,
+              top: 96,
               bottom: 28,
               child: SizedBox(
-                height: MediaQuery.of(context).size.height * 0.42,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        if (isOwnPost) {
-                          context.push(
-                            RouteNames.profile
-                                .replaceFirst(':userId', post.authorId),
-                          );
-                          return;
-                        }
-                        if (widget.isGuest) {
-                          _promptLogin(context);
-                          return;
-                        }
-                        if (!post.isFollowingAuthor) {
-                          _showFollowSheet(context, post, () {
-                            widget.cubit.followAuthor(post.id);
-                          });
-                        } else {
-                          context.push(
-                            RouteNames.profile
-                                .replaceFirst(':userId', post.authorId),
-                          );
-                        }
-                      },
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircleAvatar(
-                            radius: 18,
-                            backgroundColor: AppColors.primaryTint10,
-                            backgroundImage: post.authorPhotoUrl != null
-                                ? CachedNetworkImageProvider(
-                                    post.authorPhotoUrl!)
-                                : null,
-                            child: post.authorPhotoUrl == null
-                                ? Text(
-                                    (post.authorName ?? '?')[0].toUpperCase(),
-                                    style: const TextStyle(
-                                      color: AppColors.primary,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 12,
-                                    ),
-                                  )
-                                : null,
-                          ),
-                          const SizedBox(height: 3),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 1.5),
-                            decoration: BoxDecoration(
-                              color: post.isFollowingAuthor
-                                  ? Colors.white24
-                                  : AppColors.danger,
-                              borderRadius: BorderRadius.circular(
-                                  AppDimensions.radiusFull),
+                width: 48,
+                child: SingleChildScrollView(
+                  reverse: true,
+                  physics: const BouncingScrollPhysics(),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          if (isOwnPost) {
+                            context.push(
+                              RouteNames.profile
+                                  .replaceFirst(':userId', post.authorId),
+                            );
+                            return;
+                          }
+                          if (widget.isGuest) {
+                            _promptLogin(context);
+                            return;
+                          }
+                          if (!post.isFollowingAuthor) {
+                            _showFollowSheet(context, post, () {
+                              widget.cubit.followAuthor(post.id);
+                            });
+                          } else {
+                            context.push(
+                              RouteNames.profile
+                                  .replaceFirst(':userId', post.authorId),
+                            );
+                          }
+                        },
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CircleAvatar(
+                              radius: 18,
+                              backgroundColor: AppColors.primaryTint10,
+                              backgroundImage: post.authorPhotoUrl != null
+                                  ? CachedNetworkImageProvider(
+                                      post.authorPhotoUrl!)
+                                  : null,
+                              child: post.authorPhotoUrl == null
+                                  ? Text(
+                                      (post.authorName ?? '?')[0].toUpperCase(),
+                                      style: const TextStyle(
+                                        color: AppColors.primary,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 12,
+                                      ),
+                                    )
+                                  : null,
                             ),
-                            child: Text(
-                              isOwnPost
-                                  ? 'You'
-                                  : (post.isFollowingAuthor
-                                      ? 'Following'
-                                      : 'Follow'),
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
+                            const SizedBox(height: 3),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: post.isFollowingAuthor
+                                    ? Colors.white24
+                                    : AppColors.danger,
+                                borderRadius: BorderRadius.circular(
+                                    AppDimensions.radiusFull),
+                              ),
+                              child: Text(
+                                isOwnPost
+                                    ? 'You'
+                                    : (post.isFollowingAuthor
+                                        ? 'Following'
+                                        : 'Follow'),
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    _VideoActionBtn(
-                      icon: post.isLikedByMe
-                          ? Icons.favorite_rounded
-                          : Icons.favorite_border_rounded,
-                      label: _compact(post.likeCount),
-                      color: post.isLikedByMe
-                          ? Colors.redAccent
-                          : Colors.white.withValues(alpha: 0.9),
-                      enabled: !isOwnPost,
-                      iconSize: 21,
-                      onTap: () {
-                        if (widget.isGuest) {
-                          _promptLogin(context);
-                        } else if (!isOwnPost) {
-                          widget.cubit.likePost(post.id);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _VideoActionBtn(
-                      icon: Icons.chat_bubble_outline_rounded,
-                      label: _compact(post.commentCount),
-                      color: Colors.white.withValues(alpha: 0.9),
-                      enabled: true,
-                      iconSize: 21,
-                      onTap: () async {
-                        if (widget.isGuest) {
-                          _promptLogin(context);
-                        } else {
-                          _ctrl?.pause();
-                          if (mounted) setState(() {});
-                          await _showCommentSheet(context, post, widget.cubit);
-                          if (mounted) {
-                            _syncPlayback();
-                            setState(() {});
+                      const SizedBox(height: 12),
+                      _VideoActionBtn(
+                        icon: post.isLikedByMe
+                            ? Icons.favorite_rounded
+                            : Icons.favorite_border_rounded,
+                        label: _compact(post.likeCount),
+                        color: post.isLikedByMe
+                            ? Colors.redAccent
+                            : Colors.white.withValues(alpha: 0.9),
+                        enabled: !isOwnPost,
+                        iconSize: 21,
+                        onTap: () {
+                          if (widget.isGuest) {
+                            _promptLogin(context);
+                          } else if (!isOwnPost) {
+                            widget.cubit.likePost(post.id);
                           }
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _VideoActionBtn(
-                      icon: post.isSavedByMe
-                          ? Icons.bookmark_rounded
-                          : Icons.bookmark_border_rounded,
-                      label: post.isSavedByMe ? 'Saved' : 'Save',
-                      color: post.isSavedByMe
-                          ? AppColors.primary
-                          : Colors.white.withValues(alpha: 0.9),
-                      enabled: true,
-                      iconSize: 21,
-                      onTap: () {
-                        if (widget.isGuest) {
-                          _promptLogin(context);
-                        } else {
-                          widget.cubit.toggleSavePost(post.id);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    _VideoActionBtn(
-                      icon: _isFullscreenMode
-                          ? Icons.fullscreen_exit_rounded
-                          : Icons.fullscreen_rounded,
-                      label: _isFullscreenMode ? 'Exit' : 'Full',
-                      color: Colors.white.withValues(alpha: 0.9),
-                      iconSize: 21,
-                      onTap: _toggleFullscreenMode,
-                    ),
-                    const SizedBox(height: 12),
-                    _VideoActionBtn(
-                      icon: Icons.more_vert_rounded,
-                      label: 'More',
-                      color: Colors.white.withValues(alpha: 0.9),
-                      iconSize: 21,
-                      onTap: () => _showMoreSheet(
-                          context, post, widget.cubit, widget.isGuest),
-                    ),
-                  ],
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      _VideoActionBtn(
+                        icon: Icons.chat_bubble_outline_rounded,
+                        label: _compact(post.commentCount),
+                        color: Colors.white.withValues(alpha: 0.9),
+                        enabled: true,
+                        iconSize: 21,
+                        onTap: () async {
+                          if (widget.isGuest) {
+                            _promptLogin(context);
+                          } else {
+                            _ctrl?.pause();
+                            if (mounted) setState(() {});
+                            await _showCommentSheet(
+                                context, post, widget.cubit);
+                            if (mounted) {
+                              _syncPlayback();
+                              setState(() {});
+                            }
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      _VideoActionBtn(
+                        icon: post.isSavedByMe
+                            ? Icons.bookmark_rounded
+                            : Icons.bookmark_border_rounded,
+                        label: post.isSavedByMe ? 'Saved' : 'Save',
+                        color: post.isSavedByMe
+                            ? AppColors.primary
+                            : Colors.white.withValues(alpha: 0.9),
+                        enabled: true,
+                        iconSize: 21,
+                        onTap: () {
+                          if (widget.isGuest) {
+                            _promptLogin(context);
+                          } else {
+                            widget.cubit.toggleSavePost(post.id);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      _VideoActionBtn(
+                        icon: _isFullscreenMode
+                            ? Icons.fullscreen_exit_rounded
+                            : Icons.fullscreen_rounded,
+                        label: _isFullscreenMode ? 'Exit' : 'Full',
+                        color: Colors.white.withValues(alpha: 0.9),
+                        iconSize: 21,
+                        onTap: _toggleFullscreenMode,
+                      ),
+                      const SizedBox(height: 12),
+                      _VideoActionBtn(
+                        icon: Icons.more_vert_rounded,
+                        label: 'More',
+                        color: Colors.white.withValues(alpha: 0.9),
+                        iconSize: 21,
+                        onTap: () => _showMoreSheet(
+                            context, post, widget.cubit, widget.isGuest),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -3228,6 +3491,7 @@ void _showMoreSheet(
     BuildContext context, PostModel post, FeedCubit cubit, bool isGuest) {
   showModalBottomSheet<void>(
     context: context,
+    isScrollControlled: true,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
@@ -3456,185 +3720,204 @@ class _MoreSheet extends StatelessWidget {
     final isOwnPost = currentUserId == post.authorId;
 
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Handle
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: AppColors.borderLight,
-                  borderRadius: BorderRadius.circular(2),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.82,
+        ),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Handle
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.borderLight,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            ListTile(
-              leading:
-                  const Icon(Icons.share_outlined, color: AppColors.primary),
-              title: Text('Share',
-                  style:
-                      GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
-              onTap: () {
-                Navigator.pop(context);
-                Share.share(
-                  '${post.title}\n\n${post.description ?? ''}\n\nShared from MUST StarTrack',
-                  subject: post.title,
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(
-                post.isViewedByMe
-                    ? Icons.visibility_rounded
-                    : Icons.open_in_new_rounded,
-                color:
-                    post.isViewedByMe ? AppColors.success : AppColors.primary,
-              ),
-              title: Text(post.isViewedByMe ? 'Viewed Details' : 'View Details',
-                  style:
-                      GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
-              onTap: () async {
-                Navigator.pop(context);
-                await _openPostDetails(parentCtx, post, cubit);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.account_circle_outlined,
-                  color: AppColors.primary),
-              title: Text('View Author Profile',
-                  style:
-                      GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
-              onTap: () {
-                Navigator.pop(context);
-                parentCtx.push(
-                    RouteNames.profile.replaceFirst(':userId', post.authorId));
-              },
-            ),
-            if (!isOwnPost)
-              ListTile(
-                leading: Icon(
-                    post.isFollowingAuthor
-                        ? Icons.check_circle_rounded
-                        : Icons.person_add_alt_1_rounded,
-                    color: post.isFollowingAuthor
+                ListTile(
+                  leading: const Icon(Icons.share_outlined,
+                      color: AppColors.primary),
+                  title: Text('Share',
+                      style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w600)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Share.share(
+                      '${post.title}\n\n${post.description ?? ''}\n\nShared from MUST StarTrack',
+                      subject: post.title,
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: Icon(
+                    post.isViewedByMe
+                        ? Icons.visibility_rounded
+                        : Icons.open_in_new_rounded,
+                    color: post.isViewedByMe
                         ? AppColors.success
-                        : AppColors.primary),
-                title: Text(
-                    post.isFollowingAuthor
-                        ? 'Following Author'
-                        : 'Follow Author',
+                        : AppColors.primary,
+                  ),
+                  title: Text(
+                      post.isViewedByMe ? 'Viewed Details' : 'View Details',
+                      style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w600)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    parentCtx.push(
+                      RouteNames.authorPortfolio
+                          .replaceFirst(':userId', post.authorId),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.account_circle_outlined,
+                      color: AppColors.primary),
+                  title: Text('View Author Profile',
+                      style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w600)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    parentCtx.push(RouteNames.profile
+                        .replaceFirst(':userId', post.authorId));
+                  },
+                ),
+                if (!isOwnPost)
+                  ListTile(
+                    leading: Icon(
+                        post.isFollowingAuthor
+                            ? Icons.check_circle_rounded
+                            : Icons.person_add_alt_1_rounded,
+                        color: post.isFollowingAuthor
+                            ? AppColors.success
+                            : AppColors.primary),
+                    title: Text(
+                        post.isFollowingAuthor
+                            ? 'Following Author'
+                            : 'Follow Author',
+                        style: GoogleFonts.plusJakartaSans(
+                            fontWeight: FontWeight.w600)),
+                    onTap: post.isFollowingAuthor
+                        ? null
+                        : () {
+                            Navigator.pop(context);
+                            if (isGuest) {
+                              _promptLogin(parentCtx);
+                              return;
+                            }
+                            _showFollowSheet(parentCtx, post, () {
+                              cubit.followAuthor(post.id);
+                            });
+                          },
+                  ),
+                ListTile(
+                  leading: Icon(
+                    post.isDislikedByMe
+                        ? Icons.thumb_down_rounded
+                        : Icons.thumb_down_outlined,
+                    color: post.isDislikedByMe ? AppColors.primary : null,
+                  ),
+                  title: Text(
+                    post.isDislikedByMe ? 'Disliked' : 'Dislike Post',
                     style: GoogleFonts.plusJakartaSans(
-                        fontWeight: FontWeight.w600)),
-                onTap: post.isFollowingAuthor
-                    ? null
-                    : () {
-                        Navigator.pop(context);
-                        if (isGuest) {
-                          _promptLogin(parentCtx);
-                          return;
-                        }
-                        _showFollowSheet(parentCtx, post, () {
-                          cubit.followAuthor(post.id);
-                        });
-                      },
-              ),
-            ListTile(
-              leading: Icon(
-                post.isDislikedByMe
-                    ? Icons.thumb_down_rounded
-                    : Icons.thumb_down_outlined,
-                color: post.isDislikedByMe ? AppColors.primary : null,
-              ),
-              title: Text(
-                post.isDislikedByMe ? 'Disliked' : 'Dislike Post',
-                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
-              ),
-              onTap: isOwnPost
-                  ? null
-                  : () {
-                      Navigator.pop(context);
-                      if (isGuest) {
-                        _promptLogin(parentCtx);
-                      } else {
-                        cubit.dislikePost(post.id);
-                      }
-                    },
+                        fontWeight: FontWeight.w600),
+                  ),
+                  onTap: isOwnPost
+                      ? null
+                      : () {
+                          Navigator.pop(context);
+                          if (isGuest) {
+                            _promptLogin(parentCtx);
+                          } else {
+                            cubit.dislikePost(post.id);
+                          }
+                        },
+                ),
+                ListTile(
+                  leading: Icon(
+                    post.isRatedByMe
+                        ? Icons.star_rounded
+                        : Icons.star_border_rounded,
+                    color: post.isRatedByMe ? AppColors.warning : null,
+                  ),
+                  title: Text(
+                    post.isRatedByMe
+                        ? 'Your Rating: ${post.myRatingStars}★'
+                        : 'Rate Post',
+                    style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w600),
+                  ),
+                  onTap: (isOwnPost || post.isRatedByMe)
+                      ? null
+                      : () {
+                          Navigator.pop(context);
+                          if (isGuest) {
+                            _promptLogin(parentCtx);
+                          } else {
+                            _showRatePostSheet(
+                              parentCtx,
+                              post,
+                              cubit,
+                              initialStars: post.myRatingStars,
+                              onRated: (_) {},
+                            );
+                          }
+                        },
+                ),
+                ListTile(
+                  leading: Icon(
+                    post.hasCollaborationRequest
+                        ? Icons.check_circle_rounded
+                        : Icons.people_outline_rounded,
+                    color:
+                        post.hasCollaborationRequest ? AppColors.success : null,
+                  ),
+                  title: Text(
+                    post.hasCollaborationRequest
+                        ? 'Collaboration Pending'
+                        : 'Collaborate',
+                    style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w600),
+                  ),
+                  onTap: (isOwnPost || post.hasCollaborationRequest)
+                      ? null
+                      : () {
+                          Navigator.pop(context);
+                          if (isGuest) {
+                            _promptLogin(parentCtx);
+                          } else {
+                            _showCollaborateRequestSheet(
+                                parentCtx, post, cubit);
+                          }
+                        },
+                ),
+                const Divider(),
+                ListTile(
+                  leading:
+                      const Icon(Icons.flag_outlined, color: AppColors.danger),
+                  title: Text('Report Suspicious Content',
+                      style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.danger)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    if (isGuest) {
+                      _promptLogin(parentCtx);
+                    } else {
+                      _showReportSheet(parentCtx, post);
+                    }
+                  },
+                ),
+              ],
             ),
-            ListTile(
-              leading: Icon(
-                post.isRatedByMe
-                    ? Icons.star_rounded
-                    : Icons.star_border_rounded,
-                color: post.isRatedByMe ? AppColors.warning : null,
-              ),
-              title: Text(
-                post.isRatedByMe
-                    ? 'Your Rating: ${post.myRatingStars}★'
-                    : 'Rate Post',
-                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
-              ),
-              onTap: (isOwnPost || post.isRatedByMe)
-                  ? null
-                  : () {
-                      Navigator.pop(context);
-                      if (isGuest) {
-                        _promptLogin(parentCtx);
-                      } else {
-                        _showRatePostSheet(
-                          parentCtx,
-                          post,
-                          cubit,
-                          initialStars: post.myRatingStars,
-                          onRated: (_) {},
-                        );
-                      }
-                    },
-            ),
-            ListTile(
-              leading: Icon(
-                post.hasCollaborationRequest
-                    ? Icons.check_circle_rounded
-                    : Icons.people_outline_rounded,
-                color: post.hasCollaborationRequest ? AppColors.success : null,
-              ),
-              title: Text(
-                post.hasCollaborationRequest
-                    ? 'Collaboration Pending'
-                    : 'Collaborate',
-                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
-              ),
-              onTap: (isOwnPost || post.hasCollaborationRequest)
-                  ? null
-                  : () {
-                      Navigator.pop(context);
-                      if (isGuest) {
-                        _promptLogin(parentCtx);
-                      } else {
-                        _showCollaborateRequestSheet(parentCtx, post, cubit);
-                      }
-                    },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.flag_outlined, color: AppColors.danger),
-              title: Text('Report Suspicious Content',
-                  style: GoogleFonts.plusJakartaSans(
-                      fontWeight: FontWeight.w600, color: AppColors.danger)),
-              onTap: () {
-                Navigator.pop(context);
-                if (isGuest) {
-                  _promptLogin(parentCtx);
-                } else {
-                  _showReportSheet(parentCtx, post);
-                }
-              },
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -4516,6 +4799,18 @@ class _CollaborateRequestSheetState extends State<_CollaborateRequestSheet> {
     final userName = sl<AuthCubit>().currentUser?.displayName ?? 'A user';
 
     if (currentUserId.isEmpty) return;
+    if (currentUserId == widget.post.authorId) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('You cannot send a collaboration request to yourself.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
 
     setState(() => _loading = true);
     _traceFeedAction(
@@ -5681,46 +5976,50 @@ class _FilterChipsState extends State<_FilterChips> {
               child: Row(
                 children: [
                   Expanded(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _TopModeChip(
-                          label: 'Faculty',
-                          active: topMode == _FeedTopFilterMode.faculty,
-                          onTap: () {
-                            if (_dbFaculties.isEmpty) {
-                              unawaited(_loadFacultiesFromDatabase());
-                            }
-                            widget.cubit.applyFilter(
-                              current.copyWith(
-                                clearFollowingOnly: true,
-                                clearSearchedUser: true,
-                              ),
-                            );
-                          },
-                          compact: true,
-                          activeColor: activeColor,
-                          inactiveColor: inactiveColor,
-                          shadows: textShadows,
-                        ),
-                        const SizedBox(width: 22),
-                        _TopModeChip(
-                          label: 'Following',
-                          active: topMode == _FeedTopFilterMode.following,
-                          onTap: () => widget.cubit.applyFilter(
-                            current.copyWith(
-                              followingOnly: true,
-                              clearFaculty: true,
-                              clearSearchedUser: true,
-                              groupsOnly: false,
-                            ),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _TopModeChip(
+                            label: 'Faculty',
+                            active: topMode == _FeedTopFilterMode.faculty,
+                            onTap: () {
+                              if (_dbFaculties.isEmpty) {
+                                unawaited(_loadFacultiesFromDatabase());
+                              }
+                              widget.cubit.applyFilter(
+                                current.copyWith(
+                                  clearFollowingOnly: true,
+                                  clearSearchedUser: true,
+                                ),
+                              );
+                            },
+                            compact: true,
+                            activeColor: activeColor,
+                            inactiveColor: inactiveColor,
+                            shadows: textShadows,
                           ),
-                          compact: true,
-                          activeColor: activeColor,
-                          inactiveColor: inactiveColor,
-                          shadows: textShadows,
-                        ),
-                      ],
+                          const SizedBox(width: 16),
+                          _TopModeChip(
+                            label: 'Following',
+                            active: topMode == _FeedTopFilterMode.following,
+                            onTap: () => widget.cubit.applyFilter(
+                              current.copyWith(
+                                followingOnly: true,
+                                clearFaculty: true,
+                                clearSearchedUser: true,
+                                groupsOnly: false,
+                              ),
+                            ),
+                            compact: true,
+                            activeColor: activeColor,
+                            inactiveColor: inactiveColor,
+                            shadows: textShadows,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   Row(

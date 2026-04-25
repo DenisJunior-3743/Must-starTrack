@@ -84,8 +84,7 @@ dependencies:
   video_compress: ^3.1.2
   # video_player: plays uploaded project videos
   video_player: ^2.8.3
-  # youtube_player_flutter: embeds YouTube project links
-  youtube_player_flutter: ^9.0.4
+
   # photo_view: pinch-to-zoom project images
   photo_view: ^0.15.0
   # record: capture voice notes for chat
@@ -138,10 +137,14 @@ dependencies:
   # ── Permissions ────────────────────────────────────────────
   # permission_handler: camera, storage, notification permissions
   permission_handler: ^11.3.1
+  # Explicitly add to get web support JS file
+  flutter_inappwebview: ^6.0.0
 
 dependency_overrides:
-  # record_linux 0.7.2 doesn't implement startStream/hasPermission(request:)
-  # added in record_platform_interface 1.5.0; force the compatible version.
+  # Keep record platform interface compatible with record_web 1.1.9
+  # used by the current web 0.5.x dependency ecosystem.
+  record_platform_interface: 1.4.0
+  # record_linux 0.7.2 is missing startStream (added in record_platform_interface 1.4.0)
   record_linux: ^1.3.0
 
 dev_dependencies:

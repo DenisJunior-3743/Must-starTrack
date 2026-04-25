@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -59,7 +61,8 @@ class ChatbotCubit extends Cubit<ChatbotState> {
             messages: [
               ChatbotMessage(
                 id: 'welcome',
-                text: 'Hi, I am your MUST StarTrack assistant. Ask me about navigation, features, permissions, or troubleshooting.',
+                text:
+                    'Hi, I am your MUST StarTrack assistant. Ask me about navigation, features, permissions, or troubleshooting.',
                 isUser: false,
                 createdAt: DateTime.now(),
                 followUps: ChatbotKnowledgeBase.starterPrompts,
@@ -67,11 +70,17 @@ class ChatbotCubit extends Cubit<ChatbotState> {
             ],
             starterPrompts: ChatbotKnowledgeBase.starterPrompts,
           ),
-        );
+        ) {
+    unawaited(_refreshLearningMemory(force: true));
+  }
 
   final ChatbotRepository _repository;
   final FirestoreService _firestore;
   final ActivityLogDao _activityLogDao;
+  List<ChatbotLearnedExample> _learnedExamples =
+      const <ChatbotLearnedExample>[];
+  DateTime? _lastLearningRefreshAt;
+  bool _learningRefreshInFlight = false;
 
   Future<void> ask(
     String query, {
@@ -95,10 +104,22 @@ class ChatbotCubit extends Cubit<ChatbotState> {
 
     emit(ChatbotTyping(messages: nextMessages));
 
+    if (_shouldRefreshLearningMemory()) {
+      unawaited(_refreshLearningMemory());
+    }
+
+    final behaviorContext = await _loadBehaviorContext(
+      isGuest: isGuest,
+      userId: userId,
+    );
+
     final response = await _repository.answer(
       text,
       isGuest: isGuest,
       role: role,
+      conversation: nextMessages,
+      learnedExamples: _learnedExamples,
+      behaviorContext: behaviorContext,
     );
 
     final interactionId =
@@ -111,6 +132,14 @@ class ChatbotCubit extends Cubit<ChatbotState> {
       isGuest: isGuest,
       role: role,
       userId: userId,
+      behaviorContext: behaviorContext,
+    );
+
+    _logUserQuestionForBehavior(
+      question: text,
+      isGuest: isGuest,
+      userId: userId,
+      role: role,
     );
 
     final replied = [
@@ -166,11 +195,16 @@ class ChatbotCubit extends Cubit<ChatbotState> {
       );
       await _activityLogDao.logAction(
         userId: safeActorId,
-        action: isHelpful ? 'chatbot_feedback_helpful' : 'chatbot_feedback_not_helpful',
+        action: isHelpful
+            ? 'chatbot_feedback_helpful'
+            : 'chatbot_feedback_not_helpful',
         entityType: 'chatbot_interaction',
         entityId: interactionId,
         metadata: {'is_helpful': isHelpful},
       );
+      if (isHelpful) {
+        unawaited(_refreshLearningMemory(force: true));
+      }
     } catch (_) {
       // Metrics failures should never break chat UX.
     }
@@ -207,6 +241,7 @@ class ChatbotCubit extends Cubit<ChatbotState> {
     required bool isGuest,
     String? role,
     String? userId,
+    required ChatbotBehaviorContext behaviorContext,
   }) async {
     final safeUserId = userId?.trim();
     if (isGuest || safeUserId == null || safeUserId.isEmpty) {
@@ -227,6 +262,7 @@ class ChatbotCubit extends Cubit<ChatbotState> {
           'role': role ?? 'unknown',
           'actions_count': response.actions.length,
           'followups_count': response.followUps.length,
+          'behavior_context': behaviorContext.toPromptMap(),
           'created_at': DateTime.now().toIso8601String(),
           'is_helpful': null,
         },
@@ -234,5 +270,143 @@ class ChatbotCubit extends Cubit<ChatbotState> {
     } catch (_) {
       // Ignore remote logging failures.
     }
+  }
+
+  bool _shouldRefreshLearningMemory() {
+    final last = _lastLearningRefreshAt;
+    if (last == null) return true;
+    return DateTime.now().difference(last) >= const Duration(minutes: 6);
+  }
+
+  Future<ChatbotBehaviorContext> _loadBehaviorContext({
+    required bool isGuest,
+    String? userId,
+  }) async {
+    final safeUserId = userId?.trim();
+    if (isGuest || safeUserId == null || safeUserId.isEmpty) {
+      return const ChatbotBehaviorContext();
+    }
+
+    try {
+      final results = await Future.wait<Set<String>>([
+        _activityLogDao.getRecentSearchTerms(safeUserId, limit: 8),
+        _activityLogDao.getRecentCategorySignals(safeUserId, limit: 8),
+      ]);
+      return ChatbotBehaviorContext(
+        recentSearchTerms: results[0].take(8).toList(growable: false),
+        recentlyViewedCategories: results[1].take(8).toList(growable: false),
+      );
+    } catch (_) {
+      return const ChatbotBehaviorContext();
+    }
+  }
+
+  void _logUserQuestionForBehavior({
+    required String question,
+    required bool isGuest,
+    String? userId,
+    String? role,
+  }) {
+    final safeUserId = userId?.trim();
+    if (isGuest || safeUserId == null || safeUserId.isEmpty) {
+      return;
+    }
+
+    unawaited(
+      _activityLogDao.logAction(
+        userId: safeUserId,
+        action: 'chatbot_question',
+        entityType: 'chatbot_interaction',
+        entityId: question.length > 80 ? question.substring(0, 80) : question,
+        metadata: {
+          'question': question,
+          'role': role ?? 'unknown',
+        },
+      ),
+    );
+  }
+
+  Future<void> _refreshLearningMemory({bool force = false}) async {
+    if (_learningRefreshInFlight) return;
+    if (!force && !_shouldRefreshLearningMemory()) return;
+
+    _learningRefreshInFlight = true;
+    try {
+      final rows = await _firestore.getRecentChatbotInteractions(limit: 500);
+      _learnedExamples = _buildLearnedExamples(rows);
+      _lastLearningRefreshAt = DateTime.now();
+    } catch (_) {
+      // Learning memory should never block assistant responses.
+    } finally {
+      _learningRefreshInFlight = false;
+    }
+  }
+
+  List<ChatbotLearnedExample> _buildLearnedExamples(
+    List<Map<String, dynamic>> rows,
+  ) {
+    final byQuestionKey = <String, ChatbotLearnedExample>{};
+    final zeroTime = DateTime.fromMillisecondsSinceEpoch(0);
+
+    for (final row in rows) {
+      if (row['is_helpful'] != true) continue;
+
+      final question = (row['question'] ?? '').toString().trim();
+      final answer = (row['answer'] ?? '').toString().trim();
+      if (question.isEmpty || answer.isEmpty) continue;
+
+      final key = _normalizeKey(question);
+      if (key.isEmpty) continue;
+
+      final confidence = (row['confidence'] as num?)?.toDouble() ?? 0;
+      final source = (row['source'] ?? '').toString().trim();
+      final role = (row['role'] ?? '').toString().trim();
+      final createdAtRaw = row['created_at']?.toString() ?? '';
+      final createdAt = DateTime.tryParse(createdAtRaw);
+
+      final candidate = ChatbotLearnedExample(
+        question: question,
+        answer: answer,
+        confidence: confidence.clamp(0.0, 1.0),
+        source: source,
+        role: role,
+        createdAt: createdAt,
+      );
+
+      final existing = byQuestionKey[key];
+      if (existing == null) {
+        byQuestionKey[key] = candidate;
+        continue;
+      }
+
+      final betterConfidence = candidate.confidence > existing.confidence;
+      final sameConfidence = candidate.confidence.toStringAsFixed(4) ==
+          existing.confidence.toStringAsFixed(4);
+      final fresher = (candidate.createdAt ?? zeroTime)
+          .isAfter(existing.createdAt ?? zeroTime);
+
+      if (betterConfidence || (sameConfidence && fresher)) {
+        byQuestionKey[key] = candidate;
+      }
+    }
+
+    final learned = byQuestionKey.values.toList(growable: false)
+      ..sort((a, b) {
+        final score = b.confidence.compareTo(a.confidence);
+        if (score != 0) return score;
+        final aTime = a.createdAt ?? zeroTime;
+        final bTime = b.createdAt ?? zeroTime;
+        return bTime.compareTo(aTime);
+      });
+
+    return learned.take(250).toList(growable: false);
+  }
+
+  String _normalizeKey(String value) {
+    return value
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
   }
 }

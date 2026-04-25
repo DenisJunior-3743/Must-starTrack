@@ -274,23 +274,8 @@ class LecturerCubit extends Cubit<LecturerState> {
       final sorted = List<UserModel>.from(students);
       final aiScores = <String, double>{};
       if (sortBy == 'fit') {
-        double scoreFor(UserModel user) {
-          final profile = user.profile;
-          if (profile == null) return 0;
-          final completeness = [profile.bio, profile.faculty, profile.programName]
-              .where((value) => value != null && value.trim().isNotEmpty)
-                  .length /
-              3.0;
-          return (0.25 * ((profile.skills.length / 8).clamp(0.0, 1.0)) +
-                  0.20 * ((profile.activityStreak / 14).clamp(0.0, 1.0)) +
-                  0.20 * ((profile.totalPosts / 12).clamp(0.0, 1.0)) +
-                  0.20 * ((profile.totalCollabs / 8).clamp(0.0, 1.0)) +
-                  0.15 * completeness)
-              .clamp(0.0, 1.0);
-        }
-
         for (final student in sorted) {
-          aiScores[student.id] = scoreFor(student);
+          aiScores[student.id] = _recommenderService.computeGlobalStudentScore(student);
         }
       }
       sorted.sort((a, b) {

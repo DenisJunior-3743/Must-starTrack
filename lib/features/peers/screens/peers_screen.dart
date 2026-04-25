@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
@@ -10,12 +10,7 @@ import '../../../core/constants/app_dimensions.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/utils/media_path_utils.dart';
-import '../../../data/local/dao/group_dao.dart';
-import '../../../data/local/dao/group_member_dao.dart';
 import '../../../data/local/dao/message_dao.dart';
-import '../../../data/local/dao/sync_queue_dao.dart';
-import '../../../data/models/group_member_model.dart';
-import '../../../data/remote/sync_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
 import '../../groups/screens/create_group_screen.dart';
 import '../../groups/screens/groups_overview_tab.dart';
@@ -34,14 +29,11 @@ class _PeersScreenState extends State<PeersScreen> {
   static DateTime? _cacheLoadedAt;
   static String? _cacheUserId;
   static List<AcceptedPeerCollaboration> _cachedCollaborators = const [];
-  static List<GroupMemberModel> _cachedPendingInvites = const [];
 
   final _dao = MessageDao();
 
   bool _loading = true;
   List<AcceptedPeerCollaboration> _collaborators = const [];
-  List<GroupMemberModel> _pendingGroupInvites = const [];
-  final Set<String> _respondingInviteIds = <String>{};
 
   @override
   void initState() {
@@ -49,136 +41,57 @@ class _PeersScreenState extends State<PeersScreen> {
     _load(useCacheFirst: true);
   }
 
-  Future<void> _load({bool useCacheFirst = false}) async {
+  Future<void> _load({
+    bool useCacheFirst = false,
+    bool silentRefresh = false,
+  }) async {
     final currentUserId = sl<AuthCubit>().currentUser?.id;
     if (currentUserId == null || currentUserId.isEmpty) {
       _cacheUserId = null;
       _cacheLoadedAt = null;
       _cachedCollaborators = const [];
-      _cachedPendingInvites = const [];
       if (!mounted) return;
       setState(() {
         _collaborators = const [];
-        _pendingGroupInvites = const [];
         _loading = false;
       });
       return;
     }
 
-    if (useCacheFirst && _cacheUserId == currentUserId && _cacheLoadedAt != null) {
+    if (useCacheFirst &&
+        _cacheUserId == currentUserId &&
+        _cacheLoadedAt != null) {
       if (mounted) {
         setState(() {
           _collaborators = _cachedCollaborators;
-          _pendingGroupInvites = _cachedPendingInvites;
           _loading = false;
         });
       }
 
       final age = DateTime.now().difference(_cacheLoadedAt!);
       if (age >= _staleAfter) {
-        unawaited(_load(useCacheFirst: false));
+        unawaited(_load(useCacheFirst: false, silentRefresh: true));
       }
       return;
     }
 
-    if (mounted) {
+    if (!silentRefresh && mounted) {
       setState(() => _loading = true);
     }
 
-    final results = await Future.wait([
-      _dao.getAcceptedCollaborators(userId: currentUserId),
-      sl<GroupMemberDao>().getPendingInvitesForUser(currentUserId),
-    ]);
+    final accepted = await _dao.getAcceptedCollaborators(userId: currentUserId);
 
-    final accepted = results[0] as List<AcceptedPeerCollaboration>;
-    final pendingInvites = results[1] as List<GroupMemberModel>;
     _cacheUserId = currentUserId;
     _cacheLoadedAt = DateTime.now();
     _cachedCollaborators = accepted;
-    _cachedPendingInvites = pendingInvites;
     if (!mounted) return;
     setState(() {
       _collaborators = accepted;
-      _pendingGroupInvites = pendingInvites;
       _loading = false;
     });
   }
 
-  Future<void> _respondToGroupInvite(GroupMemberModel invite, bool accept) async {
-    if (_respondingInviteIds.contains(invite.id)) return;
-    setState(() => _respondingInviteIds.add(invite.id));
 
-    try {
-      final memberDao = sl<GroupMemberDao>();
-      final groupDao = sl<GroupDao>();
-      final syncQueue = sl<SyncQueueDao>();
-      final syncService = sl<SyncService>();
-
-      await memberDao.updateMembershipStatus(
-        groupId: invite.groupId,
-        userId: invite.userId,
-        status: accept ? 'active' : 'declined',
-        joinedAt: accept ? DateTime.now() : null,
-      );
-
-      final updated = await memberDao.getMembership(
-        groupId: invite.groupId,
-        userId: invite.userId,
-      );
-      if (updated != null) {
-        await syncQueue.enqueue(
-          operation: 'update',
-          entity: 'group_members',
-          entityId: updated.id,
-          payload: updated.toMap(),
-        );
-      }
-
-      final count = await memberDao.countActiveMembers(invite.groupId);
-      final group = await groupDao.getGroupById(invite.groupId);
-      if (group != null) {
-        final refreshed = group.copyWith(
-          memberCount: count,
-          updatedAt: DateTime.now(),
-        );
-        await groupDao.upsertGroup(refreshed);
-        await syncQueue.enqueue(
-          operation: 'update',
-          entity: 'groups',
-          entityId: refreshed.id,
-          payload: refreshed.toMap(),
-        );
-      }
-
-      await syncService.processPendingSync();
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            accept
-                ? 'Invite accepted. You are now a group member.'
-                : 'Invite declined.',
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      await _load();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Could not update invite: $e'),
-          backgroundColor: AppColors.danger,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _respondingInviteIds.remove(invite.id));
-      }
-    }
-  }
 
   Future<void> _openCreateGroup() async {
     await Navigator.of(context).push(
@@ -190,6 +103,7 @@ class _PeersScreenState extends State<PeersScreen> {
   @override
   Widget build(BuildContext context) {
     final isGuest = sl<AuthCubit>().currentUser == null;
+    final collaborators = List<AcceptedPeerCollaboration>.of(_collaborators);
 
     if (isGuest) {
       return Scaffold(
@@ -218,161 +132,87 @@ class _PeersScreenState extends State<PeersScreen> {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Peers',
-          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
-        ),
-        actions: [
-          IconButton(
-            onPressed: _openCreateGroup,
-            icon: const Icon(Icons.group_add_rounded),
-            tooltip: 'Create group',
+        appBar: AppBar(
+          title: Text(
+            'Peers',
+            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
           ),
-        ],
-        bottom: const TabBar(
-          tabs: [
-            Tab(text: 'Collaborators'),
-            Tab(text: 'Groups'),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        children: [
-          RefreshIndicator(
-            color: AppColors.primary,
-            onRefresh: _load,
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-              children: [
-                if (_pendingGroupInvites.isNotEmpty) ...[
-                  Text(
-                    'Group Invites',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  ..._pendingGroupInvites.map(
-                    (invite) => _PendingGroupInviteCard(
-                      invite: invite,
-                      isLoading: _respondingInviteIds.contains(invite.id),
-                      onDecline: () => _respondToGroupInvite(invite, false),
-                      onAccept: () => _respondToGroupInvite(invite, true),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                ],
-                if (_collaborators.isEmpty) ...[
-                  const SizedBox(height: 40),
-                  const Icon(
-                    Icons.group_off_rounded,
-                    size: 64,
-                    color: AppColors.primary,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No accepted collaborators yet',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Once a collaboration request is accepted, the collaborator and the agreed project will appear here.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 13,
-                      color: AppColors.textSecondaryLight,
-                    ),
-                  ),
-                ] else ...[
-                  _PeersSummary(count: _collaborators.length),
-                  const SizedBox(height: 16),
-                  ..._collaborators.map(
-                    (item) => _PeerCollaborationCard(item: item),
-                  ),
-                ],
-              ],
+          actions: [
+            IconButton(
+              onPressed: _openCreateGroup,
+              icon: const Icon(Icons.group_add_rounded),
+              tooltip: 'Create group',
             ),
+          ],
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Collaborators'),
+              Tab(text: 'Groups'),
+            ],
           ),
-          GroupsOverviewTab(onChanged: _load),
-        ],
-      ),
-    ),
-    );
-  }
-}
-
-class _PendingGroupInviteCard extends StatelessWidget {
-  final GroupMemberModel invite;
-  final bool isLoading;
-  final VoidCallback onAccept;
-  final VoidCallback onDecline;
-
-  const _PendingGroupInviteCard({
-    required this.invite,
-    required this.isLoading,
-    required this.onAccept,
-    required this.onDecline,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        ),
+        body: TabBarView(
           children: [
-            Text(
-              invite.groupName ?? 'Group Invite',
-              style: GoogleFonts.plusJakartaSans(
-                fontWeight: FontWeight.w700,
+            RefreshIndicator(
+              color: AppColors.primary,
+              onRefresh: _load,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+                children: [
+
+                  if (collaborators.isEmpty) ...[
+                    const SizedBox(height: 40),
+                    const Icon(
+                      Icons.group_off_rounded,
+                      size: 64,
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No accepted collaborators yet',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Once a collaboration request is accepted, the collaborator and the agreed project will appear here.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13,
+                        color: AppColors.textSecondaryLight,
+                      ),
+                    ),
+                  ] else ...[
+                    _PeersSummary(count: collaborators.length),
+                    const SizedBox(height: 16),
+                    ...List<Widget>.generate(
+                      collaborators.length,
+                      (index) {
+                        final item = collaborators[index];
+                        return KeyedSubtree(
+                          key: ValueKey<String>(
+                              'collab_${item.requestId}_$index'),
+                          child: _PeerCollaborationCard(item: item),
+                        );
+                      },
+                    ),
+                  ],
+                ],
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Invited by ${invite.invitedByName ?? 'a group manager'}',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 12,
-                color: AppColors.textSecondaryLight,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                OutlinedButton(
-                  onPressed: isLoading ? null : onDecline,
-                  child: const Text('Decline'),
-                ),
-                const SizedBox(width: 10),
-                FilledButton(
-                  onPressed: isLoading ? null : onAccept,
-                  child: isLoading
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text('Accept'),
-                ),
-              ],
-            ),
+            GroupsOverviewTab(onChanged: () => _load(silentRefresh: true)),
           ],
         ),
       ),
     );
   }
 }
+
+
 
 class _PeersSummary extends StatelessWidget {
   final int count;
@@ -475,7 +315,9 @@ class _PeerCollaborationCard extends StatelessWidget {
                       : null,
                   child: item.peerPhotoUrl == null
                       ? Text(
-                          item.peerName.isNotEmpty ? item.peerName[0].toUpperCase() : '?',
+                          item.peerName.isNotEmpty
+                              ? item.peerName[0].toUpperCase()
+                              : '?',
                           style: GoogleFonts.plusJakartaSans(
                             fontWeight: FontWeight.w700,
                             color: AppColors.primary,
@@ -492,7 +334,8 @@ class _PeerCollaborationCard extends StatelessWidget {
                         item.peerName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w700),
+                        style: GoogleFonts.plusJakartaSans(
+                            fontSize: 15, fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 4),
                       Wrap(
@@ -529,7 +372,8 @@ class _PeerCollaborationCard extends StatelessWidget {
               item.postTitle,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w700),
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 16, fontWeight: FontWeight.w700),
             ),
           ),
           if ((item.postCategory ?? '').trim().isNotEmpty)
@@ -581,27 +425,30 @@ class _PeerCollaborationCard extends StatelessWidget {
                     onPressed: item.peerId.isEmpty
                         ? null
                         : () => context.push(
-                              RouteNames.chatDetail.replaceFirst(':threadId', item.peerId),
+                              RouteNames.chatDetail
+                                  .replaceFirst(':threadId', item.peerId),
                               extra: {
                                 'peerName': item.peerName,
                                 'peerPhotoUrl': item.peerPhotoUrl,
                                 'isPeerLecturer': item.peerRole == 'lecturer',
                               },
                             ),
-                    icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
-                      label: const Text(
-                        'Message',
-                        maxLines: 1,
-                        overflow: TextOverflow.fade,
-                        softWrap: false,
-                      ),
+                    icon:
+                        const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+                    label: const Text(
+                      'Message',
+                      maxLines: 1,
+                      overflow: TextOverflow.fade,
+                      softWrap: false,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),
                 IconButton(
                   onPressed: item.peerId.isEmpty
                       ? null
-                      : () => context.push(RouteNames.profile.replaceFirst(':userId', item.peerId)),
+                      : () => context.push(RouteNames.profile
+                          .replaceFirst(':userId', item.peerId)),
                   icon: const Icon(Icons.arrow_forward_rounded),
                   tooltip: 'Open peer profile',
                 ),
@@ -621,7 +468,8 @@ class _ProjectPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final previewUrl = item.postMediaUrls.isNotEmpty ? item.postMediaUrls.first : null;
+    final previewUrl =
+        item.postMediaUrls.isNotEmpty ? item.postMediaUrls.first : null;
     final isVideo = previewUrl != null && isVideoMediaPath(previewUrl);
 
     Widget child;

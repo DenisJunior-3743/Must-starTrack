@@ -11,6 +11,7 @@
 //   - Profile visibility toggle
 //   - Save calls ProfileCubit.updateProfile() → writes SQLite + Firestore
 
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -22,11 +23,19 @@ import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
+import '../../../core/di/injection_container.dart';
+import '../../../data/local/dao/course_dao.dart';
+import '../../../data/local/dao/faculty_dao.dart';
+import '../../../data/models/course_model.dart';
+import '../../../data/models/faculty_model.dart';
+import '../../auth/bloc/auth_cubit.dart';
 import '../bloc/profile_cubit.dart';
 import '../../shared/hci_components/st_form_widgets.dart';
 
 class EditProfileScreen extends StatefulWidget {
-  const EditProfileScreen({super.key});
+  final String? targetUserId;
+
+  const EditProfileScreen({super.key, this.targetUserId});
 
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
@@ -53,6 +62,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   bool _avatarPressed = false; // drives zoom-on-press animation
 
   final _picker = ImagePicker();
+  final _facultyDao = sl<FacultyDao>();
+  final _courseDao = sl<CourseDao>();
+
+  List<FacultyModel> _faculties = const [];
+  List<CourseModel> _courses = const [];
+  bool _loadingAcademicData = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAcademicData();
+  }
 
   @override
   void dispose() {
@@ -61,6 +82,57 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _githubCtrl.dispose();
     _linkedinCtrl.dispose();
     super.dispose();
+  }
+
+  bool get _isAdminEditor =>
+      sl<AuthCubit>().isAdmin &&
+      widget.targetUserId != null &&
+      widget.targetUserId!.isNotEmpty;
+
+  Future<void> _loadAcademicData() async {
+    try {
+      final faculties = await _facultyDao.getAllFaculties(activeOnly: true);
+      if (!mounted) return;
+      setState(() {
+        _faculties = faculties;
+        _loadingAcademicData = false;
+      });
+      await _loadCoursesForFacultyName(_faculty, preferredCourse: _programme);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingAcademicData = false);
+    }
+  }
+
+  Future<void> _loadCoursesForFacultyName(
+    String facultyName, {
+    String? preferredCourse,
+  }) async {
+    final faculty = _faculties.cast<FacultyModel?>().firstWhere(
+          (item) => item?.name == facultyName,
+          orElse: () => null,
+        );
+    if (faculty == null) {
+      if (!mounted) return;
+      setState(() => _courses = const []);
+      return;
+    }
+
+    final courses = await _courseDao.getCoursesByFaculty(
+      faculty.id,
+      activeOnly: true,
+    );
+    if (!mounted) return;
+    setState(() {
+      _courses = courses;
+      if (preferredCourse != null &&
+          courses.any((course) => course.name == preferredCourse)) {
+        _programme = preferredCourse;
+      } else if (!courses.any((course) => course.name == _programme) &&
+          courses.isNotEmpty) {
+        _programme = courses.first.name;
+      }
+    });
   }
 
   // Populate form fields once the cubit emits ProfileLoaded
@@ -101,7 +173,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }
       _skills = List<String>.from(profile.skills);
       _visibility = profile.profileVisibility;
-        }
+    }
+
+    unawaited(_loadCoursesForFacultyName(
+      _faculty,
+      preferredCourse: _programme,
+    ));
   }
 
   void _markDirty() => setState(() => _dirty = true);
@@ -118,7 +195,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         builder: (_) => _PhotoSourceSheet(),
       );
       if (choice == null || !mounted) {
-        debugPrint('📸 [EditProfile] Photo picker cancelled — no source chosen');
+        debugPrint(
+            '📸 [EditProfile] Photo picker cancelled — no source chosen');
         return;
       }
       debugPrint('📸 [EditProfile] Source chosen: $choice');
@@ -238,7 +316,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Edit Profile'),
+            title: Text(
+              _isAdminEditor ? 'Edit Student Profile' : 'Edit Profile',
+            ),
             leading: IconButton(
               icon: const Icon(Icons.close_rounded),
               onPressed: () => _dirty ? _confirmDiscard() : context.pop(),
@@ -288,8 +368,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                             )
                                           : _existingPhotoUrl != null
                                               ? DecorationImage(
-                                                  image: CachedNetworkImageProvider(
-                                                      _existingPhotoUrl!),
+                                                  image:
+                                                      CachedNetworkImageProvider(
+                                                          _existingPhotoUrl!),
                                                   fit: BoxFit.cover,
                                                 )
                                               : null,
@@ -299,14 +380,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                       onTap: _pickPhoto,
                                       onTapDown: (_) =>
                                           setState(() => _avatarPressed = true),
-                                      onTapUp: (_) =>
-                                          setState(() => _avatarPressed = false),
-                                      onTapCancel: () =>
-                                          setState(() => _avatarPressed = false),
-                                      splashColor:
-                                          AppColors.primary.withValues(alpha: 0.25),
-                                      highlightColor:
-                                          AppColors.primary.withValues(alpha: 0.1),
+                                      onTapUp: (_) => setState(
+                                          () => _avatarPressed = false),
+                                      onTapCancel: () => setState(
+                                          () => _avatarPressed = false),
+                                      splashColor: AppColors.primary
+                                          .withValues(alpha: 0.25),
+                                      highlightColor: AppColors.primary
+                                          .withValues(alpha: 0.1),
                                       child: Stack(
                                         fit: StackFit.expand,
                                         children: [
@@ -329,7 +410,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                                   end: Alignment.bottomCenter,
                                                   colors: [
                                                     Colors.transparent,
-                                                    Colors.black.withValues(alpha: 0.62),
+                                                    Colors.black.withValues(
+                                                        alpha: 0.62),
                                                   ],
                                                 ),
                                               ),
@@ -365,7 +447,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                             color: Colors.white, width: 2),
                                         boxShadow: [
                                           BoxShadow(
-                                            color: Colors.black.withValues(alpha: 0.18),
+                                            color: Colors.black
+                                                .withValues(alpha: 0.18),
                                             blurRadius: 4,
                                             offset: const Offset(0, 2),
                                           ),
@@ -424,24 +507,112 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Column(
                       children: [
-                        StTextField(
-                          label: 'Faculty',
-                          initialValue: _faculty,
-                          enabled: false,
-                          helperText: 'University information cannot be changed.',
-                        ),
+                        if (_isAdminEditor)
+                          DropdownButtonFormField<String>(
+                            initialValue: _faculties
+                                    .any((faculty) => faculty.name == _faculty)
+                                ? _faculty
+                                : null,
+                            decoration: const InputDecoration(
+                              labelText: 'Faculty',
+                              border: OutlineInputBorder(),
+                              helperText:
+                                  'Admins can reassign a student to a faculty.',
+                            ),
+                            items: _faculties
+                                .map(
+                                  (faculty) => DropdownMenuItem<String>(
+                                    value: faculty.name,
+                                    child: Text(faculty.name),
+                                  ),
+                                )
+                                .toList(growable: false),
+                            onChanged: _loadingAcademicData
+                                ? null
+                                : (value) async {
+                                    if (value == null || value == _faculty) {
+                                      return;
+                                    }
+                                    setState(() {
+                                      _faculty = value;
+                                      _dirty = true;
+                                      _programme = '';
+                                    });
+                                    await _loadCoursesForFacultyName(value);
+                                  },
+                          )
+                        else
+                          StTextField(
+                            label: 'Faculty',
+                            initialValue: _faculty,
+                            enabled: false,
+                            helperText:
+                                'University information cannot be changed.',
+                          ),
                         const SizedBox(height: AppDimensions.spacingMd),
-                        StTextField(
-                          label: 'Programme',
-                          initialValue: _programme,
-                          enabled: false,
-                        ),
+                        if (_isAdminEditor)
+                          DropdownButtonFormField<String>(
+                            initialValue: _courses
+                                    .any((course) => course.name == _programme)
+                                ? _programme
+                                : null,
+                            decoration: const InputDecoration(
+                              labelText: 'Programme',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: _courses
+                                .map(
+                                  (course) => DropdownMenuItem<String>(
+                                    value: course.name,
+                                    child: Text(course.name),
+                                  ),
+                                )
+                                .toList(growable: false),
+                            onChanged: _loadingAcademicData || _courses.isEmpty
+                                ? null
+                                : (value) {
+                                    if (value == null) return;
+                                    setState(() {
+                                      _programme = value;
+                                      _dirty = true;
+                                    });
+                                  },
+                          )
+                        else
+                          StTextField(
+                            label: 'Programme',
+                            initialValue: _programme,
+                            enabled: false,
+                          ),
                         const SizedBox(height: AppDimensions.spacingMd),
-                        StTextField(
-                          label: 'Year of Study',
-                          initialValue: 'Year $_year',
-                          enabled: false,
-                        ),
+                        if (_isAdminEditor)
+                          DropdownButtonFormField<int>(
+                            initialValue: _year,
+                            decoration: const InputDecoration(
+                              labelText: 'Year of Study',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: List.generate(
+                              7,
+                              (index) => DropdownMenuItem<int>(
+                                value: index + 1,
+                                child: Text('Year ${index + 1}'),
+                              ),
+                            ),
+                            onChanged: (value) {
+                              if (value == null) return;
+                              setState(() {
+                                _year = value;
+                                _dirty = true;
+                              });
+                            },
+                          )
+                        else
+                          StTextField(
+                            label: 'Year of Study',
+                            initialValue: 'Year $_year',
+                            enabled: false,
+                          ),
                       ],
                     ),
                   ),

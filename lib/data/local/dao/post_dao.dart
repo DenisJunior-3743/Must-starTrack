@@ -29,6 +29,7 @@ import '../../../core/constants/app_enums.dart';
 class PostDao {
   final DatabaseHelper _db;
   final _uuid = const Uuid();
+  final Map<String, Set<String>> _tableColumnCache = <String, Set<String>>{};
 
   PostDao({DatabaseHelper? db}) : _db = db ?? DatabaseHelper.instance;
 
@@ -163,6 +164,16 @@ class PostDao {
     required String postId,
     String? message,
   }) async {
+    if (senderId.trim().isEmpty ||
+        receiverId.trim().isEmpty ||
+        senderId == receiverId) {
+      debugPrint(
+        '[PostDao] Skipping self/invalid collaboration request '
+        'sender=$senderId receiver=$receiverId post=$postId',
+      );
+      return;
+    }
+
     final db = await _db.database;
     final now = DateTime.now().toIso8601String();
     final existing = await db.query(
@@ -312,9 +323,6 @@ class PostDao {
     bool includePendingForAdmin = false,
   }) async {
     final db = await _db.database;
-    debugPrint('[PostDao] getFeedPage using database');
-    final dbPath = db.path;
-    debugPrint('[PostDao] database path: $dbPath');
     final postColumns = await _tableColumns(db, DatabaseSchema.tablePosts);
     final userColumns = await _tableColumns(db, DatabaseSchema.tableUsers);
 
@@ -382,7 +390,7 @@ class PostDao {
         ? "LEFT JOIN ${DatabaseSchema.tableFollows} fl ON fl.followee_id = p.author_id AND fl.follower_id = '$currentUserId'"
         : '';
     final collabJoin = currentUserId != null
-        ? "LEFT JOIN ${DatabaseSchema.tableCollabRequests} cr ON cr.post_id = p.id AND cr.sender_id = '$currentUserId' AND COALESCE(cr.status, 'pending') = 'pending'"
+        ? "LEFT JOIN ${DatabaseSchema.tableCollabRequests} cr ON cr.post_id = p.id AND cr.sender_id = '$currentUserId' AND COALESCE(cr.status, 'pending') = 'pending' AND COALESCE(cr.receiver_id, '') != COALESCE(cr.sender_id, '')"
         : '';
     final viewJoin = currentUserId != null
         ? "LEFT JOIN ${DatabaseSchema.tableActivityLogs} vw ON vw.entity_id = p.id AND vw.user_id = '$currentUserId' AND vw.action = 'view_post' AND vw.entity_type = '${DatabaseSchema.tablePosts}'"
@@ -450,103 +458,8 @@ class PostDao {
       LIMIT  ?
     ''';
 
-    debugPrint('[PostDao] SQL: $sql');
-    debugPrint('[PostDao] ARGS: $args');
-
-    final allCols =
-        await db.rawQuery('PRAGMA table_info(${DatabaseSchema.tablePosts})');
-    debugPrint(
-        '[PostDao] TABLE COLUMNS: ${allCols.map((r) => r['name']).toList()}');
-
-    final debugCount = await db
-        .rawQuery('SELECT COUNT(*) as cnt FROM ${DatabaseSchema.tablePosts}');
-    debugPrint('[PostDao] DEBUG COUNT before query: $debugCount');
-
-    // Build conditional debug query only selecting columns that exist
-    final sampleCols = ['id', 'created_at', 'status', 'type'];
-    if (postColumns.contains('is_archived')) {
-      sampleCols.add('is_archived');
-    }
-    final rawPosts = await db.rawQuery(
-        'SELECT ${sampleCols.join(', ')} FROM ${DatabaseSchema.tablePosts} LIMIT 5');
-    debugPrint('[PostDao] RAW POSTS: $rawPosts');
-
     final rows = await db.rawQuery(sql, args);
-    debugPrint('[PostDao] ROWS RETURNED: ${rows.length}');
-
     if (rows.isEmpty) {
-      final debugCountAfter = await db
-          .rawQuery('SELECT COUNT(*) as cnt FROM ${DatabaseSchema.tablePosts}');
-      debugPrint('[PostDao] DEBUG COUNT after empty query: $debugCountAfter');
-
-      final simpleQuery = await db
-          .rawQuery('SELECT id FROM ${DatabaseSchema.tablePosts} LIMIT 5');
-      debugPrint('[PostDao] Simple query result: $simpleQuery');
-
-      final withStatus = await db.rawQuery(
-          "SELECT COUNT(*) as cnt, status FROM ${DatabaseSchema.tablePosts} GROUP BY status");
-      debugPrint('[PostDao] Posts by status: $withStatus');
-    }
-    if (rows.isEmpty) {
-      final statsSql = StringBuffer()
-        ..writeln('SELECT')
-        ..writeln('  COUNT(*) AS total,')
-        ..writeln(
-            "  SUM(CASE WHEN type = 'project' THEN 1 ELSE 0 END) AS exact_projects,")
-        ..writeln(
-            "  SUM(CASE WHEN type = 'opportunity' THEN 1 ELSE 0 END) AS exact_opportunities,")
-        ..writeln(
-            "  SUM(CASE WHEN LOWER(TRIM(COALESCE(type, ''))) = 'project' THEN 1 ELSE 0 END) AS normalized_projects,")
-        ..writeln(
-            "  SUM(CASE WHEN LOWER(TRIM(COALESCE(type, ''))) = 'opportunity' THEN 1 ELSE 0 END) AS normalized_opportunities,")
-        ..write(
-          postColumns.contains('status')
-              ? "  SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END) AS archived_by_status,\n"
-              : '  0 AS archived_by_status,\n',
-        )
-        ..write(
-          postColumns.contains('is_archived')
-              ? '  SUM(CASE WHEN COALESCE(is_archived, 0) = 1 THEN 1 ELSE 0 END) AS archived_by_flag\n'
-              : '  0 AS archived_by_flag\n',
-        )
-        ..write('FROM ${DatabaseSchema.tablePosts}');
-
-      final stats = await db.rawQuery(statsSql.toString());
-      final statRow =
-          stats.isNotEmpty ? stats.first : const <String, Object?>{};
-
-      final rawCount = await db.rawQuery(
-          'SELECT COUNT(*) as cnt, MIN(created_at) as min_created, MAX(created_at) as max_created FROM ${DatabaseSchema.tablePosts}');
-      debugPrint('[PostDao] RAW POSTS: $rawCount');
-
-      final sampleColumns = <String>[
-        'id',
-        if (postColumns.contains('type')) 'type',
-        if (postColumns.contains('status')) 'status',
-        if (postColumns.contains('moderation_status')) 'moderation_status',
-        if (postColumns.contains('is_archived')) 'is_archived',
-        if (postColumns.contains('created_at')) 'created_at',
-      ];
-      final sampleRows = sampleColumns.isEmpty
-          ? const <Map<String, Object?>>[]
-          : await db.query(
-              DatabaseSchema.tablePosts,
-              columns: sampleColumns,
-              orderBy:
-                  postColumns.contains('created_at') ? 'created_at DESC' : null,
-              limit: 5,
-            );
-      debugPrint(
-        '[PostDao] getFeedPage returned 0 rows '
-        'filterType=${filterType ?? 'all'} '
-        'filterCategory=${filterCategory ?? 'all'} '
-        'filterFaculty=${filterFaculty ?? 'all'} '
-        'afterCursor=${afterCursor ?? 'none'} '
-        'columns=${postColumns.toList()..sort()} '
-        'stats=$statRow '
-        'samples=$sampleRows',
-      );
-
       if (filterType != null && postColumns.contains('type')) {
         final fallbackArgs = <dynamic>[];
         final fallbackConditions = <String>[];
@@ -625,9 +538,6 @@ class PostDao {
 
         final fallbackRows = await db.rawQuery(fallbackSql, fallbackArgs);
         if (fallbackRows.isNotEmpty) {
-          debugPrint(
-            '[PostDao] normalized type fallback recovered ${fallbackRows.length} row(s) for filterType=$filterType',
-          );
           return fallbackRows.map(_fromDbRow).toList();
         }
       }
@@ -704,15 +614,87 @@ class PostDao {
     final db = await _db.database;
     final postColumns = await _tableColumns(db, DatabaseSchema.tablePosts);
     final rows = await db.rawQuery('''
-      SELECT * FROM ${DatabaseSchema.tablePosts}
-      WHERE  author_id = ?
+      SELECT p.*,
+        (
+          SELECT COUNT(*)
+          FROM ${DatabaseSchema.tableLikes} lk_count
+          WHERE lk_count.post_id = p.id
+        ) AS local_like_count,
+        (
+          SELECT COUNT(*)
+          FROM ${DatabaseSchema.tableDislikes} dlk_count
+          WHERE dlk_count.post_id = p.id
+        ) AS local_dislike_count,
+        (
+          SELECT COUNT(*)
+          FROM ${DatabaseSchema.tableComments} cm_count
+          WHERE cm_count.post_id = p.id AND COALESCE(cm_count.is_deleted, 0) = 0
+        ) AS local_comment_count
+      FROM ${DatabaseSchema.tablePosts} p
+      WHERE  p.author_id = ?
         ${!includeArchived && postColumns.contains('is_archived') ? 'AND COALESCE(is_archived, 0) = 0' : ''}
         ${!includeArchived && !postColumns.contains('is_archived') && postColumns.contains('status') ? "AND COALESCE(status, 'published') != 'archived'" : ''}
-        ${afterCursor != null ? 'AND created_at < $afterCursor' : ''}
-      ORDER  BY created_at DESC
+        ${afterCursor != null ? 'AND p.created_at < $afterCursor' : ''}
+      ORDER  BY p.created_at DESC
       LIMIT  ?
     ''', [authorId, pageSize]);
     return rows.map(_fromDbRow).toList();
+  }
+
+  Future<List<PostModel>> hydrateEngagementCounts(
+    List<PostModel> posts,
+  ) async {
+    if (posts.isEmpty) return posts;
+
+    final db = await _db.database;
+    final ids = posts.map((post) => post.id).toSet().toList(growable: false);
+    final placeholders = List.filled(ids.length, '?').join(',');
+
+    Future<Map<String, int>> countByPost({
+      required String table,
+      String extraWhere = '',
+    }) async {
+      final rows = await db.rawQuery(
+        '''
+        SELECT post_id, COUNT(*) AS count
+        FROM $table
+        WHERE post_id IN ($placeholders)
+          $extraWhere
+        GROUP BY post_id
+        ''',
+        ids,
+      );
+      return {
+        for (final row in rows)
+          if ((row['post_id']?.toString() ?? '').isNotEmpty)
+            row['post_id'].toString(): row['count'] is int
+                ? row['count'] as int
+                : int.tryParse(row['count']?.toString() ?? '') ?? 0,
+      };
+    }
+
+    final likeCounts = await countByPost(table: DatabaseSchema.tableLikes);
+    final dislikeCounts =
+        await countByPost(table: DatabaseSchema.tableDislikes);
+    final commentCounts = await countByPost(
+      table: DatabaseSchema.tableComments,
+      extraWhere: 'AND COALESCE(is_deleted, 0) = 0',
+    );
+
+    return posts.map((post) {
+      final localLikes = likeCounts[post.id] ?? 0;
+      final localDislikes = dislikeCounts[post.id] ?? 0;
+      final localComments = commentCounts[post.id] ?? 0;
+      return post.copyWith(
+        likeCount: localLikes > post.likeCount ? localLikes : post.likeCount,
+        dislikeCount: localDislikes > post.dislikeCount
+            ? localDislikes
+            : post.dislikeCount,
+        commentCount: localComments > post.commentCount
+            ? localComments
+            : post.commentCount,
+      );
+    }).toList(growable: false);
   }
 
   Future<List<PostModel>> getPostsByGroup(
@@ -1256,13 +1238,18 @@ class PostDao {
       ),
       trustScore:
           parseInt(row['trust_score'] ?? row['suspicion_score'], fallback: 100),
-      likeCount: parseInt(row['resolved_like_count'] ?? row['like_count']),
-      dislikeCount: parseInt(
-        row['resolved_dislike_count'] ?? row['dislike_count'],
-      ),
-      commentCount: parseInt(
-        row['resolved_comment_count'] ?? row['comment_count'],
-      ),
+      likeCount: [
+        parseInt(row['resolved_like_count'] ?? row['like_count']),
+        parseInt(row['local_like_count']),
+      ].reduce((a, b) => a > b ? a : b),
+      dislikeCount: [
+        parseInt(row['resolved_dislike_count'] ?? row['dislike_count']),
+        parseInt(row['local_dislike_count']),
+      ].reduce((a, b) => a > b ? a : b),
+      commentCount: [
+        parseInt(row['resolved_comment_count'] ?? row['comment_count']),
+        parseInt(row['local_comment_count']),
+      ].reduce((a, b) => a > b ? a : b),
       shareCount: parseInt(row['share_count']),
       viewCount: parseInt(row['view_count']),
       isArchived:
@@ -1377,8 +1364,15 @@ class PostDao {
   }
 
   Future<Set<String>> _tableColumns(Database db, String table) async {
+    final cached = _tableColumnCache[table];
+    if (cached != null && cached.isNotEmpty) {
+      return cached;
+    }
+
     final rows = await db.rawQuery('PRAGMA table_info($table)');
-    return rows.map((row) => row['name']).whereType<String>().toSet();
+    final columns = rows.map((row) => row['name']).whereType<String>().toSet();
+    _tableColumnCache[table] = columns;
+    return columns;
   }
 
   Future<Map<String, dynamic>> _filterToExistingColumns(

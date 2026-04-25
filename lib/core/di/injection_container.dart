@@ -35,9 +35,11 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:dio/dio.dart';
 
-import '../config/gemini_config.dart';
+import '../config/openai_config.dart';
+import '../config/openai_key_loader.dart';
 import '../network/connectivity_service.dart';
 import '../router/route_guards.dart';
+import '../services/user_presence_service.dart';
 
 import '../../data/local/database_helper.dart';
 import '../../data/local/dao/activity_log_dao.dart';
@@ -58,8 +60,9 @@ import '../../data/local/services/faculty_seeder.dart';
 
 import '../../data/remote/firestore_service.dart';
 import '../../data/remote/fcm_service.dart';
-import '../../data/remote/gemini_service.dart';
+import '../../data/remote/openai_service.dart';
 import '../../data/remote/recommender_service.dart';
+import '../../data/remote/skill_pattern_service.dart';
 import '../../data/remote/sync_service.dart';
 import '../../data/remote/cloudinary_service.dart';
 
@@ -81,13 +84,45 @@ import '../theme/theme_cubit.dart';
 /// Global service locator instance — the single access point.
 final sl = GetIt.instance;
 
-const _geminiApiKey = String.fromEnvironment(
-  'GEMINI_API_KEY',
-  defaultValue: GeminiConfig.bundledApiKey,
+const _openAiApiKeyFromEnv = String.fromEnvironment(
+  'OPENAI_API_KEY',
+  defaultValue: OpenAiConfig.bundledApiKey,
 );
 
 class InjectionContainer {
   InjectionContainer._();
+
+  /// Minimal registration for the web-only recommendation dashboard.
+  /// Only registers services that are compatible with the web platform
+  /// (no SQLite, no local notifications, no platform channels).
+  static Future<void> initWeb() async {
+    // Firebase instances
+    sl.registerSingleton<fb.FirebaseAuth>(fb.FirebaseAuth.instance);
+    sl.registerSingleton<FirebaseFirestore>(FirebaseFirestore.instance);
+
+    sl.registerSingleton<FirestoreService>(
+      FirestoreService(firestore: sl<FirebaseFirestore>()),
+    );
+
+    final openAiApiKey = _openAiApiKeyFromEnv.trim().isNotEmpty
+        ? _openAiApiKeyFromEnv.trim()
+        : (await loadOpenAiApiKeyFromProjectFile() ?? '').trim();
+
+    sl.registerSingleton<OpenAiService>(
+      OpenAiService(
+        apiKey: openAiApiKey,
+        model: OpenAiConfig.model,
+      ),
+    );
+
+    sl.registerSingleton<RecommenderService>(
+      RecommenderService(openAiService: sl<OpenAiService>()),
+    );
+
+    sl.registerSingleton<SkillPatternService>(
+      SkillPatternService(openAiService: sl<OpenAiService>()),
+    );
+  }
 
   static Future<void> init() async {
     // ── 1. External: Flutter / system dependencies ──────────────────────────
@@ -125,8 +160,8 @@ class InjectionContainer {
         ),
       ),
     );
-    final androidNotifPlugin = localNotifPlugin
-        .resolvePlatformSpecificImplementation<
+    final androidNotifPlugin =
+        localNotifPlugin.resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>();
     await androidNotifPlugin?.createNotificationChannel(
       const AndroidNotificationChannel(
@@ -201,13 +236,25 @@ class InjectionContainer {
       ),
     );
 
-    // Gemini key is injected at runtime via --dart-define. Empty disables remote rerank.
-    sl.registerSingleton<GeminiService>(
-      GeminiService(apiKey: _geminiApiKey),
+    final openAiApiKey = _openAiApiKeyFromEnv.trim().isNotEmpty
+        ? _openAiApiKeyFromEnv.trim()
+        : (await loadOpenAiApiKeyFromProjectFile() ?? '').trim();
+
+    // OpenAI key can come from --dart-define, .env, or Open API.txt in project root.
+    // Empty key keeps local-first behavior and disables remote rerank/AI fallback.
+    sl.registerSingleton<OpenAiService>(
+      OpenAiService(
+        apiKey: openAiApiKey,
+        model: OpenAiConfig.model,
+      ),
     );
 
     sl.registerSingleton<RecommenderService>(
-      RecommenderService(geminiService: sl<GeminiService>()),
+      RecommenderService(openAiService: sl<OpenAiService>()),
+    );
+
+    sl.registerSingleton<SkillPatternService>(
+      SkillPatternService(openAiService: sl<OpenAiService>()),
     );
 
     sl.registerSingleton<CloudinaryService>(
@@ -216,7 +263,7 @@ class InjectionContainer {
 
     sl.registerSingleton<FcmService>(
       FcmService(
-        messaging: null,   // uses FirebaseMessaging.instance internally
+        messaging: null, // uses FirebaseMessaging.instance internally
         firestore: sl<FirebaseFirestore>(),
         localNotif: sl<FlutterLocalNotificationsPlugin>(),
         preferences: sl<NotificationPreferencesService>(),
@@ -249,6 +296,14 @@ class InjectionContainer {
 
     sl.registerSingleton<ConnectivityService>(
       ConnectivityService(),
+    );
+
+    sl.registerSingleton<UserPresenceService>(
+      UserPresenceService(
+        firestore: sl<FirestoreService>(),
+        secureStorage: sl<FlutterSecureStorage>(),
+        connectivity: sl<ConnectivityService>(),
+      ),
     );
 
     // ── 7. Repositories ─────────────────────────────────────────────────────
@@ -293,7 +348,9 @@ class InjectionContainer {
         postDao: sl<PostDao>(),
         userDao: sl<UserDao>(),
         activityLogDao: sl<ActivityLogDao>(),
+        commentDao: sl<CommentDao>(),
         recommenderService: sl<RecommenderService>(),
+        skillPatternService: sl<SkillPatternService>(),
         syncQueue: sl<SyncQueueDao>(),
         syncService: sl<SyncService>(),
         firestore: sl<FirestoreService>(),

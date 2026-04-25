@@ -1,13 +1,16 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:timeago/timeago.dart' as timeago;
+import 'package:url_launcher/url_launcher.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
+import '../../../core/constants/app_enums.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_guards.dart';
 import '../../../core/router/route_names.dart';
@@ -18,13 +21,16 @@ import '../../../data/local/dao/sync_queue_dao.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/remote/sync_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
-import '../../shared/screens/offline_video_player_screen.dart';
 import '../../shared/widgets/guest_auth_required_view.dart';
 
 enum _MyProjectsFilter { all, active, opportunities, applied, archived }
 
 class MyProjectsScreen extends StatefulWidget {
   const MyProjectsScreen({super.key});
+
+  static void invalidateCache() {
+    _MyProjectsScreenState.invalidateCache();
+  }
 
   @override
   State<MyProjectsScreen> createState() => _MyProjectsScreenState();
@@ -36,6 +42,11 @@ class _MyProjectsScreenState extends State<MyProjectsScreen> {
   static String? _cacheUserId;
   static List<PostModel> _cachedPosts = const [];
   static List<PostModel> _cachedAppliedPosts = const [];
+
+  /// Call this after creating or editing a post so the screen reloads fresh data.
+  static void invalidateCache() {
+    _cacheLoadedAt = null;
+  }
 
   final _postDao = sl<PostDao>();
   final _postJoinDao = sl<PostJoinDao>();
@@ -56,7 +67,10 @@ class _MyProjectsScreenState extends State<MyProjectsScreen> {
     _loadPosts(useCacheFirst: true);
   }
 
-  Future<void> _loadPosts({bool useCacheFirst = false}) async {
+  Future<void> _loadPosts({
+    bool useCacheFirst = false,
+    bool silentRefresh = false,
+  }) async {
     final userId = _currentUserId;
     if (userId == null || userId.isEmpty) {
       setState(() {
@@ -72,10 +86,15 @@ class _MyProjectsScreenState extends State<MyProjectsScreen> {
     }
 
     if (useCacheFirst && _cacheUserId == userId && _cacheLoadedAt != null) {
+      final cachedPosts = await _postDao.hydrateEngagementCounts(_cachedPosts);
+      final cachedAppliedPosts =
+          await _postDao.hydrateEngagementCounts(_cachedAppliedPosts);
       if (mounted) {
+        _cachedPosts = cachedPosts;
+        _cachedAppliedPosts = cachedAppliedPosts;
         setState(() {
-          _posts = _cachedPosts;
-          _appliedPosts = _cachedAppliedPosts;
+          _posts = cachedPosts;
+          _appliedPosts = cachedAppliedPosts;
           _loading = false;
           _error = null;
         });
@@ -83,15 +102,17 @@ class _MyProjectsScreenState extends State<MyProjectsScreen> {
 
       final age = DateTime.now().difference(_cacheLoadedAt!);
       if (age >= _staleAfter) {
-        unawaited(_loadPosts(useCacheFirst: false));
+        unawaited(_loadPosts(useCacheFirst: false, silentRefresh: true));
       }
       return;
     }
 
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    if (!silentRefresh) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
 
     try {
       final results = await Future.wait([
@@ -127,7 +148,9 @@ class _MyProjectsScreenState extends State<MyProjectsScreen> {
       case _MyProjectsFilter.active:
         return _posts.where((p) => !p.isArchived).toList();
       case _MyProjectsFilter.opportunities:
-        return _posts.where((p) => p.type == 'opportunity' && !p.isArchived).toList();
+        return _posts
+            .where((p) => p.type == 'opportunity' && !p.isArchived)
+            .toList();
       case _MyProjectsFilter.applied:
         return _appliedPosts;
       case _MyProjectsFilter.archived:
@@ -305,6 +328,7 @@ class _MyProjectsScreenState extends State<MyProjectsScreen> {
     }
 
     return Scaffold(
+      backgroundColor: AppColors.background(context),
       appBar: AppBar(
         title: Text(
           'My Projects',
@@ -323,13 +347,11 @@ class _MyProjectsScreenState extends State<MyProjectsScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
           children: [
-            Text(
-              'Manage everything you have posted: update titles, descriptions, media, archive older work, or remove posts you no longer want visible.',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 13,
-                color: AppColors.textSecondary(context),
-                height: 1.4,
-              ),
+            _MyProjectsOverviewHeader(
+              totalPosts: _posts.length,
+              activePosts: _posts.where((p) => !p.isArchived).length,
+              appliedPosts: _appliedPosts.length,
+              onCreate: guards.canCreatePost() ? () => _openEditor() : null,
             ),
             const SizedBox(height: 16),
             Wrap(
@@ -337,9 +359,26 @@ class _MyProjectsScreenState extends State<MyProjectsScreen> {
               runSpacing: 8,
               children: _MyProjectsFilter.values.map((filter) {
                 final selected = _filter == filter;
+                final isDark = Theme.of(context).brightness == Brightness.dark;
                 return ChoiceChip(
                   label: Text(_filterLabel(filter)),
                   selected: selected,
+                  showCheckmark: false,
+                  selectedColor: AppColors.primary,
+                  backgroundColor:
+                      isDark ? AppColors.surfaceDark2 : AppColors.surfaceLight,
+                  side: BorderSide(
+                    color: selected
+                        ? AppColors.primary
+                        : AppColors.border(context),
+                  ),
+                  labelStyle: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: selected
+                        ? Colors.white
+                        : AppColors.textPrimary(context),
+                  ),
                   onSelected: (_) => setState(() => _filter = filter),
                 );
               }).toList(),
@@ -452,12 +491,17 @@ class _MyProjectsMessageCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        color: isDark ? AppColors.surfaceDark2 : AppColors.surfaceLight,
         borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-        border: Border.all(color: AppColors.border(context)),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : AppColors.borderLight,
+        ),
       ),
       child: Column(
         children: [
@@ -465,7 +509,11 @@ class _MyProjectsMessageCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             title,
-            style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w700),
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary(context),
+            ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
@@ -486,6 +534,174 @@ class _MyProjectsMessageCard extends StatelessWidget {
               label: Text(actionLabel!),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MyProjectsOverviewHeader extends StatelessWidget {
+  const _MyProjectsOverviewHeader({
+    required this.totalPosts,
+    required this.activePosts,
+    required this.appliedPosts,
+    required this.onCreate,
+  });
+
+  final int totalPosts;
+  final int activePosts;
+  final int appliedPosts;
+  final VoidCallback? onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark2 : AppColors.surfaceLight,
+        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : AppColors.borderLight,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color:
+                      AppColors.primary.withValues(alpha: isDark ? 0.22 : 0.10),
+                  borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+                ),
+                child: const Icon(
+                  Icons.dashboard_customize_outlined,
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Project workspace',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary(context),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Update posts, review media, and manage visibility.',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        color: AppColors.textSecondary(context),
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (onCreate != null)
+                IconButton.filled(
+                  tooltip: 'Create post',
+                  onPressed: onCreate,
+                  icon: const Icon(Icons.add_rounded),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _HeaderStat(
+                  label: 'Total',
+                  value: '$totalPosts',
+                  icon: Icons.inventory_2_outlined,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _HeaderStat(
+                  label: 'Active',
+                  value: '$activePosts',
+                  icon: Icons.check_circle_outline_rounded,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _HeaderStat(
+                  label: 'Applied',
+                  value: '$appliedPosts',
+                  icon: Icons.how_to_reg_rounded,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeaderStat extends StatelessWidget {
+  const _HeaderStat({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.05)
+            : AppColors.primaryTint10,
+        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 17, color: AppColors.primary),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary(context),
+                  ),
+                ),
+                Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondary(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -513,186 +729,832 @@ class _MyProjectCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cover = post.mediaUrls.isNotEmpty ? post.mediaUrls.first : null;
-    final isVideo = cover != null && isVideoMediaPath(cover);
-
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        color: isDark ? AppColors.surfaceDark2 : AppColors.surfaceLight,
         borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-        border: Border.all(color: AppColors.border(context)),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : AppColors.borderLight,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+            color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.04),
+            blurRadius: isDark ? 18 : 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          InkWell(
-            onTap: cover == null
-                ? onOpen
-                : () {
-                    if (isVideo) {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => OfflineVideoPlayerScreen(
-                            source: cover,
-                            title: post.title,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    post.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary(context),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _StatusBadge(post: post),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Description',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: isDark ? const Color(0xFF7EA7FF) : AppColors.primary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              post.description?.trim().isNotEmpty == true
+                  ? post.description!
+                  : 'No description yet.',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 13,
+                color: AppColors.textSecondary(context),
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _MetricChip(
+                    icon: Icons.thumb_up_alt_outlined,
+                    label: '${post.likeCount} likes'),
+                _MetricChip(
+                    icon: Icons.comment_outlined,
+                    label: '${post.commentCount} comments'),
+                _MetricChip(
+                    icon: Icons.visibility_outlined,
+                    label: '${post.viewCount} views'),
+                if (post.type == 'opportunity')
+                  _MetricChip(
+                      icon: Icons.people_outline,
+                      label: '${post.joinCount} applicants'),
+                _MetricChip(
+                    icon: Icons.schedule_rounded,
+                    label: timeago.format(post.updatedAt)),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Media',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary(context),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _MyProjectMediaTabs(post: post),
+            if (onViewApplicants != null) ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: onViewApplicants,
+                  icon: const Icon(Icons.people_rounded, size: 18),
+                  label: Text('View Applicants (${post.joinCount})'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.roleLecturer,
+                    side: BorderSide(
+                        color: AppColors.roleLecturer.withValues(alpha: 0.4)),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onOpen,
+                    icon: const Icon(Icons.open_in_new_rounded),
+                    label: const Text('Open'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Edit'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                if (onRestore != null) ...[
+                  Expanded(
+                    child: TextButton.icon(
+                      onPressed: onRestore,
+                      icon: const Icon(Icons.restore_rounded),
+                      label: const Text('Restore'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ] else if (onArchive != null) ...[
+                  Expanded(
+                    child: TextButton.icon(
+                      onPressed: onArchive,
+                      icon: const Icon(Icons.archive_outlined),
+                      label: const Text('Archive'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  child: TextButton.icon(
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline_rounded,
+                        color: AppColors.danger),
+                    label: const Text('Delete',
+                        style: TextStyle(color: AppColors.danger)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+enum _MyProjectMediaType { image, video }
+
+class _MyProjectMediaItem {
+  const _MyProjectMediaItem({
+    required this.source,
+    required this.title,
+    required this.type,
+  });
+
+  final String source;
+  final String title;
+  final _MyProjectMediaType type;
+
+  bool get isVideo => type == _MyProjectMediaType.video;
+}
+
+List<_MyProjectMediaItem> _myProjectVideosFor(PostModel post) {
+  final items = <_MyProjectMediaItem>[
+    for (final url in post.mediaUrls.where(_isMyProjectVideoUrl))
+      _MyProjectMediaItem(
+        source: url,
+        title: post.title,
+        type: _MyProjectMediaType.video,
+      ),
+  ];
+
+  final youtube = post.youtubeUrl?.trim();
+  if (youtube != null && youtube.isNotEmpty) {
+    items.add(
+      _MyProjectMediaItem(
+        source: youtube,
+        title: post.title,
+        type: _MyProjectMediaType.video,
+      ),
+    );
+  }
+  return items;
+}
+
+List<_MyProjectMediaItem> _myProjectPicturesFor(PostModel post) {
+  return post.mediaUrls
+      .where((url) => !_isMyProjectVideoUrl(url))
+      .map(
+        (url) => _MyProjectMediaItem(
+          source: url,
+          title: post.title,
+          type: _MyProjectMediaType.image,
+        ),
+      )
+      .toList(growable: false);
+}
+
+class _MyProjectMediaTabs extends StatefulWidget {
+  const _MyProjectMediaTabs({required this.post});
+
+  final PostModel post;
+
+  @override
+  State<_MyProjectMediaTabs> createState() => _MyProjectMediaTabsState();
+}
+
+class _MyProjectMediaTabsState extends State<_MyProjectMediaTabs> {
+  int _selected = 0;
+
+  void _openMedia(List<_MyProjectMediaItem> items, int index) {
+    if (items.isEmpty || index < 0 || index >= items.length) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _MyProjectMediaPreviewScreen(
+          items: items,
+          initialIndex: index,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final videos = _myProjectVideosFor(widget.post);
+    final pictures = _myProjectPicturesFor(widget.post);
+    final showcase = [...pictures, ...videos];
+    final tabs = [
+      ('Videos', Icons.play_circle_outline_rounded, videos),
+      ('Pictures', Icons.image_outlined, pictures),
+      ('Showcase', Icons.auto_awesome_motion_rounded, showcase),
+    ];
+    final currentItems = tabs[_selected].$3;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: List.generate(tabs.length, (index) {
+              final selected = _selected == index;
+              final tab = tabs[index];
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                  selected: selected,
+                  showCheckmark: false,
+                  avatar: Icon(
+                    tab.$2,
+                    size: 17,
+                    color: selected
+                        ? Colors.white
+                        : isDark
+                            ? const Color(0xFF8FB2FF)
+                            : AppColors.primary,
+                  ),
+                  label: Text('${tab.$1} (${tab.$3.length})'),
+                  selectedColor: AppColors.primary,
+                  backgroundColor: isDark
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : AppColors.primaryTint10,
+                  side: BorderSide(
+                    color: selected
+                        ? AppColors.primary
+                        : isDark
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : AppColors.borderLight,
+                  ),
+                  labelStyle: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: selected
+                        ? Colors.white
+                        : AppColors.textPrimary(context),
+                  ),
+                  onSelected: (_) => setState(() => _selected = index),
+                ),
+              );
+            }),
+          ),
+        ),
+        const SizedBox(height: 10),
+        if (currentItems.isEmpty)
+          _MyProjectEmptyMediaPanel(label: tabs[_selected].$1)
+        else
+          _MyProjectMediaGrid(
+            items: currentItems,
+            onOpen: (index) => _openMedia(currentItems, index),
+          ),
+      ],
+    );
+  }
+}
+
+class _MyProjectEmptyMediaPanel extends StatelessWidget {
+  const _MyProjectEmptyMediaPanel({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.05)
+            : AppColors.primaryTint10,
+        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : AppColors.primary.withValues(alpha: 0.10),
+        ),
+      ),
+      child: Text(
+        'No ${label.toLowerCase()} added yet.',
+        style: GoogleFonts.plusJakartaSans(
+          fontSize: 12,
+          color: AppColors.textSecondary(context),
+        ),
+      ),
+    );
+  }
+}
+
+class _MyProjectMediaGrid extends StatelessWidget {
+  const _MyProjectMediaGrid({
+    required this.items,
+    required this.onOpen,
+  });
+
+  final List<_MyProjectMediaItem> items;
+  final ValueChanged<int> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      itemCount: items.length,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 1.35,
+      ),
+      itemBuilder: (context, index) {
+        final item = items[index];
+        return InkWell(
+          onTap: () => onOpen(index),
+          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _MyProjectMediaThumbnail(item: item),
+                Positioned(
+                  left: 8,
+                  bottom: 8,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.58),
+                      borderRadius:
+                          BorderRadius.circular(AppDimensions.radiusFull),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          item.isVideo
+                              ? Icons.play_arrow_rounded
+                              : Icons.zoom_out_map_rounded,
+                          size: 14,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          item.isVideo ? 'Watch' : 'View',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
                           ),
                         ),
-                      );
-                    } else {
-                      onOpen();
-                    }
-                  },
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(AppDimensions.radiusLg)),
-            child: Container(
-              height: 170,
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                color: AppColors.primaryTint10,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(AppDimensions.radiusLg)),
-              ),
-              child: cover == null
-                  ? const Icon(Icons.perm_media_rounded, size: 40, color: AppColors.primary)
-                  : isVideo
-                      ? Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            Container(color: Colors.black12),
-                            const Center(
-                              child: Icon(Icons.play_circle_fill_rounded, size: 54, color: Colors.white),
-                            ),
-                          ],
-                        )
-                      : ClipRRect(
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(AppDimensions.radiusLg)),
-                          child: isLocalMediaPath(cover)
-                              ? Image.file(File(_toFilePath(cover)), fit: BoxFit.cover)
-                              : Image.network(cover, fit: BoxFit.cover),
-                        ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        post.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    _StatusBadge(post: post),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  post.description?.trim().isNotEmpty == true
-                      ? post.description!
-                      : 'No description yet.',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 13,
-                    color: AppColors.textSecondary(context),
-                    height: 1.35,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _MetricChip(icon: Icons.thumb_up_alt_outlined, label: '${post.likeCount} likes'),
-                    _MetricChip(icon: Icons.comment_outlined, label: '${post.commentCount} comments'),
-                    _MetricChip(icon: Icons.visibility_outlined, label: '${post.viewCount} views'),
-                    if (post.type == 'opportunity')
-                      _MetricChip(icon: Icons.people_outline, label: '${post.joinCount} applicants'),
-                    _MetricChip(icon: Icons.schedule_rounded, label: timeago.format(post.updatedAt)),
-                  ],
-                ),
-                if (onViewApplicants != null) ...[
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: onViewApplicants,
-                      icon: const Icon(Icons.people_rounded, size: 18),
-                      label: Text('View Applicants (${post.joinCount})'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.roleLecturer,
-                        side: BorderSide(color: AppColors.roleLecturer.withValues(alpha: 0.4)),
-                      ),
+                      ],
                     ),
                   ),
-                ],
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: onOpen,
-                        icon: const Icon(Icons.open_in_new_rounded),
-                        label: const Text('Open'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: onEdit,
-                        icon: const Icon(Icons.edit_outlined),
-                        label: const Text('Edit'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    if (onRestore != null) ...[
-                      Expanded(
-                        child: TextButton.icon(
-                          onPressed: onRestore,
-                          icon: const Icon(Icons.restore_rounded),
-                          label: const Text('Restore'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                    ] else if (onArchive != null) ...[
-                      Expanded(
-                        child: TextButton.icon(
-                          onPressed: onArchive,
-                          icon: const Icon(Icons.archive_outlined),
-                          label: const Text('Archive'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    Expanded(
-                      child: TextButton.icon(
-                        onPressed: onDelete,
-                        icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
-                        label: const Text('Delete', style: TextStyle(color: AppColors.danger)),
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),
           ),
+        );
+      },
+    );
+  }
+}
+
+class _MyProjectMediaThumbnail extends StatelessWidget {
+  const _MyProjectMediaThumbnail({required this.item});
+
+  final _MyProjectMediaItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (item.isVideo) {
+      return Container(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.05)
+            : AppColors.primaryTint10,
+        child: const Center(
+          child: Icon(
+            Icons.play_circle_outline_rounded,
+            size: 48,
+            color: AppColors.primary,
+          ),
+        ),
+      );
+    }
+
+    if (isLocalMediaPath(item.source)) {
+      return Image.file(
+        File(_toFilePath(item.source)),
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => const _MyProjectMediaErrorThumbnail(),
+      );
+    }
+
+    return Image.network(
+      item.source,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => const _MyProjectMediaErrorThumbnail(),
+      loadingBuilder: (context, child, progress) {
+        if (progress == null) return child;
+        return Container(color: AppColors.primaryTint10);
+      },
+    );
+  }
+}
+
+class _MyProjectMediaErrorThumbnail extends StatelessWidget {
+  const _MyProjectMediaErrorThumbnail();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      color: isDark
+          ? Colors.white.withValues(alpha: 0.05)
+          : AppColors.primaryTint10,
+      child: const Icon(
+        Icons.broken_image_outlined,
+        size: 36,
+        color: AppColors.primary,
+      ),
+    );
+  }
+}
+
+class _MyProjectMediaPreviewScreen extends StatefulWidget {
+  const _MyProjectMediaPreviewScreen({
+    required this.items,
+    required this.initialIndex,
+  });
+
+  final List<_MyProjectMediaItem> items;
+  final int initialIndex;
+
+  @override
+  State<_MyProjectMediaPreviewScreen> createState() =>
+      _MyProjectMediaPreviewScreenState();
+}
+
+class _MyProjectMediaPreviewScreenState
+    extends State<_MyProjectMediaPreviewScreen> {
+  late final PageController _pageController;
+  late int _index;
+
+  @override
+  void initState() {
+    super.initState();
+    _index = widget.initialIndex.clamp(0, widget.items.length - 1);
+    _pageController = PageController(initialPage: _index);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.items[_index];
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text(
+          '${_index + 1} of ${widget.items.length}',
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+        ),
+        actions: [
+          if (_isExternalMyProjectWebVideo(item.source))
+            IconButton(
+              tooltip: 'Open video',
+              icon: const Icon(Icons.open_in_new_rounded),
+              onPressed: () async {
+                final uri = Uri.tryParse(item.source);
+                if (uri != null) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              },
+            ),
         ],
       ),
+      body: Stack(
+        children: [
+          PageView.builder(
+            controller: _pageController,
+            itemCount: widget.items.length,
+            onPageChanged: (value) => setState(() => _index = value),
+            itemBuilder: (context, index) {
+              final item = widget.items[index];
+              return item.isVideo
+                  ? _MyProjectInlineVideoPreview(item: item)
+                  : _MyProjectImagePreview(item: item);
+            },
+          ),
+          if (widget.items.length > 1) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _MyProjectPreviewNavButton(
+                icon: Icons.chevron_left_rounded,
+                onPressed: _index == 0
+                    ? null
+                    : () => _pageController.previousPage(
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeOut,
+                        ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: _MyProjectPreviewNavButton(
+                icon: Icons.chevron_right_rounded,
+                onPressed: _index == widget.items.length - 1
+                    ? null
+                    : () => _pageController.nextPage(
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeOut,
+                        ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MyProjectPreviewNavButton extends StatelessWidget {
+  const _MyProjectPreviewNavButton({
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton.filled(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 32),
+      style: IconButton.styleFrom(
+        backgroundColor: Colors.black.withValues(alpha: 0.46),
+        foregroundColor: Colors.white,
+        disabledBackgroundColor: Colors.black.withValues(alpha: 0.14),
+      ),
+    );
+  }
+}
+
+class _MyProjectImagePreview extends StatelessWidget {
+  const _MyProjectImagePreview({required this.item});
+
+  final _MyProjectMediaItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final child = isLocalMediaPath(item.source)
+        ? Image.file(
+            File(_toFilePath(item.source)),
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => const _MyProjectPreviewError(),
+          )
+        : Image.network(
+            item.source,
+            fit: BoxFit.contain,
+            loadingBuilder: (context, child, progress) {
+              if (progress == null) return child;
+              return const Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              );
+            },
+            errorBuilder: (_, __, ___) => const _MyProjectPreviewError(),
+          );
+
+    return Center(
+      child: InteractiveViewer(
+        minScale: 0.7,
+        maxScale: 4,
+        child: child,
+      ),
+    );
+  }
+}
+
+class _MyProjectInlineVideoPreview extends StatefulWidget {
+  const _MyProjectInlineVideoPreview({required this.item});
+
+  final _MyProjectMediaItem item;
+
+  @override
+  State<_MyProjectInlineVideoPreview> createState() =>
+      _MyProjectInlineVideoPreviewState();
+}
+
+class _MyProjectInlineVideoPreviewState
+    extends State<_MyProjectInlineVideoPreview> {
+  VideoPlayerController? _controller;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _prepare();
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _prepare() async {
+    if (_isExternalMyProjectWebVideo(widget.item.source)) {
+      setState(() {
+        _loading = false;
+        _error = 'Open this hosted video in your browser.';
+      });
+      return;
+    }
+
+    try {
+      final source = widget.item.source;
+      final controller = isLocalMediaPath(source)
+          ? VideoPlayerController.file(File(_toFilePath(source)))
+          : VideoPlayerController.networkUrl(Uri.parse(source));
+      await controller.initialize();
+      await controller.setLooping(true);
+      await controller.play();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      setState(() {
+        _controller = controller;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = error.toString();
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    if (_loading) {
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.white),
+      );
+    }
+    if (_error != null ||
+        controller == null ||
+        !controller.value.isInitialized) {
+      return _MyProjectVideoFallback(
+        source: widget.item.source,
+        message: _error ?? 'This video could not be loaded.',
+      );
+    }
+
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AspectRatio(
+            aspectRatio: controller.value.aspectRatio,
+            child: VideoPlayer(controller),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: VideoProgressIndicator(
+              controller,
+              allowScrubbing: true,
+              colors: const VideoProgressColors(
+                playedColor: AppColors.primary,
+                bufferedColor: Colors.white38,
+                backgroundColor: Colors.white12,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          IconButton.filled(
+            onPressed: () {
+              setState(() {
+                controller.value.isPlaying
+                    ? controller.pause()
+                    : controller.play();
+              });
+            },
+            icon: Icon(
+              controller.value.isPlaying
+                  ? Icons.pause_rounded
+                  : Icons.play_arrow_rounded,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MyProjectVideoFallback extends StatelessWidget {
+  const _MyProjectVideoFallback({
+    required this.source,
+    required this.message,
+  });
+
+  final String source;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.play_circle_outline_rounded,
+              size: 72,
+              color: Colors.white70,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.plusJakartaSans(color: Colors.white70),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: () async {
+                final uri = Uri.tryParse(source);
+                if (uri != null) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              },
+              icon: const Icon(Icons.open_in_new_rounded),
+              label: const Text('Open video'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MyProjectPreviewError extends StatelessWidget {
+  const _MyProjectPreviewError();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Icon(Icons.broken_image_outlined, size: 64, color: Colors.white70),
     );
   }
 }
@@ -705,9 +1567,33 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isArchived = post.isArchived;
-    final background = isArchived ? AppColors.warning.withValues(alpha: 0.14) : AppColors.success.withValues(alpha: 0.14);
-    final foreground = isArchived ? AppColors.warning : AppColors.success;
-    final label = isArchived ? 'Archived' : (post.type == 'opportunity' ? 'Opportunity' : 'Live');
+    final isPending =
+        !isArchived && post.moderationStatus == ModerationStatus.pending;
+
+    final Color background;
+    final Color foreground;
+    final String label;
+
+    final isRejected =
+        !isArchived && post.moderationStatus == ModerationStatus.rejected;
+
+    if (isArchived) {
+      background = AppColors.warning.withValues(alpha: 0.14);
+      foreground = AppColors.warning;
+      label = 'Archived';
+    } else if (isRejected) {
+      background = AppColors.danger.withValues(alpha: 0.14);
+      foreground = AppColors.danger;
+      label = 'Rejected';
+    } else if (isPending) {
+      background = AppColors.primary.withValues(alpha: 0.12);
+      foreground = AppColors.primary;
+      label = 'Pending Review';
+    } else {
+      background = AppColors.success.withValues(alpha: 0.14);
+      foreground = AppColors.success;
+      label = post.type == 'opportunity' ? 'Opportunity' : 'Live';
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -717,7 +1603,8 @@ class _StatusBadge extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w700, color: foreground),
+        style: GoogleFonts.plusJakartaSans(
+            fontSize: 11, fontWeight: FontWeight.w700, color: foreground),
       ),
     );
   }
@@ -731,11 +1618,19 @@ class _MetricChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: AppColors.primaryTint10,
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.06)
+            : AppColors.primaryTint10,
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.transparent,
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -744,7 +1639,11 @@ class _MetricChip extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             label,
-            style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w600),
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary(context),
+            ),
           ),
         ],
       ),
@@ -767,15 +1666,18 @@ class _AppliedOpportunityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isExpired = post.opportunityDeadline != null &&
         post.opportunityDeadline!.isBefore(DateTime.now());
 
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        color: isDark ? AppColors.surfaceDark2 : AppColors.surfaceLight,
         borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
         border: Border.all(
-          color: AppColors.roleLecturer.withValues(alpha: 0.25),
+          color: isDark
+              ? AppColors.roleLecturer.withValues(alpha: 0.35)
+              : AppColors.roleLecturer.withValues(alpha: 0.25),
         ),
       ),
       child: Padding(
@@ -796,6 +1698,7 @@ class _AppliedOpportunityCard extends StatelessWidget {
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary(context),
                     ),
                   ),
                 ),
@@ -887,4 +1790,15 @@ class _AppliedOpportunityCard extends StatelessWidget {
 
 String _toFilePath(String source) {
   return source.startsWith('file://') ? Uri.parse(source).toFilePath() : source;
+}
+
+bool _isMyProjectVideoUrl(String url) {
+  return isVideoMediaPath(url) || _isExternalMyProjectWebVideo(url);
+}
+
+bool _isExternalMyProjectWebVideo(String url) {
+  final lower = url.toLowerCase();
+  return lower.contains('youtube.com') ||
+      lower.contains('youtu.be') ||
+      lower.contains('vimeo.com');
 }

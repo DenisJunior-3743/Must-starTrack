@@ -32,6 +32,7 @@
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -40,6 +41,7 @@ import '../core/di/injection_container.dart';
 import '../core/router/app_router.dart';
 import '../core/router/route_guards.dart';
 import '../core/services/session_timeout_service.dart';
+import '../core/services/user_presence_service.dart';
 import '../core/theme/app_theme.dart';
 import '../core/theme/theme_cubit.dart';
 import '../core/constants/app_strings.dart';
@@ -92,10 +94,13 @@ class _StarTrackAppState extends State<StarTrackApp>
     SessionTimeoutService service,
     AuthCubit authCubit,
   ) {
+    final presence = sl<UserPresenceService>();
     if (state is AuthAuthenticated) {
       service.startTracking(onExpired: authCubit.logout);
+      unawaited(presence.start(state.user.id));
     } else if (state is AuthUnauthenticated) {
       service.stopTracking();
+      unawaited(presence.stop());
     }
   }
 
@@ -116,6 +121,7 @@ class _StarTrackAppState extends State<StarTrackApp>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _authSub?.cancel();
+    unawaited(sl<UserPresenceService>().stop());
     sl<SessionTimeoutService>().dispose();
     super.dispose();
   }
@@ -174,15 +180,19 @@ class _StarTrackAppState extends State<StarTrackApp>
                 mediaQuery.textScaler.scale(1.0).clamp(0.8, 1.3),
               ),
             );
+            final content = child ?? const SizedBox.shrink();
             return MediaQuery(
               data: constrained,
-              // Reset the inactivity timer on every user touch.
-              child: Listener(
-                onPointerDown: (_) =>
-                    sl<SessionTimeoutService>().resetActivity(),
-                behavior: HitTestBehavior.translucent,
-                child: child ?? const SizedBox.shrink(),
-              ),
+              // Avoid web pointer re-entrancy assertions caused by a global
+              // root Listener while keeping inactivity tracking on native.
+              child: kIsWeb
+                  ? content
+                  : Listener(
+                      onPointerDown: (_) =>
+                          sl<SessionTimeoutService>().resetActivity(),
+                      behavior: HitTestBehavior.translucent,
+                      child: content,
+                    ),
             );
           },
         ),
