@@ -71,6 +71,10 @@ scripts/package-lock.json
 # Environment files
 .env
 .env.local
+Open API.txt
+
+# Local server/proxy code (do not push)
+/functions/
 
 # Platform build directories
 /build/

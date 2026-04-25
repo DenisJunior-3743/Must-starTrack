@@ -35,7 +35,8 @@ class ChatbotFaqEntry extends Equatable {
   });
 
   @override
-  List<Object?> get props => [id, group, question, answer, keywords, actions, followUps];
+  List<Object?> get props =>
+      [id, group, question, answer, keywords, actions, followUps];
 }
 
 class ChatbotKnowledgeDoc extends Equatable {
@@ -57,6 +58,55 @@ class ChatbotKnowledgeDoc extends Equatable {
 
   @override
   List<Object?> get props => [id, title, summary, content, keywords, followUps];
+}
+
+class ChatbotLearnedExample extends Equatable {
+  final String question;
+  final String answer;
+  final double confidence;
+  final String source;
+  final String role;
+  final DateTime? createdAt;
+
+  const ChatbotLearnedExample({
+    required this.question,
+    required this.answer,
+    this.confidence = 0,
+    this.source = '',
+    this.role = '',
+    this.createdAt,
+  });
+
+  @override
+  List<Object?> get props => [
+        question,
+        answer,
+        confidence,
+        source,
+        role,
+        createdAt,
+      ];
+}
+
+class ChatbotBehaviorContext extends Equatable {
+  final List<String> recentSearchTerms;
+  final List<String> recentlyViewedCategories;
+
+  const ChatbotBehaviorContext({
+    this.recentSearchTerms = const [],
+    this.recentlyViewedCategories = const [],
+  });
+
+  bool get isEmpty =>
+      recentSearchTerms.isEmpty && recentlyViewedCategories.isEmpty;
+
+  Map<String, dynamic> toPromptMap() => {
+        'recentSearchTerms': recentSearchTerms,
+        'recentlyViewedCategories': recentlyViewedCategories,
+      };
+
+  @override
+  List<Object?> get props => [recentSearchTerms, recentlyViewedCategories];
 }
 
 class ChatbotResponse extends Equatable {

@@ -39,6 +39,20 @@ import '../models/group_member_model.dart';
 import '../local/dao/message_dao.dart';
 import '../local/dao/notification_dao.dart';
 
+class UserDevicePresenceSummary {
+  final int totalDevices;
+  final int activeDevices;
+  final DateTime? lastSeenAt;
+
+  const UserDevicePresenceSummary({
+    required this.totalDevices,
+    required this.activeDevices,
+    required this.lastSeenAt,
+  });
+
+  bool get isOnline => activeDevices > 0;
+}
+
 class FirestoreService {
   final FirebaseFirestore _db;
 
@@ -55,7 +69,7 @@ class FirestoreService {
       _db.collection('conversations');
   CollectionReference<Map<String, dynamic>> get _notifications =>
       _db.collection('notifications');
-    CollectionReference<Map<String, dynamic>> get _collabRequests =>
+  CollectionReference<Map<String, dynamic>> get _collabRequests =>
       _db.collection('collab_requests');
   CollectionReference<Map<String, dynamic>> get _follows =>
       _db.collection('follows');
@@ -69,6 +83,58 @@ class FirestoreService {
       _db.collection('group_members');
   CollectionReference<Map<String, dynamic>> get _recommendationLogs =>
       _db.collection('recommendation_logs');
+  CollectionReference<Map<String, dynamic>> get _userRecommendations =>
+      _db.collection('user_recommendations');
+    CollectionReference<Map<String, dynamic>> get _comments =>
+      _db.collection('comments');
+
+  // ── User pre-computed recommendations (from mobile app) ─────────────────────────
+
+  /// Fetches pre-computed recommendations for a specific user from Firestore.
+  /// Returns cached recommendation results computed by the mobile algorithm.
+  Future<Map<String, dynamic>> getUserRecommendations(
+      {required String userId}) {
+    return _userRecommendations.doc(userId).get().then((snapshot) {
+      return snapshot.data() ?? <String, dynamic>{};
+    }).catchError((_) => <String, dynamic>{});
+  }
+
+  /// Watches pre-computed recommendations for a user (real-time updates).
+  Stream<Map<String, dynamic>> watchUserRecommendations(
+      {required String userId}) {
+    return _userRecommendations.doc(userId).snapshots().map((snapshot) {
+      return snapshot.data() ?? <String, dynamic>{};
+    });
+  }
+
+  /// Fetches all user recommendation documents (for admin/analytics).
+  Future<List<Map<String, dynamic>>> getAllUserRecommendations(
+      {int limit = 200}) async {
+    final safeLimit = limit <= 0 ? 200 : limit;
+    final snapshot = await _userRecommendations.limit(safeLimit).get();
+
+    return snapshot.docs
+        .map((doc) => {'userId': doc.id, ...doc.data()})
+        .toList(growable: false);
+  }
+
+  /// Pushes pre-computed recommendations to Firestore (written by background job).
+  Future<void> saveUserRecommendations({
+    required String userId,
+    required Map<String, dynamic> recs,
+  }) async {
+    final batch = _db.batch();
+    batch.set(
+      _userRecommendations.doc(userId),
+      {
+        ...recs,
+        'updated_at': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+    await batch.commit();
+  }
+
   CollectionReference<Map<String, dynamic>> get _postRatings =>
       _db.collection('post_ratings');
   CollectionReference<Map<String, dynamic>> get _appFeedback =>
@@ -103,6 +169,20 @@ class FirestoreService {
       }
       await batch.commit();
     }
+  }
+
+  Future<List<Map<String, dynamic>>> getRecentRecommendationLogs({
+    int limit = 200,
+  }) async {
+    final safeLimit = limit <= 0 ? 200 : limit;
+    final snapshot = await _recommendationLogs
+        .orderBy('logged_at', descending: true)
+        .limit(safeLimit)
+        .get(const GetOptions(source: Source.serverAndCache));
+
+    return snapshot.docs
+        .map((doc) => {'id': doc.id, ...doc.data()})
+        .toList(growable: false);
   }
 
   Future<void> setPostRating({
@@ -172,6 +252,85 @@ class FirestoreService {
 
   Future<void> deleteAppFeedback(String feedbackId) async {
     await _appFeedback.doc(feedbackId).delete();
+  }
+
+  /// Fetches recent comment snippets grouped by post id.
+  ///
+  /// The schema for comments can differ between environments, so this method
+  /// accepts common field aliases for both post id and text content.
+  Future<Map<String, List<String>>> getRecentCommentSnippetsForPosts({
+    required List<String> postIds,
+    int perPost = 4,
+  }) async {
+    if (postIds.isEmpty) return const <String, List<String>>{};
+
+    final grouped = <String, List<String>>{};
+    final normalizedIds = postIds
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (normalizedIds.isEmpty) return const <String, List<String>>{};
+
+    Iterable<List<String>> chunked(List<String> source, int size) sync* {
+      for (var i = 0; i < source.length; i += size) {
+        yield source.sublist(i, (i + size).clamp(0, source.length));
+      }
+    }
+
+    Future<void> runQueryForField(String postField) async {
+      for (final chunk in chunked(normalizedIds, 10)) {
+        final snapshot = await _comments
+            .where(postField, whereIn: chunk)
+            .limit(chunk.length * perPost * 4)
+            .get(const GetOptions(source: Source.serverAndCache));
+
+        for (final doc in snapshot.docs) {
+          final data = doc.data();
+          final postId = _extractCommentPostId(data);
+          if (postId == null || !normalizedIds.contains(postId)) continue;
+
+          final text = _extractCommentText(data);
+          if (text == null || text.isEmpty) continue;
+
+          final list = grouped.putIfAbsent(postId, () => <String>[]);
+          if (list.length < perPost) {
+            list.add(text);
+          }
+        }
+      }
+    }
+
+    try {
+      await runQueryForField('post_id');
+    } catch (_) {
+      try {
+        await runQueryForField('postId');
+      } catch (_) {
+        return grouped;
+      }
+    }
+
+    return grouped;
+  }
+
+  String? _extractCommentPostId(Map<String, dynamic> data) {
+    final raw = data['post_id'] ?? data['postId'] ?? data['project_id'];
+    final id = raw?.toString().trim();
+    if (id == null || id.isEmpty) return null;
+    return id;
+  }
+
+  String? _extractCommentText(Map<String, dynamic> data) {
+    final raw = data['content'] ??
+        data['comment'] ??
+        data['comment_text'] ??
+        data['body'] ??
+        data['message'] ??
+        data['text'];
+    final text = raw?.toString().trim();
+    if (text == null || text.isEmpty) return null;
+    return text;
   }
 
   /// Writes an account deletion request to Firestore.
@@ -279,7 +438,10 @@ class FirestoreService {
       fallback: now,
     );
     final updatedAt = _firestoreDateToIso(
-      data['updatedAt'] ?? data['updated_at'] ?? data['createdAt'] ?? data['created_at'],
+      data['updatedAt'] ??
+          data['updated_at'] ??
+          data['createdAt'] ??
+          data['created_at'],
       fallback: now,
     );
     final lastSeenAtRaw = data['lastSeenAt'] ?? data['last_seen_at'];
@@ -291,7 +453,8 @@ class FirestoreService {
       'role': data['role'],
       'displayName': data['displayName'] ?? data['display_name'],
       'photoUrl': data['photoUrl'] ?? data['photo_url'],
-      'isEmailVerified': data['isEmailVerified'] ?? data['is_email_verified'] ?? false,
+      'isEmailVerified':
+          data['isEmailVerified'] ?? data['is_email_verified'] ?? false,
       'isSuspended': data['isSuspended'] ?? data['is_suspended'] ?? false,
       'isBanned': data['isBanned'] ?? data['is_banned'] ?? false,
       'lastSeenAt': lastSeenAtRaw == null
@@ -315,6 +478,90 @@ class FirestoreService {
     return _users.doc(userId).snapshots().map((snap) {
       if (!snap.exists || snap.data() == null) return null;
       return _decodeUserDoc(snap);
+    });
+  }
+
+  Future<void> setDevicePresence({
+    required String userId,
+    required String deviceId,
+    required bool isInApp,
+    required bool isNetworkOnline,
+  }) async {
+    if (userId.trim().isEmpty || deviceId.trim().isEmpty) return;
+
+    final now = DateTime.now().toIso8601String();
+    await _users.doc(userId).set(
+      {
+        'lastSeenAt': now,
+        'updatedAt': now,
+        'presence_devices.$deviceId': {
+          'device_id': deviceId,
+          'is_in_app': isInApp,
+          'is_network_online': isNetworkOnline,
+          'last_seen_at': FieldValue.serverTimestamp(),
+          'updated_at': FieldValue.serverTimestamp(),
+        },
+      },
+      SetOptions(merge: true),
+    );
+  }
+
+  DateTime? _presenceTimestamp(dynamic raw) {
+    if (raw is Timestamp) return raw.toDate();
+    if (raw is DateTime) return raw;
+    if (raw is String) return DateTime.tryParse(raw);
+    return null;
+  }
+
+  UserDevicePresenceSummary _decodePresenceSummary(
+    Map<String, dynamic>? data,
+  ) {
+    if (data == null) {
+      return const UserDevicePresenceSummary(
+        totalDevices: 0,
+        activeDevices: 0,
+        lastSeenAt: null,
+      );
+    }
+
+    final devicesRaw = data['presence_devices'];
+    final devices = devicesRaw is Map
+        ? Map<String, dynamic>.from(devicesRaw)
+        : const <String, dynamic>{};
+
+    var active = 0;
+    DateTime? latest;
+    final now = DateTime.now();
+
+    devices.forEach((_, value) {
+      if (value is! Map) return;
+      final map = Map<String, dynamic>.from(value);
+      final isInApp = map['is_in_app'] == true;
+      final isNetworkOnline = map['is_network_online'] == true;
+      final seen = _presenceTimestamp(map['last_seen_at']);
+
+      if (seen != null && (latest == null || seen.isAfter(latest!))) {
+        latest = seen;
+      }
+
+      final fresh = seen != null && now.difference(seen).inSeconds <= 70;
+      if (isInApp && isNetworkOnline && fresh) {
+        active += 1;
+      }
+    });
+
+    latest ??= _presenceTimestamp(data['lastSeenAt'] ?? data['last_seen_at']);
+
+    return UserDevicePresenceSummary(
+      totalDevices: devices.length,
+      activeDevices: active,
+      lastSeenAt: latest,
+    );
+  }
+
+  Stream<UserDevicePresenceSummary> watchUserDevicePresence(String userId) {
+    return _users.doc(userId).snapshots().map((snap) {
+      return _decodePresenceSummary(snap.data());
     });
   }
 
@@ -375,8 +622,8 @@ class FirestoreService {
   }) async {
     Query<Map<String, dynamic>> query = _posts
         .where('is_archived', isEqualTo: false)
-      // Firestore whereIn cannot contain null.
-      .where('moderation_status', isEqualTo: 'approved')
+        // Firestore whereIn cannot contain null.
+        .where('moderation_status', isEqualTo: 'approved')
         .orderBy('created_at', descending: true)
         .limit(pageSize);
 
@@ -393,8 +640,9 @@ class FirestoreService {
     }
 
     final snapshot = await query.get();
-    return snapshot.docs.map((d) =>
-        PostModel.fromJson({'id': d.id, ...d.data()})).toList();
+    return snapshot.docs
+        .map((d) => PostModel.fromJson({'id': d.id, ...d.data()}))
+        .toList();
   }
 
   /// Pull a recent batch of posts from Firestore for local cache hydration.
@@ -416,7 +664,8 @@ class FirestoreService {
       query = query.where('moderation_status', isEqualTo: 'approved');
     }
 
-    final snapshot = await query.get(const GetOptions(source: Source.serverAndCache));
+    final snapshot =
+        await query.get(const GetOptions(source: Source.serverAndCache));
 
     debugPrint(
       '[FirestoreService] getRecentPosts fetched ${snapshot.docs.length} raw docs '
@@ -455,6 +704,38 @@ class FirestoreService {
     return posts;
   }
 
+  /// Streams a recent batch of posts from Firestore for real-time dashboards.
+  Stream<List<PostModel>> watchRecentPosts({
+    int limit = 80,
+    bool includePendingForAdmin = false,
+  }) {
+    Query<Map<String, dynamic>> query = _posts
+        .where('is_archived', isEqualTo: false)
+        .orderBy('created_at', descending: true)
+        .limit(limit);
+
+    if (!includePendingForAdmin) {
+      query = query.where('moderation_status', isEqualTo: 'approved');
+    }
+
+    return query.snapshots().map((snapshot) {
+      final posts = <PostModel>[];
+      for (final doc in snapshot.docs) {
+        try {
+          final post = PostModel.fromJson({'id': doc.id, ...doc.data()});
+          if (post.isArchived) continue;
+          posts.add(post);
+        } catch (error, stackTrace) {
+          debugPrint(
+              '[FirestoreService] unreadable streamed post ${doc.id}: $error');
+          debugPrint('$stackTrace');
+        }
+      }
+      posts.sort((left, right) => right.createdAt.compareTo(left.createdAt));
+      return posts;
+    });
+  }
+
   /// Fetches users by Firestore document ID in small batches.
   Future<List<UserModel>> getUsersByIds(Iterable<String> userIds) async {
     final uniqueIds = userIds.where((id) => id.isNotEmpty).toSet().toList();
@@ -469,7 +750,8 @@ class FirestoreService {
         index + 10 > uniqueIds.length ? uniqueIds.length : index + 10,
       );
 
-      final snapshot = await _users.where(FieldPath.documentId, whereIn: batch).get();
+      final snapshot =
+          await _users.where(FieldPath.documentId, whereIn: batch).get();
       for (final doc in snapshot.docs) {
         try {
           users.add(_decodeUserDoc(doc));
@@ -485,7 +767,8 @@ class FirestoreService {
   /// Fetches all users from Firestore for admin full-hydration.
   Future<List<UserModel>> getAllUsersFromRemote({int limit = 500}) async {
     try {
-      final snapshot = await _users.get(const GetOptions(source: Source.serverAndCache));
+      final snapshot =
+          await _users.get(const GetOptions(source: Source.serverAndCache));
       final users = <UserModel>[];
       for (final doc in snapshot.docs) {
         try {
@@ -520,7 +803,8 @@ class FirestoreService {
                   '$decodeError keys=${doc.data().keys.toList()}');
             }
           }
-          users.sort((left, right) => right.createdAt.compareTo(left.createdAt));
+          users
+              .sort((left, right) => right.createdAt.compareTo(left.createdAt));
           debugPrint(
               '[FirestoreService] getAllUsersFromRemote cache fallback returned '
               '${users.length} users');
@@ -581,13 +865,15 @@ class FirestoreService {
           try {
             groups.add(GroupModel.fromJson({'id': doc.id, ...data}));
           } catch (error) {
-            debugPrint('[FirestoreService] Skipping unreadable group ${doc.id}: $error');
+            debugPrint(
+                '[FirestoreService] Skipping unreadable group ${doc.id}: $error');
           }
         }
       }
     } on FirebaseException catch (error) {
       if (error.code == 'permission-denied') {
-        debugPrint('[FirestoreService] getGroupsByIds denied by security rules');
+        debugPrint(
+            '[FirestoreService] getGroupsByIds denied by security rules');
         return const [];
       }
       rethrow;
@@ -607,7 +893,8 @@ class FirestoreService {
           .toList();
     } on FirebaseException catch (error) {
       if (error.code == 'permission-denied') {
-        debugPrint('[FirestoreService] getRecentGroups denied by security rules');
+        debugPrint(
+            '[FirestoreService] getRecentGroups denied by security rules');
         return const [];
       }
       if (error.code == 'failed-precondition') {
@@ -650,13 +937,15 @@ class FirestoreService {
           try {
             members.add(GroupMemberModel.fromJson({'id': doc.id, ...data}));
           } catch (error) {
-            debugPrint('[FirestoreService] Skipping unreadable group member ${doc.id}: $error');
+            debugPrint(
+                '[FirestoreService] Skipping unreadable group member ${doc.id}: $error');
           }
         }
       }
     } on FirebaseException catch (error) {
       if (error.code == 'permission-denied') {
-        debugPrint('[FirestoreService] getGroupMembersByGroupIds denied by security rules');
+        debugPrint(
+            '[FirestoreService] getGroupMembersByGroupIds denied by security rules');
         return const [];
       }
       rethrow;
@@ -672,11 +961,13 @@ class FirestoreService {
           .where('user_id', isEqualTo: userId)
           .get(const GetOptions(source: Source.serverAndCache));
       return snapshot.docs
-          .map((doc) => GroupMemberModel.fromJson({'id': doc.id, ...doc.data()}))
+          .map(
+              (doc) => GroupMemberModel.fromJson({'id': doc.id, ...doc.data()}))
           .toList();
     } on FirebaseException catch (error) {
       if (error.code == 'permission-denied') {
-        debugPrint('[FirestoreService] getGroupMembersForUser denied by security rules');
+        debugPrint(
+            '[FirestoreService] getGroupMembersForUser denied by security rules');
         return const [];
       }
       rethrow;
@@ -697,6 +988,13 @@ class FirestoreService {
     final parts = message.conversationId.split('_');
     final convoUserId = parts.isNotEmpty ? parts[0] : message.senderId;
     final convoPeerId = parts.length >= 2 ? parts[1] : '';
+    if (convoPeerId.isNotEmpty && convoPeerId == message.senderId) {
+      debugPrint(
+        '[FirestoreService] Skipping self-target message '
+        'conversation=${message.conversationId} sender=${message.senderId}',
+      );
+      return;
+    }
 
     // Use separate writes instead of a transaction.  A transaction with
     // SetOptions(merge:true) requires Firestore to internally READ the
@@ -841,19 +1139,13 @@ class FirestoreService {
     controller = StreamController<int>.broadcast(
       onListen: () {
         subscriptions.add(
-          _conversations
-              .where('user_id', isEqualTo: userId)
-              .snapshots()
-              .listen(
+          _conversations.where('user_id', isEqualTo: userId).snapshots().listen(
                 (_) => emitTick(),
                 onError: handleError,
               ),
         );
         subscriptions.add(
-          _conversations
-              .where('peer_id', isEqualTo: userId)
-              .snapshots()
-              .listen(
+          _conversations.where('peer_id', isEqualTo: userId).snapshots().listen(
                 (_) => emitTick(),
                 onError: handleError,
               ),
@@ -925,6 +1217,50 @@ class FirestoreService {
     // Count decrement handled by Cloud Function trigger (see above).
   }
 
+  Future<int?> getFollowerCountForUser({required String userId}) async {
+    final safeUserId = userId.trim();
+    if (safeUserId.isEmpty) return null;
+    try {
+      final snapshot = await _follows
+          .where('following_id', isEqualTo: safeUserId)
+          .count()
+          .get();
+      return snapshot.count;
+    } on FirebaseException catch (error) {
+      debugPrint(
+        '[FirestoreService] follower count lookup failed for $safeUserId: '
+        '${error.code} ${error.message}',
+      );
+      return null;
+    }
+  }
+
+  Future<Map<String, int>> getFollowerCountIndex({int limit = 5000}) async {
+    try {
+      Query<Map<String, dynamic>> query = _follows;
+      if (limit > 0) {
+        query = query.limit(limit);
+      }
+      final snapshot = await query.get(
+        const GetOptions(source: Source.serverAndCache),
+      );
+
+      final counts = <String, int>{};
+      for (final doc in snapshot.docs) {
+        final followingId = (doc.data()['following_id'] as String?)?.trim();
+        if (followingId == null || followingId.isEmpty) continue;
+        counts[followingId] = (counts[followingId] ?? 0) + 1;
+      }
+      return counts;
+    } on FirebaseException catch (error) {
+      debugPrint(
+        '[FirestoreService] follower index lookup failed: '
+        '${error.code} ${error.message}',
+      );
+      return const <String, int>{};
+    }
+  }
+
   // ── Search ────────────────────────────────────────────────────────────────
 
   /// Full-text search via Firestore array-contains (skills field).
@@ -978,6 +1314,23 @@ class FirestoreService {
   }
 
   // ── Faculty operations ────────────────────────────────────────────────────
+
+  Future<List<String>> getActiveFacultyNames({int limit = 200}) async {
+    final safeLimit = limit <= 0 ? 200 : limit;
+    final snapshot = await _faculties
+        .where('isActive', isEqualTo: true)
+        .limit(safeLimit)
+        .get(const GetOptions(source: Source.serverAndCache));
+
+    final names = snapshot.docs
+        .map((doc) => (doc.data()['name'] as String?)?.trim() ?? '')
+        .where((name) => name.isNotEmpty)
+        .toSet()
+        .toList(growable: false)
+      ..sort();
+
+    return names;
+  }
 
   Future<void> setFaculty(FacultyModel faculty) async {
     await _faculties

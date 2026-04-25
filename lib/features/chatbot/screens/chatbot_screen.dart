@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/constants/app_colors.dart';
@@ -8,7 +7,7 @@ import '../../../core/constants/app_dimensions.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../data/local/dao/activity_log_dao.dart';
 import '../../../data/remote/firestore_service.dart';
-import '../../../data/remote/gemini_service.dart';
+import '../../../data/remote/openai_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
 import '../bloc/chatbot_cubit.dart';
 import '../data/chatbot_repository.dart';
@@ -26,7 +25,7 @@ class ChatbotScreen extends StatelessWidget {
     return ChatbotScreen(
       key: key,
       repository: ChatbotRepository.defaultForApp(
-        geminiService: sl<GeminiService>(),
+        openAiService: sl<OpenAiService>(),
       ),
     );
   }
@@ -55,6 +54,22 @@ class _ChatbotViewState extends State<_ChatbotView> {
   final _inputCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
 
+  void _scrollToLatest({bool animate = true}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollCtrl.hasClients) return;
+      final target = _scrollCtrl.position.maxScrollExtent + 120;
+      if (animate) {
+        _scrollCtrl.animateTo(
+          target,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+        );
+      } else {
+        _scrollCtrl.jumpTo(target);
+      }
+    });
+  }
+
   @override
   void dispose() {
     _inputCtrl.dispose();
@@ -80,14 +95,7 @@ class _ChatbotViewState extends State<_ChatbotView> {
           userId: userId,
         );
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollCtrl.hasClients) return;
-      _scrollCtrl.animateTo(
-        _scrollCtrl.position.maxScrollExtent + 220,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
-      );
-    });
+    _scrollToLatest();
   }
 
   @override
@@ -109,32 +117,44 @@ class _ChatbotViewState extends State<_ChatbotView> {
       body: Column(
         children: [
           Expanded(
-            child: BlocBuilder<ChatbotCubit, ChatbotState>(
-              builder: (context, state) {
-                final messages = switch (state) {
-                  ChatbotIdle s => s.messages,
-                  ChatbotTyping s => s.messages,
-                  _ => const <ChatbotMessage>[],
+            child: BlocListener<ChatbotCubit, ChatbotState>(
+              listenWhen: (previous, current) {
+                final prevLen = switch (previous) {
+                  ChatbotIdle s => s.messages.length,
+                  ChatbotTyping s => s.messages.length,
+                  _ => 0,
                 };
-
-                final starterPrompts = state is ChatbotIdle
-                    ? state.starterPrompts
-                    : const <String>[];
-
-                return ListView(
-                  controller: _scrollCtrl,
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 18),
-                  children: [
-                    ...messages.map((msg) => _MessageBubble(message: msg)),
-                    if (state is ChatbotTyping) const _TypingBubble(),
-                    if (messages.length <= 1 && starterPrompts.isNotEmpty)
-                      _PromptChips(
-                        prompts: starterPrompts,
-                        onTap: (value) => _submit(context, value),
-                      ),
-                  ],
-                );
+                final nextLen = switch (current) {
+                  ChatbotIdle s => s.messages.length,
+                  ChatbotTyping s => s.messages.length,
+                  _ => 0,
+                };
+                return nextLen != prevLen || current is ChatbotTyping;
               },
+              listener: (_, __) => _scrollToLatest(),
+              child: BlocBuilder<ChatbotCubit, ChatbotState>(
+                builder: (context, state) {
+                  final messages = switch (state) {
+                    ChatbotIdle s => s.messages,
+                    ChatbotTyping s => s.messages,
+                    _ => const <ChatbotMessage>[],
+                  };
+
+                  return ListView(
+                    controller: _scrollCtrl,
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 18),
+                    children: [
+                      ...messages.map(
+                        (msg) => _MessageBubble(
+                          message: msg,
+                          onFollowUp: (prompt) => _submit(context, prompt),
+                        ),
+                      ),
+                      if (state is ChatbotTyping) const _TypingBubble(),
+                    ],
+                  );
+                },
+              ),
             ),
           ),
           SafeArea(
@@ -191,8 +211,12 @@ class _ChatbotViewState extends State<_ChatbotView> {
 
 class _MessageBubble extends StatelessWidget {
   final ChatbotMessage message;
+  final ValueChanged<String>? onFollowUp;
 
-  const _MessageBubble({required this.message});
+  const _MessageBubble({
+    required this.message,
+    this.onFollowUp,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -205,6 +229,11 @@ class _MessageBubble extends StatelessWidget {
             : const Color(0xFFF1F5F9));
 
     final textColor = isUser ? Colors.white : AppColors.textPrimary(context);
+    final actorUserId = sl<AuthCubit>().currentUser?.id;
+    final canSendFeedback =
+        !isUser && message.interactionId != null && actorUserId != null;
+    final canShowFollowUps =
+        !isUser && message.followUps.isNotEmpty && onFollowUp != null;
 
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -229,149 +258,63 @@ class _MessageBubble extends StatelessWidget {
                   color: textColor,
                 ),
               ),
-              if (!isUser && message.source != null) ...[
-                const SizedBox(height: 7),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isUser
-                            ? Colors.white24
-                            : AppColors.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        message.source == ChatbotSource.faq
-                            ? 'FAQ'
-                            : (message.source == ChatbotSource.ai
-                                ? 'AI fallback'
-                                : 'Fallback'),
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: isUser
-                              ? Colors.white
-                              : AppColors.textSecondary(context),
-                        ),
-                      ),
-                    ),
-                    if (message.confidence != null) ...[
-                      const SizedBox(width: 8),
-                      Text(
-                        'Conf ${(message.confidence! * 100).round()}%',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 10,
-                          color: AppColors.textSecondary(context),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-              if (!isUser && message.interactionId != null) ...[
+              if (canShowFollowUps) ...[
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
+                  runSpacing: 8,
+                  children: message.followUps
+                      .take(3)
+                      .map(
+                        (followUp) => ActionChip(
+                          label: Text(
+                            followUp,
+                            style: GoogleFonts.plusJakartaSans(fontSize: 11),
+                          ),
+                          onPressed: () => onFollowUp?.call(followUp),
+                        ),
+                      )
+                      .toList(growable: false),
+                ),
+              ],
+              if (canSendFeedback) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
-                    ChoiceChip(
-                      label: const Text('Helpful'),
+                    FilterChip(
+                      label: Text(
+                        'Helpful',
+                        style: GoogleFonts.plusJakartaSans(fontSize: 11),
+                      ),
                       selected: message.isHelpful == true,
                       onSelected: (_) =>
                           context.read<ChatbotCubit>().markHelpful(
                                 interactionId: message.interactionId!,
                                 isHelpful: true,
-                                actorUserId: sl<AuthCubit>().currentUser?.id,
+                                actorUserId: actorUserId,
                               ),
                     ),
-                    ChoiceChip(
-                      label: const Text('Not Helpful'),
+                    FilterChip(
+                      label: Text(
+                        'Not Helpful',
+                        style: GoogleFonts.plusJakartaSans(fontSize: 11),
+                      ),
                       selected: message.isHelpful == false,
                       onSelected: (_) =>
                           context.read<ChatbotCubit>().markHelpful(
                                 interactionId: message.interactionId!,
                                 isHelpful: false,
-                                actorUserId: sl<AuthCubit>().currentUser?.id,
+                                actorUserId: actorUserId,
                               ),
                     ),
                   ],
                 ),
               ],
-              if (!isUser && message.actions.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: message.actions
-                      .map(
-                        (action) => OutlinedButton(
-                          onPressed: () => context.push(action.route),
-                          child: Text(action.label),
-                        ),
-                      )
-                      .toList(growable: false),
-                ),
-              ],
-              if (!isUser && message.followUps.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: message.followUps
-                      .take(4)
-                      .map(
-                        (suggestion) => ActionChip(
-                          label: Text(
-                            suggestion,
-                            style: GoogleFonts.plusJakartaSans(fontSize: 11),
-                          ),
-                          onPressed: () => context.read<ChatbotCubit>().ask(
-                                suggestion,
-                                isGuest: sl<AuthCubit>().currentUser == null,
-                                role: sl<AuthCubit>().currentUser?.role.name,
-                                userId: sl<AuthCubit>().currentUser?.id,
-                              ),
-                        ),
-                      )
-                      .toList(growable: false),
-                ),
-              ],
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _PromptChips extends StatelessWidget {
-  final List<String> prompts;
-  final ValueChanged<String> onTap;
-
-  const _PromptChips({required this.prompts, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 14),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: prompts
-            .map(
-              (p) => ActionChip(
-                label: Text(
-                  p,
-                  style: GoogleFonts.plusJakartaSans(fontSize: 12),
-                ),
-                onPressed: () => onTap(p),
-              ),
-            )
-            .toList(growable: false),
       ),
     );
   }

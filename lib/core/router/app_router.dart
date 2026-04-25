@@ -30,6 +30,8 @@
 //    redirect function. This means login/logout navigation is
 //    automatic and no screen has to call context.go() manually."
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -52,7 +54,9 @@ import '../../features/auth/screens/password_reset_sent_screen.dart';
 // ── Feed screens ──────────────────────────────────────────────────────────────
 import '../../features/feed/screens/home_feed_screen.dart';
 import '../../features/feed/screens/project_detail_screen.dart';
+import '../../features/feed/screens/author_portfolio_screen.dart';
 import '../../features/feed/screens/create_post_screen.dart';
+import '../../features/feed/screens/global_student_ranks_screen.dart';
 import '../../features/feed/screens/my_projects_screen.dart';
 
 // ── Discover screens ──────────────────────────────────────────────────────────
@@ -88,6 +92,7 @@ import '../../features/admin/screens/user_management_screen.dart';
 import '../../features/admin/screens/chatbot_analytics_screen.dart';
 import '../../features/admin/screens/admin_notifications_screen.dart';
 import '../../features/admin/screens/post_moderation_review_screen.dart';
+import '../../features/admin/screens/recommendation_web_lab_screen.dart';
 import '../../features/super_admin/screens/super_admin_dashboard_screen.dart';
 // ── Lecturer screens ──────────────────────────────────────────────────────
 import '../../features/lecturer/screens/lecturer_dashboard_screen.dart';
@@ -194,6 +199,7 @@ class AppRouter {
           Routes.activityLogs,
           Routes.adminChatbotAnalytics,
           Routes.adminNotifications,
+          Routes.adminRecommendationLab,
           RouteNames.adminPostReview.split('/:').first,
         ];
         final isAdminRoute = adminOnly.any(
@@ -211,9 +217,7 @@ class AppRouter {
         final isLecturerRoute = lecturerOnly.any(
           (r) => location.startsWith(r.split(':').first),
         );
-        if (isLecturerRoute &&
-            role != UserRole.lecturer &&
-            !role.isAdmin) {
+        if (isLecturerRoute && role != UserRole.lecturer && !role.isAdmin) {
           return Routes.home;
         }
 
@@ -236,7 +240,6 @@ class AppRouter {
 
       // ── Route tree ───────────────────────────────────────────────────────
       routes: [
-
         // ── Splash ─────────────────────────────────────────────────────────
         GoRoute(
           path: Routes.splash,
@@ -319,11 +322,11 @@ class AppRouter {
               builder: (_, __) {
                 final homeFeedCubit = _resolveHomeFeedCubit();
                 homeFeedCubit.ensureLoaded(
-                  staleAfter: const Duration(minutes: 2),
+                  staleAfter: const Duration(minutes: 8),
                 );
                 return BlocProvider.value(
                   value: homeFeedCubit,
-                child: const HomeFeedScreen(),
+                  child: const HomeFeedScreen(),
                 );
               },
             ),
@@ -343,7 +346,7 @@ class AppRouter {
               builder: (_, __) {
                 final inboxCubit = _resolveInboxMessageCubit();
                 inboxCubit.ensureConversationsLoaded(
-                  staleAfter: const Duration(minutes: 2),
+                  staleAfter: const Duration(minutes: 8),
                 );
                 return BlocProvider.value(
                   value: inboxCubit,
@@ -351,7 +354,6 @@ class AppRouter {
                 );
               },
             ),
-            // Notifications (mapped to /projects slot as 5th tab)
             GoRoute(
               path: Routes.projects,
               builder: (_, __) => const MyProjectsScreen(),
@@ -403,17 +405,31 @@ class AppRouter {
             postId: state.pathParameters['postId'] ?? '',
           ),
         ),
+        // ── Author portfolio (read-only user + all their projects) ────────────
+        GoRoute(
+          path: Routes.authorPortfolio,
+          builder: (_, state) => AuthorPortfolioScreen(
+            authorId: state.pathParameters['userId'] ?? '',
+          ),
+        ),
         GoRoute(
           path: Routes.createPost,
           builder: (_, state) => BlocProvider(
             create: (_) => sl<FeedCubit>(),
             child: CreatePostScreen(
-              existingPost: state.extra is PostModel ? state.extra as PostModel : null,
+              existingPost:
+                  state.extra is PostModel ? state.extra as PostModel : null,
             ),
           ),
         ),
 
         // ── Profile ────────────────────────────────────────────────────────
+        GoRoute(
+          path: Routes.globalRanks,
+          name: RouteNames.globalRanksName,
+          builder: (_, __) => const GlobalStudentRanksScreen(),
+        ),
+
         GoRoute(
           path: Routes.myProfile,
           builder: (_, __) => BlocProvider(
@@ -430,10 +446,13 @@ class AppRouter {
         ),
         GoRoute(
           path: Routes.editProfile,
-          builder: (_, __) => BlocProvider(
-            create: (_) => sl<ProfileCubit>()..loadProfile(null),
-            child: const EditProfileScreen(),
-          ),
+          builder: (_, state) {
+            final targetUserId = state.uri.queryParameters['userId'];
+            return BlocProvider(
+              create: (_) => sl<ProfileCubit>()..loadProfile(targetUserId),
+              child: EditProfileScreen(targetUserId: targetUserId),
+            );
+          },
         ),
         GoRoute(
           path: Routes.profile,
@@ -462,12 +481,13 @@ class AppRouter {
             // Extra data passed via GoRouter extra parameter
             final extra = state.extra as Map<String, dynamic>? ?? {};
             return BlocProvider(
-              create: (_) => sl<MessageCubit>()..loadThread(
-                peerId: threadId,
-                peerName: extra['peerName'] as String? ?? '',
-                peerPhotoUrl: extra['peerPhotoUrl'] as String?,
-                isPeerLecturer: extra['isPeerLecturer'] as bool? ?? false,
-              ),
+              create: (_) => sl<MessageCubit>()
+                ..loadThread(
+                  peerId: threadId,
+                  peerName: extra['peerName'] as String? ?? '',
+                  peerPhotoUrl: extra['peerPhotoUrl'] as String?,
+                  isPeerLecturer: extra['isPeerLecturer'] as bool? ?? false,
+                ),
               child: const ChatDetailScreen(),
             );
           },
@@ -549,6 +569,10 @@ class AppRouter {
           path: Routes.adminNotifications,
           builder: (_, __) => const AdminNotificationsScreen(),
         ),
+        GoRoute(
+          path: Routes.adminRecommendationLab,
+          builder: (_, __) => const RecommendationWebLabScreen(),
+        ),
 
         // ── Super Admin ────────────────────────────────────────────────────
         GoRoute(
@@ -564,7 +588,8 @@ class AppRouter {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline_rounded, size: 64, color: Colors.grey),
+              const Icon(Icons.error_outline_rounded,
+                  size: 64, color: Colors.grey),
               const SizedBox(height: 16),
               Text(
                 'Could not find: ${state.uri.path}',
@@ -590,7 +615,34 @@ class AppRouter {
 // We wrap AuthCubit's stream in a ChangeNotifier adapter.
 
 class _AuthListenable extends ChangeNotifier {
+  StreamSubscription<AuthState>? _subscription;
+  bool _notifyScheduled = false;
+  bool _disposed = false;
+
   _AuthListenable(AuthCubit cubit) {
-    cubit.stream.listen((_) => notifyListeners());
+    _subscription = cubit.stream.listen((_) => _scheduleNotify());
+  }
+
+  void _scheduleNotify() {
+    if (_disposed || _notifyScheduled) {
+      return;
+    }
+
+    _notifyScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _notifyScheduled = false;
+      if (_disposed) {
+        return;
+      }
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _subscription?.cancel();
+    _subscription = null;
+    super.dispose();
   }
 }

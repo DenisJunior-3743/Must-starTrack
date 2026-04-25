@@ -100,16 +100,17 @@ class ThreadLoaded extends MessageState {
     List<MessageModel>? messages,
     bool? hasMore,
     bool? isLoadingMore,
-  }) => ThreadLoaded(
-    conversationId: conversationId,
-    peerId: peerId,
-    peerName: peerName,
-    peerPhotoUrl: peerPhotoUrl,
-    isPeerLecturer: isPeerLecturer,
-    messages: messages ?? this.messages,
-    hasMore: hasMore ?? this.hasMore,
-    isLoadingMore: isLoadingMore ?? this.isLoadingMore,
-  );
+  }) =>
+      ThreadLoaded(
+        conversationId: conversationId,
+        peerId: peerId,
+        peerName: peerName,
+        peerPhotoUrl: peerPhotoUrl,
+        isPeerLecturer: isPeerLecturer,
+        messages: messages ?? this.messages,
+        hasMore: hasMore ?? this.hasMore,
+        isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      );
 
   @override
   List<Object?> get props => [
@@ -132,6 +133,30 @@ class MessageError extends MessageState {
   List<Object?> get props => [message];
 }
 
+class _ConversationReadSignal {
+  final String userId;
+  final String? conversationId;
+  final bool markAll;
+
+  const _ConversationReadSignal({
+    required this.userId,
+    this.conversationId,
+    this.markAll = false,
+  });
+}
+
+class _RequestViewedSignal {
+  final String userId;
+  final String? requestId;
+  final bool markAll;
+
+  const _RequestViewedSignal({
+    required this.userId,
+    this.requestId,
+    this.markAll = false,
+  });
+}
+
 // ── Cubit ─────────────────────────────────────────────────────────────────────
 
 class MessageCubit extends Cubit<MessageState> {
@@ -146,6 +171,8 @@ class MessageCubit extends Cubit<MessageState> {
   StreamSubscription<List<MessageModel>>? _threadSub;
   StreamSubscription<int>? _inboxRealtimeSub;
   StreamSubscription<AuthState>? _authSub;
+  StreamSubscription<_ConversationReadSignal>? _readSyncSub;
+  StreamSubscription<_RequestViewedSignal>? _requestSyncSub;
   Timer? _inboxRefreshDebounce;
   String? _realtimeInboxUserId;
   DateTime? _lastConversationsLoadedAt;
@@ -155,6 +182,11 @@ class MessageCubit extends Cubit<MessageState> {
 
   static const _pageSize = 40;
   static const _uuid = Uuid();
+  static final StreamController<_ConversationReadSignal>
+      _conversationReadSignals =
+      StreamController<_ConversationReadSignal>.broadcast();
+  static final StreamController<_RequestViewedSignal> _requestViewedSignals =
+      StreamController<_RequestViewedSignal>.broadcast();
 
   MessageCubit({
     required MessageDao messageDao,
@@ -174,6 +206,12 @@ class MessageCubit extends Cubit<MessageState> {
         _firestore = firestore,
         _recommenderService = recommenderService,
         super(const MessageInitial()) {
+    _readSyncSub = _conversationReadSignals.stream.listen(
+      _applyConversationReadSignal,
+    );
+    _requestSyncSub = _requestViewedSignals.stream.listen(
+      _applyRequestViewedSignal,
+    );
     _authSub = _authCubit.stream.listen((authState) {
       if (authState is AuthAuthenticated) {
         unawaited(loadConversations());
@@ -188,6 +226,129 @@ class MessageCubit extends Cubit<MessageState> {
     if (!isClosed) {
       emit(next);
     }
+  }
+
+  void _broadcastConversationRead({
+    required String userId,
+    String? conversationId,
+    bool markAll = false,
+  }) {
+    if (userId.trim().isEmpty) return;
+    if (markAll) {
+      _conversationReadSignals.add(
+        _ConversationReadSignal(userId: userId, markAll: true),
+      );
+      return;
+    }
+
+    final id = conversationId?.trim();
+    if (id == null || id.isEmpty) return;
+    _conversationReadSignals.add(
+      _ConversationReadSignal(
+        userId: userId,
+        conversationId: id,
+      ),
+    );
+  }
+
+  ConversationSummary _copyConversationWithUnread(
+    ConversationSummary convo,
+    int unreadCount,
+  ) {
+    return ConversationSummary(
+      id: convo.id,
+      peerId: convo.peerId,
+      peerName: convo.peerName,
+      peerPhotoUrl: convo.peerPhotoUrl,
+      lastMessage: convo.lastMessage,
+      lastMessageAt: convo.lastMessageAt,
+      unreadCount: unreadCount,
+      isPeerLecturer: convo.isPeerLecturer,
+    );
+  }
+
+  void _applyConversationReadSignal(_ConversationReadSignal signal) {
+    final uid = _currentUserId;
+    if (uid == null || uid.isEmpty) return;
+    if (signal.userId != uid) return;
+
+    final current = state;
+    if (current is! ConversationsLoaded) return;
+
+    var changed = false;
+    final updated = current.conversations.map((convo) {
+      if (signal.markAll) {
+        if (convo.unreadCount == 0) return convo;
+        changed = true;
+        return _copyConversationWithUnread(convo, 0);
+      }
+
+      if (signal.conversationId != convo.id || convo.unreadCount == 0) {
+        return convo;
+      }
+      changed = true;
+      return _copyConversationWithUnread(convo, 0);
+    }).toList(growable: false);
+
+    if (!changed) return;
+
+    _emitIfOpen(ConversationsLoaded(
+      conversations: updated,
+      requests: current.requests,
+      hasMore: current.hasMore,
+    ));
+  }
+
+  void _broadcastRequestViewed({
+    required String userId,
+    String? requestId,
+    bool markAll = false,
+  }) {
+    if (userId.trim().isEmpty) return;
+    if (markAll) {
+      _requestViewedSignals.add(
+        _RequestViewedSignal(userId: userId, markAll: true),
+      );
+      return;
+    }
+
+    final id = requestId?.trim();
+    if (id == null || id.isEmpty) return;
+    _requestViewedSignals.add(
+      _RequestViewedSignal(
+        userId: userId,
+        requestId: id,
+      ),
+    );
+  }
+
+  void _applyRequestViewedSignal(_RequestViewedSignal signal) {
+    final uid = _currentUserId;
+    if (uid == null || uid.isEmpty) return;
+    if (signal.userId != uid) return;
+
+    final current = state;
+    if (current is! ConversationsLoaded) return;
+
+    var changed = false;
+    final now = DateTime.now();
+    final updatedRequests = current.requests.map((request) {
+      if (!request.isIncoming || request.receiverViewedAt != null) {
+        return request;
+      }
+      if (!signal.markAll && signal.requestId != request.id) {
+        return request;
+      }
+      changed = true;
+      return request.copyWith(receiverViewedAt: now);
+    }).toList(growable: false);
+
+    if (!changed) return;
+    _emitIfOpen(ConversationsLoaded(
+      conversations: current.conversations,
+      requests: updatedRequests,
+      hasMore: current.hasMore,
+    ));
   }
 
   Future<void> ensureConversationsLoaded({
@@ -228,7 +389,6 @@ class MessageCubit extends Cubit<MessageState> {
     }
     _emitIfOpen(const ConversationsLoading());
     try {
-      await _syncService.syncRemoteToLocal();
       final convos = await _messageDao.getConversations(
         userId: uid,
         pageSize: _pageSize,
@@ -249,17 +409,24 @@ class MessageCubit extends Cubit<MessageState> {
         hasMore: convos.length == _pageSize,
       ));
       _lastConversationsLoadedAt = DateTime.now();
+      unawaited(
+        _refreshConversationsInBackground(syncRemoteFirst: true),
+      );
     } catch (e) {
       _emitIfOpen(MessageError('Failed to load conversations: $e'));
     }
   }
 
-  Future<void> _refreshConversationsInBackground() async {
+  Future<void> _refreshConversationsInBackground({
+    bool syncRemoteFirst = true,
+  }) async {
     final uid = _currentUserId;
     if (uid == null || uid.isEmpty) return;
 
     try {
-      await _syncService.syncRemoteToLocal();
+      if (syncRemoteFirst) {
+        await _syncService.syncRealtimeInboxSlices();
+      }
       final convos = await _messageDao.getConversations(
         userId: uid,
         pageSize: _pageSize,
@@ -288,6 +455,137 @@ class MessageCubit extends Cubit<MessageState> {
     }
   }
 
+  Future<void> refreshConversations({
+    bool syncRemoteFirst = true,
+  }) async {
+    await _refreshConversationsInBackground(syncRemoteFirst: syncRemoteFirst);
+  }
+
+  Future<void> markCollaborationRequestViewed(String requestId) async {
+    final uid = _currentUserId;
+    if (uid == null || uid.isEmpty || requestId.trim().isEmpty) return;
+
+    try {
+      await _messageDao.markCollaborationRequestViewed(
+        requestId: requestId,
+        userId: uid,
+      );
+      _broadcastRequestViewed(
+        userId: uid,
+        requestId: requestId,
+      );
+
+      unawaited(_syncService.markCollaborationRequestViewedRemote(requestId));
+
+      final current = state;
+      if (current is ConversationsLoaded) {
+        final now = DateTime.now();
+        final updatedRequests = current.requests.map((request) {
+          if (request.id != requestId) return request;
+          return request.copyWith(receiverViewedAt: now);
+        }).toList(growable: false);
+        _emitIfOpen(ConversationsLoaded(
+          conversations: current.conversations,
+          requests: updatedRequests,
+          hasMore: current.hasMore,
+        ));
+      }
+    } catch (_) {
+      // Keep current state if local viewed flag update fails.
+    }
+  }
+
+  Future<void> markIncomingRequestsViewed() async {
+    final uid = _currentUserId;
+    if (uid == null || uid.isEmpty) return;
+
+    try {
+      await _messageDao.markAllIncomingRequestsViewed(uid);
+      _broadcastRequestViewed(
+        userId: uid,
+        markAll: true,
+      );
+
+      unawaited(_syncService.markAllIncomingRequestsViewedRemote(uid));
+
+      final current = state;
+      if (current is ConversationsLoaded) {
+        final now = DateTime.now();
+        final updatedRequests = current.requests
+            .map((request) => request.isIncoming
+                ? request.copyWith(receiverViewedAt: now)
+                : request)
+            .toList(growable: false);
+        _emitIfOpen(ConversationsLoaded(
+          conversations: current.conversations,
+          requests: updatedRequests,
+          hasMore: current.hasMore,
+        ));
+      }
+    } catch (_) {
+      // Keep current state if marking incoming requests viewed fails.
+    }
+  }
+
+  Future<void> markConversationVisited(String conversationId) async {
+    final uid = _currentUserId;
+    if (uid == null || uid.isEmpty || conversationId.trim().isEmpty) return;
+
+    try {
+      await _messageDao.markConversationRead(
+        conversationId: conversationId,
+        userId: uid,
+      );
+      unawaited(_syncService.markConversationReadRemote(
+        conversationId: conversationId,
+        userId: uid,
+      ));
+      _broadcastConversationRead(
+        userId: uid,
+        conversationId: conversationId,
+      );
+
+      final current = state;
+      if (current is ConversationsLoaded) {
+        final updatedConversations = current.conversations
+            .map((c) =>
+                c.id == conversationId ? _copyConversationWithUnread(c, 0) : c)
+            .toList(growable: false);
+        _emitIfOpen(ConversationsLoaded(
+          conversations: updatedConversations,
+          requests: current.requests,
+          hasMore: current.hasMore,
+        ));
+      }
+    } catch (_) {
+      // Keep current state if mark-read operation fails.
+    }
+  }
+
+  Future<void> markAllConversationsRead() async {
+    final uid = _currentUserId;
+    if (uid == null || uid.isEmpty) return;
+
+    try {
+      await _messageDao.markAllConversationsAsViewed(uid);
+      _broadcastConversationRead(userId: uid, markAll: true);
+
+      final current = state;
+      if (current is ConversationsLoaded) {
+        final updated = current.conversations
+            .map((c) => _copyConversationWithUnread(c, 0))
+            .toList(growable: false);
+        _emitIfOpen(ConversationsLoaded(
+          conversations: updated,
+          requests: current.requests,
+          hasMore: current.hasMore,
+        ));
+      }
+    } catch (_) {
+      // Leave existing state untouched if marking all read fails.
+    }
+  }
+
   void _startRealtimeInboxWatcher(String userId) {
     if (_realtimeInboxUserId == userId && _inboxRealtimeSub != null) {
       return;
@@ -310,7 +608,7 @@ class MessageCubit extends Cubit<MessageState> {
     }
 
     await _syncService.syncRealtimeInboxSlices();
-    await _refreshConversationsInBackground();
+    await _refreshConversationsInBackground(syncRemoteFirst: false);
   }
 
   void _stopRealtimeInboxWatcher() {
@@ -333,11 +631,13 @@ class MessageCubit extends Cubit<MessageState> {
     }
 
     final incomingRequests = requests
-        .where((request) => request.isIncoming && request.counterpartId.isNotEmpty)
+        .where(
+            (request) => request.isIncoming && request.counterpartId.isNotEmpty)
         .toList();
     if (incomingRequests.isEmpty) return requests;
 
-    final counterpartIds = incomingRequests.map((request) => request.counterpartId).toSet();
+    final counterpartIds =
+        incomingRequests.map((request) => request.counterpartId).toSet();
     final candidates = <UserModel>[];
     for (final counterpartId in counterpartIds) {
       final user = await _userDao.getUserById(counterpartId);
@@ -382,6 +682,12 @@ class MessageCubit extends Cubit<MessageState> {
         _emitIfOpen(const MessageError('Not logged in'));
         return;
       }
+      if (peerId.trim() == uid.trim()) {
+        _emitIfOpen(
+          const MessageError('You cannot start a chat with yourself.'),
+        );
+        return;
+      }
 
       var resolvedPeerName = peerName.trim();
       var resolvedPeerPhotoUrl = peerPhotoUrl;
@@ -423,10 +729,14 @@ class MessageCubit extends Cubit<MessageState> {
         conversationId: convoId,
         userId: uid,
       );
-      await _syncService.markConversationReadRemote(
+      _broadcastConversationRead(
+        userId: uid,
+        conversationId: convoId,
+      );
+      unawaited(_syncService.markConversationReadRemote(
         conversationId: convoId,
         userId: uid,
-      );
+      ));
 
       _emitIfOpen(ThreadLoaded(
         conversationId: convoId,
@@ -441,7 +751,8 @@ class MessageCubit extends Cubit<MessageState> {
       await _threadSub?.cancel();
       _threadSub = _firestore.watchMessages(convoId).listen(
         (remoteMessages) {
-          _onRemoteMessages(conversationId: convoId, remoteMessages: remoteMessages);
+          _onRemoteMessages(
+              conversationId: convoId, remoteMessages: remoteMessages);
         },
       );
     } catch (e) {
@@ -453,13 +764,15 @@ class MessageCubit extends Cubit<MessageState> {
 
   Future<void> loadMoreMessages() async {
     final current = state;
-    if (current is! ThreadLoaded || current.isLoadingMore || !current.hasMore) return;
+    if (current is! ThreadLoaded || current.isLoadingMore || !current.hasMore) {
+      return;
+    }
 
     _emitIfOpen(current.copyWith(isLoadingMore: true));
 
     try {
-      final oldest = current.messages.isNotEmpty
-          ? current.messages.first.createdAt : null;
+      final oldest =
+          current.messages.isNotEmpty ? current.messages.first.createdAt : null;
 
       final older = await _messageDao.getMessages(
         conversationId: current.conversationId,
@@ -484,7 +797,8 @@ class MessageCubit extends Cubit<MessageState> {
   ///   2. Append to UI immediately
   ///   3. Persist to SQLite
   ///   4. Enqueue Firestore sync
-  Future<void> sendMessage(String text, {
+  Future<void> sendMessage(
+    String text, {
     String? replyToId,
     String? replyToPreview,
   }) async {
@@ -492,6 +806,12 @@ class MessageCubit extends Cubit<MessageState> {
     if (current is! ThreadLoaded) return;
     final uid = _currentUserId;
     if (uid == null || uid.isEmpty) return;
+    if (current.peerId.trim() == uid.trim()) {
+      _emitIfOpen(
+        const MessageError('You cannot send a message to yourself.'),
+      );
+      return;
+    }
 
     final msg = MessageModel(
       id: _uuid.v4(),
@@ -533,8 +853,10 @@ class MessageCubit extends Cubit<MessageState> {
       await _syncService.processPendingSync();
     } catch (e) {
       // Rollback optimistic message on failure
-      final rolled = (state as ThreadLoaded).messages
-          .where((m) => m.id != msg.id).toList();
+      final rolled = (state as ThreadLoaded)
+          .messages
+          .where((m) => m.id != msg.id)
+          .toList();
       _emitIfOpen((state as ThreadLoaded).copyWith(messages: rolled));
     }
   }
@@ -549,6 +871,12 @@ class MessageCubit extends Cubit<MessageState> {
     if (current is! ThreadLoaded) return;
     final uid = _currentUserId;
     if (uid == null || uid.isEmpty) return;
+    if (current.peerId.trim() == uid.trim()) {
+      _emitIfOpen(
+        const MessageError('You cannot send a message to yourself.'),
+      );
+      return;
+    }
     if (!await audioFile.exists()) {
       _emitIfOpen(const MessageError('Recorded audio file is missing.'));
       return;
@@ -695,13 +1023,26 @@ class MessageCubit extends Cubit<MessageState> {
             request.postTitle.toLowerCase().contains(lowered) ||
             request.message.toLowerCase().contains(lowered);
       }).toList();
-      _emitIfOpen(ConversationsLoaded(conversations: results, requests: matchingRequests));
+      _emitIfOpen(ConversationsLoaded(
+          conversations: results, requests: matchingRequests));
     } catch (e) {
       _emitIfOpen(MessageError('Search failed: $e'));
     }
   }
 
   Future<void> deleteConversation(String conversationId) async {
+    final current = state;
+    if (current is ConversationsLoaded) {
+      final nextConversations = current.conversations
+          .where((conversation) => conversation.id != conversationId)
+          .toList(growable: false);
+      _emitIfOpen(ConversationsLoaded(
+        conversations: nextConversations,
+        requests: current.requests,
+        hasMore: current.hasMore,
+      ));
+    }
+
     await _messageDao.deleteConversation(conversationId);
     await _syncDao.enqueue(
       entity: 'conversation',
@@ -710,7 +1051,7 @@ class MessageCubit extends Cubit<MessageState> {
       payload: const {},
     );
     await _syncService.processPendingSync();
-    await loadConversations();
+    await refreshConversations(syncRemoteFirst: false);
   }
 
   void _onRemoteMessages({
@@ -729,7 +1070,8 @@ class MessageCubit extends Cubit<MessageState> {
 
     final uid = _currentUserId;
     if (uid != null && uid.isNotEmpty) {
-      final hasUnreadIncoming = merged.any((m) => m.senderId != uid && !m.isRead);
+      final hasUnreadIncoming =
+          merged.any((m) => m.senderId != uid && !m.isRead);
       if (hasUnreadIncoming) {
         final readMerged = merged.map((m) {
           if (m.senderId == uid || m.isRead) return m;
@@ -771,10 +1113,14 @@ class MessageCubit extends Cubit<MessageState> {
         conversationId: conversationId,
         userId: userId,
       );
-      await _syncService.markConversationReadRemote(
+      _broadcastConversationRead(
+        userId: userId,
+        conversationId: conversationId,
+      );
+      unawaited(_syncService.markConversationReadRemote(
         conversationId: conversationId,
         userId: userId,
-      );
+      ));
     } catch (_) {
       // Best effort: local/UI remains usable even if read sync fails.
     }
@@ -827,6 +1173,10 @@ class MessageCubit extends Cubit<MessageState> {
   Future<void> close() async {
     _inboxRefreshDebounce?.cancel();
     _inboxRefreshDebounce = null;
+    await _readSyncSub?.cancel();
+    _readSyncSub = null;
+    await _requestSyncSub?.cancel();
+    _requestSyncSub = null;
     await _authSub?.cancel();
     _authSub = null;
     await _inboxRealtimeSub?.cancel();

@@ -68,6 +68,23 @@ class SettingsDrawer extends StatelessWidget {
                     context.push(RouteNames.myProfile);
                   },
                 ),
+                if (!isGuest)
+                  _DrawerTile(
+                    icon: Icons.folder_open_rounded,
+                    label: 'My Projects',
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      context.push(RouteNames.projects);
+                    },
+                  ),
+                _DrawerTile(
+                  icon: Icons.leaderboard_rounded,
+                  label: 'View Ranks',
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    context.push(RouteNames.globalRanks);
+                  },
+                ),
                 _DrawerTile(
                   icon: Icons.notifications_outlined,
                   label: 'Notification Settings',

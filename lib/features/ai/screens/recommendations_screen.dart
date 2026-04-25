@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -7,11 +7,13 @@ import '../../../core/constants/app_dimensions.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_names.dart';
 import '../../../data/local/dao/activity_log_dao.dart';
+import '../../../data/local/dao/comment_dao.dart';
 import '../../../data/local/dao/message_dao.dart';
 import '../../../data/local/dao/post_dao.dart';
 import '../../../data/local/dao/user_dao.dart';
-import '../../../data/remote/gemini_service.dart';
+import '../../../data/remote/openai_service.dart';
 import '../../../data/remote/recommender_service.dart';
+import '../../../data/remote/skill_pattern_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
 
 class RecommendationsScreen extends StatefulWidget {
@@ -59,11 +61,21 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
       pageSize: 80,
       currentUserId: currentUserId,
     );
+    final commentSnippetsByPost =
+        await sl<CommentDao>().getRecentCommentSnippetsForPosts(
+      posts.map((post) => post.id).toList(),
+    );
     final rankedPosts = await sl<RecommenderService>().rankHybrid(
       user: currentUser,
       candidates: posts,
+      skillPatterns: await sl<SkillPatternService>().buildFromContext(
+        userSkills: currentUser.profile?.skills ?? const <String>[],
+        candidatePosts: posts,
+        mode: 'personalized',
+      ),
       recentlyViewedCategories: recentCategories,
       recentSearchTerms: recentSearchTerms,
+      commentSnippetsByPost: commentSnippetsByPost,
     );
 
     final allStudents = await userDao.getAllUsers(
@@ -71,7 +83,8 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
       includeSuspended: false,
       pageSize: 120,
     );
-    final acceptedCollaborators = await sl<MessageDao>().getAcceptedCollaborators(
+    final acceptedCollaborators =
+        await sl<MessageDao>().getAcceptedCollaborators(
       userId: currentUserId,
       limit: 100,
     );
@@ -79,7 +92,8 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
         .rankCollaborators(
           currentUser: currentUser,
           candidates: allStudents,
-          excludedUserIds: acceptedCollaborators.map((item) => item.peerId).toSet(),
+          excludedUserIds:
+              acceptedCollaborators.map((item) => item.peerId).toSet(),
           recentSearchTerms: recentSearchTerms,
         )
         .take(6)
@@ -92,9 +106,15 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
       profileCompletion: _profileCompletion(currentUser),
       recentSearchTerms: recentSearchTerms.toList()..sort(),
       recentCategories: recentCategories.toList()..sort(),
-      geminiEnabled: sl<GeminiService>().isConfigured,
-      projects: rankedPosts.where((item) => item.post.type != 'opportunity').take(4).toList(),
-      opportunities: rankedPosts.where((item) => item.post.type == 'opportunity').take(4).toList(),
+      aiRerankEnabled: sl<OpenAiService>().isConfigured,
+      projects: rankedPosts
+          .where((item) => item.post.type != 'opportunity')
+          .take(4)
+          .toList(),
+      opportunities: rankedPosts
+          .where((item) => item.post.type == 'opportunity')
+          .take(4)
+          .toList(),
       collaborators: collaboratorSuggestions,
     );
   }
@@ -137,14 +157,17 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
                 const SizedBox(height: 18),
                 const _SectionHeader(
                   title: 'Projects You Might Like',
-                  subtitle: 'Blended from your profile, recent activity, and live engagement.',
+                  subtitle:
+                      'Blended from your profile, recent activity, and live engagement.',
                 ),
                 const SizedBox(height: 10),
-                ...data.projects.map((item) => _PostRecommendationCard(item: item)),
+                ...data.projects
+                    .map((item) => _PostRecommendationCard(item: item)),
                 const SizedBox(height: 18),
                 const _SectionHeader(
                   title: 'Potential Collaborators',
-                  subtitle: 'Students whose skills and momentum fit your current direction.',
+                  subtitle:
+                      'Students whose skills and momentum fit your current direction.',
                 ),
                 const SizedBox(height: 10),
                 ...data.collaborators
@@ -152,11 +175,12 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
                 const SizedBox(height: 18),
                 const _SectionHeader(
                   title: 'Top Opportunities',
-                  subtitle: 'Open calls with the strongest signal match right now.',
+                  subtitle:
+                      'Open calls with the strongest signal match right now.',
                 ),
                 const SizedBox(height: 10),
-                ...data.opportunities
-                    .map((item) => _PostRecommendationCard(item: item, accent: AppColors.roleLecturer)),
+                ...data.opportunities.map((item) => _PostRecommendationCard(
+                    item: item, accent: AppColors.roleLecturer)),
               ],
             ),
           );
@@ -213,7 +237,8 @@ class _HeroPanel extends StatelessWidget {
                   color: Colors.white.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: const Icon(Icons.auto_awesome_rounded, color: Colors.white),
+                child:
+                    const Icon(Icons.auto_awesome_rounded, color: Colors.white),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -230,9 +255,9 @@ class _HeroPanel extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      data.geminiEnabled
-                          ? 'Local ranking is active with Gemini reranking when useful.'
-                          : 'Local ranking is active. Add Gemini later for remote reranking.',
+                      data.aiRerankEnabled
+                          ? 'Local ranking is active with OpenAI reranking when useful.'
+                          : 'Local ranking is active. Add OpenAI later for remote reranking.',
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 12,
                         color: Colors.white.withValues(alpha: 0.9),
@@ -259,7 +284,8 @@ class _HeroPanel extends StatelessWidget {
               minHeight: 10,
               value: data.profileCompletion,
               backgroundColor: Colors.white.withValues(alpha: 0.18),
-              valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFF8FAFC)),
+              valueColor:
+                  const AlwaysStoppedAnimation<Color>(Color(0xFFF8FAFC)),
             ),
           ),
           const SizedBox(height: 8),
@@ -270,17 +296,20 @@ class _HeroPanel extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.92),
             ),
           ),
-          if (data.recentSearchTerms.isNotEmpty || data.recentCategories.isNotEmpty) ...[
+          if (data.recentSearchTerms.isNotEmpty ||
+              data.recentCategories.isNotEmpty) ...[
             const SizedBox(height: 14),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
                 ...data.recentSearchTerms.take(3).map(
-                      (term) => _SignalChip(label: term, icon: Icons.search_rounded),
+                      (term) =>
+                          _SignalChip(label: term, icon: Icons.search_rounded),
                     ),
                 ...data.recentCategories.take(2).map(
-                      (term) => _SignalChip(label: term, icon: Icons.category_outlined),
+                      (term) => _SignalChip(
+                          label: term, icon: Icons.category_outlined),
                     ),
               ],
             ),
@@ -324,7 +353,8 @@ class _SectionHeader extends StatelessWidget {
 }
 
 class _PostRecommendationCard extends StatelessWidget {
-  const _PostRecommendationCard({required this.item, this.accent = AppColors.primary});
+  const _PostRecommendationCard(
+      {required this.item, this.accent = AppColors.primary});
 
   final RecommendedPost item;
   final Color accent;
@@ -365,7 +395,8 @@ class _PostRecommendationCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 10),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
                         color: accent.withValues(alpha: 0.10),
                         borderRadius: BorderRadius.circular(999),
@@ -446,10 +477,13 @@ class _CollaboratorRecommendationCard extends StatelessWidget {
                 CircleAvatar(
                   radius: 24,
                   backgroundColor: AppColors.primaryTint10,
-                  backgroundImage: user.photoUrl != null ? NetworkImage(user.photoUrl!) : null,
+                  backgroundImage: user.photoUrl != null
+                      ? NetworkImage(user.photoUrl!)
+                      : null,
                   child: user.photoUrl == null
                       ? Text(
-                          (user.firstName.isNotEmpty ? user.firstName[0] : '?').toUpperCase(),
+                          (user.firstName.isNotEmpty ? user.firstName[0] : '?')
+                              .toUpperCase(),
                           style: GoogleFonts.plusJakartaSans(
                             fontWeight: FontWeight.w700,
                             color: AppColors.primary,
@@ -472,7 +506,9 @@ class _CollaboratorRecommendationCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        user.profile?.programName ?? user.profile?.faculty ?? user.email,
+                        user.profile?.programName ??
+                            user.profile?.faculty ??
+                            user.email,
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 12,
                           color: AppColors.textSecondary(context),
@@ -485,7 +521,8 @@ class _CollaboratorRecommendationCard extends StatelessWidget {
                         runSpacing: 8,
                         children: [
                           ...item.matchedSkills.take(2).map(
-                                (skill) => _MetaPill(label: skill, color: AppColors.primary),
+                                (skill) => _MetaPill(
+                                    label: skill, color: AppColors.primary),
                               ),
                           ...item.reasons.take(1).map(
                                 (reason) => _MetaPill(
@@ -625,7 +662,7 @@ class _RecommendationsViewData {
     required this.profileCompletion,
     required this.recentSearchTerms,
     required this.recentCategories,
-    required this.geminiEnabled,
+    required this.aiRerankEnabled,
     required this.projects,
     required this.opportunities,
     required this.collaborators,
@@ -636,7 +673,7 @@ class _RecommendationsViewData {
         profileCompletion = 0,
         recentSearchTerms = const [],
         recentCategories = const [],
-        geminiEnabled = false,
+        aiRerankEnabled = false,
         projects = const [],
         opportunities = const [],
         collaborators = const [];
@@ -645,13 +682,15 @@ class _RecommendationsViewData {
   final double profileCompletion;
   final List<String> recentSearchTerms;
   final List<String> recentCategories;
-  final bool geminiEnabled;
+  final bool aiRerankEnabled;
   final List<RecommendedPost> projects;
   final List<RecommendedPost> opportunities;
   final List<RecommendedUser> collaborators;
 
   bool get hasContent =>
-      projects.isNotEmpty || opportunities.isNotEmpty || collaborators.isNotEmpty;
+      projects.isNotEmpty ||
+      opportunities.isNotEmpty ||
+      collaborators.isNotEmpty;
 }
 
 String _reasonLabel(String reason) {
@@ -668,12 +707,19 @@ String _reasonLabel(String reason) {
       return 'Based on recent activity';
     case 'opportunity_fit':
       return 'Opportunity fit';
+    case 'comment_sentiment_signal':
+      return 'Comment sentiment';
     case 'complementary_skills':
       return 'Complementary skills';
+    case 'trust_signal':
+      return 'Trust signal';
+    case 'trust_penalty':
+      return 'Trust penalty';
+    case 'openai_rerank':
+      return 'OpenAI reranked';
     case 'gemini_rerank':
-      return 'Gemini reranked';
+      return 'AI reranked';
     default:
       return 'Recommended';
   }
 }
-

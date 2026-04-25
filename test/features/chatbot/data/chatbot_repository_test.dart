@@ -1,13 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:must_startrack/data/remote/gemini_service.dart';
+import 'package:must_startrack/data/remote/openai_service.dart';
 import 'package:must_startrack/features/chatbot/data/chatbot_repository.dart';
 import 'package:must_startrack/features/chatbot/models/chatbot_models.dart';
 
 void main() {
-  group('ChatbotRepository Gemini integration', () {
+  group('ChatbotRepository OpenAI integration', () {
     test('uses FAQ answer first for strong local matches', () async {
-      final gemini = _FakeGeminiService(
+      final openAi = _FakeOpenAiService(
         configured: true,
         response: '{"answer":"AI should not be called"}',
       );
@@ -23,7 +23,7 @@ void main() {
         ],
         projectDocs: const [],
         knownRoutes: const {'/home'},
-        geminiService: gemini,
+        openAiService: openAi,
       );
 
       final result = await repo.answer(
@@ -33,15 +33,16 @@ void main() {
 
       expect(result.source, ChatbotSource.faq);
       expect(result.answer, 'Guests can browse only.');
-      expect(gemini.callCount, 0);
+      expect(openAi.callCount, 0);
     });
 
-    test('returns AI response when Gemini is configured and JSON is valid', () async {
-      final gemini = _FakeGeminiService(
+    test('returns AI response when OpenAI is configured and JSON is valid',
+        () async {
+      final openAi = _FakeOpenAiService(
         configured: true,
         response: '''
 {
-  "answer": "This answer came from Gemini.",
+  "answer": "This answer came from OpenAI.",
   "confidence": 0.91,
   "followUps": ["Do you want setup steps?", "Need route guidance?"],
   "actions": [
@@ -63,7 +64,7 @@ void main() {
         ],
         projectDocs: const [],
         knownRoutes: const {'/home', '/discover'},
-        geminiService: gemini,
+        openAiService: openAi,
       );
 
       final result = await repo.answer(
@@ -72,17 +73,18 @@ void main() {
         role: 'student',
       );
 
-      expect(gemini.callCount, 1);
+      expect(openAi.callCount, 1);
       expect(result.source, ChatbotSource.ai);
-      expect(result.answer, 'This answer came from Gemini.');
+      expect(result.answer, 'This answer came from OpenAI.');
       expect(result.confidence, closeTo(0.91, 0.0001));
       expect(result.followUps, contains('Do you want setup steps?'));
       expect(result.actions, hasLength(1));
       expect(result.actions.first.route, '/home');
     });
 
-    test('falls back when Gemini is not configured', () async {
-      final gemini = _FakeGeminiService(
+    test('uses learned examples before fallback when query is close enough',
+        () async {
+      final openAi = _FakeOpenAiService(
         configured: false,
         response: '{"answer":"should not be used"}',
       );
@@ -98,22 +100,56 @@ void main() {
         ],
         projectDocs: const [],
         knownRoutes: const {'/home'},
-        geminiService: gemini,
+        openAiService: openAi,
       );
 
       final result = await repo.answer(
-        'How does embedding retrieval work for recommendations?',
+        'How do I create a group and invite members?',
+        isGuest: false,
+        role: 'student',
+        learnedExamples: const [
+          ChatbotLearnedExample(
+            question: 'How do I create a group?',
+            answer:
+                'Open Peers, accept collaborators, then create a group and invite them from your accepted collaborators list.',
+            confidence: 0.95,
+            source: 'faq',
+            role: 'student',
+          ),
+        ],
+      );
+
+      expect(openAi.callCount, 0);
+      expect(result.source, ChatbotSource.faq);
+      expect(result.answer, contains('create a group'));
+    });
+
+    test('returns safe fallback when OpenAI is not configured', () async {
+      final openAi = _FakeOpenAiService(
+        configured: false,
+        response: '{"answer":"should not be used"}',
+      );
+
+      final repo = ChatbotRepository(
+        faqs: const [],
+        projectDocs: const [],
+        knownRoutes: const {'/home'},
+        openAiService: openAi,
+      );
+
+      final result = await repo.answer(
+        'Explain distributed tracing internals in this system.',
         isGuest: false,
         role: 'student',
       );
 
-      expect(gemini.callCount, 0);
+      expect(openAi.callCount, 0);
       expect(result.source, ChatbotSource.fallback);
-      expect(result.answer, contains('I am still learning'));
+      expect(result.answer, contains('I can help with navigation'));
     });
 
-    test('falls back when Gemini returns invalid JSON', () async {
-      final gemini = _FakeGeminiService(
+    test('falls back when OpenAI returns invalid JSON', () async {
+      final openAi = _FakeOpenAiService(
         configured: true,
         response: 'this-is-not-json',
       );
@@ -129,23 +165,23 @@ void main() {
         ],
         projectDocs: const [],
         knownRoutes: const {'/home'},
-        geminiService: gemini,
+        openAiService: openAi,
       );
 
       final result = await repo.answer(
-        'Describe recommender score blending internals and audit fields.',
+        'Explain distributed tracing internals in this system.',
         isGuest: true,
       );
 
-      expect(gemini.callCount, 1);
+      expect(openAi.callCount, 1);
       expect(result.source, ChatbotSource.fallback);
-      expect(result.answer, contains('I am still learning'));
+      expect(result.answer, contains('I can help with navigation'));
     });
   });
 }
 
-class _FakeGeminiService extends GeminiService {
-  _FakeGeminiService({
+class _FakeOpenAiService extends OpenAiService {
+  _FakeOpenAiService({
     required this.configured,
     required this.response,
   }) : super(apiKey: 'test-key');

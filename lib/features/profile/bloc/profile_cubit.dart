@@ -82,18 +82,27 @@ class ProfileLoaded extends ProfileState {
     int? followerCount,
     int? followingCount,
     int? collabCount,
-  }) => ProfileLoaded(
-    user: user ?? this.user,
-    posts: posts ?? this.posts,
-    isOwnProfile: isOwnProfile ?? this.isOwnProfile,
-    isFollowing: isFollowing ?? this.isFollowing,
-    followerCount: followerCount ?? this.followerCount,
-    followingCount: followingCount ?? this.followingCount,
-    collabCount: collabCount ?? this.collabCount,
-  );
+  }) =>
+      ProfileLoaded(
+        user: user ?? this.user,
+        posts: posts ?? this.posts,
+        isOwnProfile: isOwnProfile ?? this.isOwnProfile,
+        isFollowing: isFollowing ?? this.isFollowing,
+        followerCount: followerCount ?? this.followerCount,
+        followingCount: followingCount ?? this.followingCount,
+        collabCount: collabCount ?? this.collabCount,
+      );
 
   @override
-  List<Object?> get props => [user, posts, isOwnProfile, isFollowing, followerCount, followingCount, collabCount];
+  List<Object?> get props => [
+        user,
+        posts,
+        isOwnProfile,
+        isFollowing,
+        followerCount,
+        followingCount,
+        collabCount
+      ];
 }
 
 class ProfileUpdating extends ProfileState {
@@ -257,8 +266,8 @@ class ProfileCubit extends Cubit<ProfileState> {
         });
       } else {
         await db.delete(DatabaseSchema.tableFollows,
-          where: 'follower_id = ? AND followee_id = ?',
-          whereArgs: [uid, current.user.id]);
+            where: 'follower_id = ? AND followee_id = ?',
+            whereArgs: [uid, current.user.id]);
       }
     } catch (e) {
       // Rollback on failure
@@ -288,6 +297,13 @@ class ProfileCubit extends Cubit<ProfileState> {
     final current = state;
     if (current is! ProfileLoaded) return;
 
+    final isAdminEditor = _authCubit.isAdmin;
+    if (!current.isOwnProfile && !isAdminEditor) {
+      emit(const ProfileError(
+          'You do not have permission to edit this profile.'));
+      return;
+    }
+
     emit(const ProfileUpdating());
 
     try {
@@ -301,23 +317,26 @@ class ProfileCubit extends Cubit<ProfileState> {
             folder: 'avatars',
           );
         } else {
-          debugPrint('[ProfileCubit] Cloudinary not configured â€“ skipping photo upload.');
+          debugPrint(
+              '[ProfileCubit] Cloudinary not configured â€“ skipping photo upload.');
         }
       }
 
       // Build updated user + profile
       final oldProfile = current.user.profile;
       final now = DateTime.now();
-      final nextProfile = (oldProfile ?? ProfileModel(
-        id: current.user.id,
-        userId: current.user.id,
-        createdAt: now,
-        updatedAt: now,
-      )).copyWith(
+      final nextProfile = (oldProfile ??
+              ProfileModel(
+                id: current.user.id,
+                userId: current.user.id,
+                createdAt: now,
+                updatedAt: now,
+              ))
+          .copyWith(
         bio: bio,
-        faculty: oldProfile?.faculty,
-        programName: oldProfile?.programName,
-        yearOfStudy: oldProfile?.yearOfStudy,
+        faculty: faculty,
+        programName: programme,
+        yearOfStudy: yearOfStudy,
         skills: skills,
         portfolioLinks: portfolioLinks,
         profileVisibility: visibility,
@@ -337,7 +356,8 @@ class ProfileCubit extends Cubit<ProfileState> {
       try {
         await _firestore.setUser(updated);
       } catch (e) {
-        debugPrint('[ProfileCubit] Firestore upsert failed, enqueueing for sync: $e');
+        debugPrint(
+            '[ProfileCubit] Firestore upsert failed, enqueueing for sync: $e');
         // Fallback: enqueue for later sync
         await _syncQueue.enqueue(
           operation: 'update',
@@ -348,7 +368,9 @@ class ProfileCubit extends Cubit<ProfileState> {
       }
 
       // 3. Update AuthCubit in-memory user so other screens see the new photo
-      _authCubit.updateCurrentUser(updated);
+      if (current.isOwnProfile) {
+        _authCubit.updateCurrentUser(updated);
+      }
 
       // Reload posts (unchanged but re-query to keep state consistent)
       final posts = await _postDao.getPostsByAuthor(updated.id, pageSize: 30);

@@ -1,11 +1,14 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/di/injection_container.dart';
+import '../../../core/router/route_names.dart';
 import '../../../data/local/dao/activity_log_dao.dart';
 import '../../../data/local/dao/user_dao.dart';
 import '../../../data/models/user_model.dart';
+import '../../../data/remote/firestore_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
 
 class UserManagementScreen extends StatefulWidget {
@@ -18,6 +21,7 @@ class UserManagementScreen extends StatefulWidget {
 class _UserManagementScreenState extends State<UserManagementScreen> {
   final _userDao = sl<UserDao>();
   final _activityDao = sl<ActivityLogDao>();
+  final _firestore = sl<FirestoreService>();
   bool _loading = true;
   String _roleFilter = 'all';
   bool _suspendedOnly = false;
@@ -39,9 +43,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       );
       if (!mounted) return;
       setState(() {
-        _users = _suspendedOnly
-            ? users.where((u) => u.isSuspended).toList()
-            : users;
+        _users =
+            _suspendedOnly ? users.where((u) => u.isSuspended).toList() : users;
       });
     } finally {
       if (mounted) {
@@ -91,12 +94,16 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Delete User'),
-            content: Text('Delete ${user.displayName ?? user.email}? This cannot be undone.'),
+            content: Text(
+                'Delete ${user.displayName ?? user.email}? This cannot be undone.'),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel')),
               FilledButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+                style:
+                    FilledButton.styleFrom(backgroundColor: AppColors.danger),
                 child: const Text('Delete'),
               ),
             ],
@@ -136,10 +143,13 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                     ),
                     items: const [
                       DropdownMenuItem(value: 'all', child: Text('All roles')),
-                      DropdownMenuItem(value: 'student', child: Text('Student')),
-                      DropdownMenuItem(value: 'lecturer', child: Text('Lecturer')),
+                      DropdownMenuItem(
+                          value: 'student', child: Text('Student')),
+                      DropdownMenuItem(
+                          value: 'lecturer', child: Text('Lecturer')),
                       DropdownMenuItem(value: 'admin', child: Text('Admin')),
-                      DropdownMenuItem(value: 'super_admin', child: Text('Super Admin')),
+                      DropdownMenuItem(
+                          value: 'super_admin', child: Text('Super Admin')),
                     ],
                     onChanged: (value) {
                       if (value == null) return;
@@ -184,7 +194,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                           ),
                           title: Text(
                             user.displayName ?? user.email,
-                            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+                            style: GoogleFonts.plusJakartaSans(
+                                fontWeight: FontWeight.w700),
                           ),
                           subtitle: Text(
                             '${user.email}\nrole: ${user.role.name}'
@@ -193,21 +204,62 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                             style: GoogleFonts.plusJakartaSans(fontSize: 12),
                           ),
                           isThreeLine: true,
-                          trailing: PopupMenuButton<String>(
-                            enabled: !isSelf,
-                            onSelected: (value) async {
-                              if (value == 'suspend') {
-                                await _suspend(user);
-                              } else if (value == 'ban') {
-                                await _ban(user);
-                              } else if (value == 'delete') {
-                                await _confirmDelete(user);
-                              }
-                            },
-                            itemBuilder: (_) => const [
-                              PopupMenuItem(value: 'suspend', child: Text('Suspend')),
-                              PopupMenuItem(value: 'ban', child: Text('Ban')),
-                              PopupMenuItem(value: 'delete', child: Text('Delete')),
+                          subtitleTextStyle:
+                              GoogleFonts.plusJakartaSans(fontSize: 12),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              StreamBuilder<UserDevicePresenceSummary>(
+                                stream:
+                                    _firestore.watchUserDevicePresence(user.id),
+                                builder: (context, snapshot) {
+                                  final summary = snapshot.data;
+                                  final total = summary?.totalDevices ?? 0;
+                                  final active = summary?.activeDevices ?? 0;
+                                  return Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: Text(
+                                      'Devices $active/$total',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: active > 0
+                                            ? AppColors.success
+                                            : AppColors.textSecondaryLight,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              PopupMenuButton<String>(
+                                enabled: !isSelf,
+                                onSelected: (value) async {
+                                  if (value == 'edit_profile') {
+                                    await context.push(
+                                      '${RouteNames.editProfile}?userId=${Uri.encodeComponent(user.id)}',
+                                    );
+                                    if (!context.mounted) return;
+                                    await _load();
+                                  } else if (value == 'suspend') {
+                                    await _suspend(user);
+                                  } else if (value == 'ban') {
+                                    await _ban(user);
+                                  } else if (value == 'delete') {
+                                    await _confirmDelete(user);
+                                  }
+                                },
+                                itemBuilder: (_) => const [
+                                  PopupMenuItem(
+                                      value: 'edit_profile',
+                                      child: Text('Edit profile')),
+                                  PopupMenuItem(
+                                      value: 'suspend', child: Text('Suspend')),
+                                  PopupMenuItem(
+                                      value: 'ban', child: Text('Ban')),
+                                  PopupMenuItem(
+                                      value: 'delete', child: Text('Delete')),
+                                ],
+                              ),
                             ],
                           ),
                         ),

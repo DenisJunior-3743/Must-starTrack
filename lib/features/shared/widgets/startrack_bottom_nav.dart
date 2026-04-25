@@ -7,7 +7,7 @@ enum StarTrackNavTab {
   home,
   peers,
   inbox,
-  projects,
+  leaderboard,
   none,
 }
 
@@ -19,7 +19,7 @@ class StarTrackBottomNav extends StatelessWidget {
     required this.onPeersTap,
     required this.onAddTap,
     required this.onInboxTap,
-    required this.onProjectsTap,
+    required this.onLeaderboardTap,
     this.unreadMessageCount = 0,
   });
 
@@ -28,7 +28,7 @@ class StarTrackBottomNav extends StatelessWidget {
   final VoidCallback onPeersTap;
   final VoidCallback onAddTap;
   final VoidCallback onInboxTap;
-  final VoidCallback onProjectsTap;
+  final VoidCallback onLeaderboardTap;
   final int unreadMessageCount;
 
   @override
@@ -101,10 +101,10 @@ class StarTrackBottomNav extends StatelessWidget {
             ),
             Expanded(
               child: _NavItem(
-                icon: Icons.folder_open_rounded,
-                label: 'My Projects',
-                active: activeTab == StarTrackNavTab.projects,
-                onTap: onProjectsTap,
+                icon: Icons.leaderboard_rounded,
+                label: 'Leaderboard',
+                active: activeTab == StarTrackNavTab.leaderboard,
+                onTap: onLeaderboardTap,
               ),
             ),
           ],

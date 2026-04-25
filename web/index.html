@@ -33,6 +33,10 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
-  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    window.flutter_inappwebview = window.flutter_inappwebview || {};
+  </script>
+  <script src="chartjs_bridge.js"></script>
+  <script src="flutter_bootstrap.js" defer></script>
 </body>
 </html>

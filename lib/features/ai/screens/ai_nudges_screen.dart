@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -7,6 +7,7 @@ import '../../../core/constants/app_dimensions.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_names.dart';
 import '../../../data/local/dao/activity_log_dao.dart';
+import '../../../data/local/dao/comment_dao.dart';
 import '../../../data/local/dao/message_dao.dart';
 import '../../../data/local/dao/post_dao.dart';
 import '../../../data/local/dao/user_dao.dart';
@@ -48,26 +49,35 @@ class _AiNudgesScreenState extends State<AiNudgesScreen> {
       entityId: 'ai_nudges',
     );
 
-    final ownPosts = await sl<PostDao>().getPostsByAuthor(currentUserId, pageSize: 20);
+    final ownPosts =
+        await sl<PostDao>().getPostsByAuthor(currentUserId, pageSize: 20);
     final collaborators = await sl<MessageDao>().getAcceptedCollaborators(
       userId: currentUserId,
       limit: 100,
     );
-    final recentSearchTerms = await activityDao.getRecentSearchTerms(currentUserId);
-    final recentCategories = await activityDao.getRecentCategorySignals(currentUserId);
+    final recentSearchTerms =
+        await activityDao.getRecentSearchTerms(currentUserId);
+    final recentCategories =
+        await activityDao.getRecentCategorySignals(currentUserId);
 
     final opportunities = await sl<PostDao>().getFeedPage(
       pageSize: 40,
       filterType: 'opportunity',
       currentUserId: currentUserId,
     );
+    final commentSnippetsByPost =
+        await sl<CommentDao>().getRecentCommentSnippetsForPosts(
+      opportunities.map((post) => post.id).toList(),
+    );
     final rankedOpportunities = await sl<RecommenderService>().rankHybrid(
       user: user,
       candidates: opportunities,
       recentlyViewedCategories: recentCategories,
       recentSearchTerms: recentSearchTerms,
+      commentSnippetsByPost: commentSnippetsByPost,
     );
-    final topOpportunity = rankedOpportunities.isNotEmpty ? rankedOpportunities.first.post : null;
+    final topOpportunity =
+        rankedOpportunities.isNotEmpty ? rankedOpportunities.first.post : null;
 
     final profile = user.profile!;
     final profileCompletion = _profileCompletion(user);
@@ -140,7 +150,8 @@ class _AiNudgesScreenState extends State<AiNudgesScreen> {
         message:
             '"${topOpportunity.title}" currently has the strongest skill overlap with your profile and activity pattern.',
         ctaLabel: 'Review opportunity',
-        route: RouteNames.projectDetail.replaceFirst(':postId', topOpportunity.id),
+        route:
+            RouteNames.projectDetail.replaceFirst(':postId', topOpportunity.id),
         icon: Icons.campaign_rounded,
         color: AppColors.roleLecturer,
       ));
@@ -159,7 +170,9 @@ class _AiNudgesScreenState extends State<AiNudgesScreen> {
     }
 
     return _NudgesViewData(
-      userName: user.firstName.isNotEmpty ? user.firstName : (user.displayName ?? user.email),
+      userName: user.firstName.isNotEmpty
+          ? user.firstName
+          : (user.displayName ?? user.email),
       activityStreak: profile.activityStreak,
       collaboratorsCount: collaborators.length,
       recentSearchTerms: recentSearchTerms.toList()..sort(),
@@ -307,7 +320,8 @@ class _NudgesHero extends StatelessWidget {
                   .take(3)
                   .map(
                     (term) => Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
                         color: AppColors.primaryTint10,
                         borderRadius: BorderRadius.circular(999),
@@ -387,14 +401,16 @@ class _NudgeCard extends StatelessWidget {
                       style: FilledButton.styleFrom(
                         backgroundColor: item.color.withValues(alpha: 0.12),
                         foregroundColor: item.color,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
                       child: Text(
                         item.ctaLabel,
-                        style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
+                        style: GoogleFonts.plusJakartaSans(
+                            fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],
@@ -494,4 +510,3 @@ class _NudgeItem {
   final IconData icon;
   final Color color;
 }
-

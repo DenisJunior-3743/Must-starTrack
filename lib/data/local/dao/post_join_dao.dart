@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 
 import '../database_helper.dart';
 import '../schema/database_schema.dart';
+import 'post_dao.dart';
 import '../../models/user_model.dart';
 import '../../models/post_model.dart';
 import '../../models/profile_model.dart';
@@ -17,8 +18,11 @@ import '../../models/profile_model.dart';
 class PostJoinDao {
   final DatabaseHelper _db;
   final _uuid = const Uuid();
+  final PostDao _postDao;
 
-  PostJoinDao({DatabaseHelper? db}) : _db = db ?? DatabaseHelper.instance;
+  PostJoinDao({DatabaseHelper? db})
+      : _db = db ?? DatabaseHelper.instance,
+        _postDao = PostDao(db: db ?? DatabaseHelper.instance);
 
   /// Join an opportunity post. Returns the generated join id.
   Future<String> joinPost(String userId, String postId) async {
@@ -136,7 +140,9 @@ class PostJoinDao {
       WHERE pj.user_id = ?
       ORDER BY pj.created_at DESC
     ''', [userId]);
-    return rows.map((r) => PostModel.fromJson(r)).toList();
+    return _postDao.hydrateEngagementCounts(
+      rows.map((r) => PostModel.fromJson(r)).toList(),
+    );
   }
 
   /// Returns rows pending sync.

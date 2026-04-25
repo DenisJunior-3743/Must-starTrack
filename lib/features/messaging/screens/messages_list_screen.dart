@@ -1,4 +1,4 @@
-﻿// lib/features/messaging/screens/messages_list_screen.dart
+// lib/features/messaging/screens/messages_list_screen.dart
 //
 // MUST StarTrack â€” Messages List Screen (Phase 4)
 //
@@ -28,6 +28,7 @@ import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_names.dart';
 import '../../../data/local/dao/activity_log_dao.dart';
 import '../../../data/local/dao/message_dao.dart';
+import '../../../data/remote/firestore_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
 import '../../shared/widgets/guest_auth_required_view.dart';
 import '../bloc/message_cubit.dart';
@@ -49,11 +50,11 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        context.read<MessageCubit>().ensureConversationsLoaded(
-          staleAfter: const Duration(minutes: 2),
-        );
-      }
+      if (!mounted) return;
+      context.read<MessageCubit>().ensureConversationsLoaded(
+            staleAfter: const Duration(minutes: 2),
+          );
+      context.read<MessageCubit>().markIncomingRequestsViewed();
     });
   }
 
@@ -88,7 +89,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Inbox',
-          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
         actions: [
           IconButton(
             icon: const Icon(Icons.edit_rounded),
@@ -144,13 +145,16 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                 }
                 if (state is MessageError) {
                   return Center(
-                    child: Text(state.message,
-                      style: GoogleFonts.plusJakartaSans(color: AppColors.danger)));
+                      child: Text(state.message,
+                          style: GoogleFonts.plusJakartaSans(
+                              color: AppColors.danger)));
                 }
                 final convos = state is ConversationsLoaded
-                    ? state.conversations : <ConversationSummary>[];
+                    ? state.conversations
+                    : <ConversationSummary>[];
                 final requests = state is ConversationsLoaded
-                    ? state.requests : <CollaborationInboxItem>[];
+                    ? state.requests
+                    : <CollaborationInboxItem>[];
 
                 final visibleRequests = _filter == _InboxFilter.chats
                     ? const <CollaborationInboxItem>[]
@@ -168,8 +172,8 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                             size: 56, color: AppColors.primary),
                         const SizedBox(height: 12),
                         Text('Inbox is empty.',
-                          style: GoogleFonts.plusJakartaSans(
-                            color: AppColors.textSecondaryLight)),
+                            style: GoogleFonts.plusJakartaSans(
+                                color: AppColors.textSecondaryLight)),
                       ],
                     ),
                   );
@@ -181,19 +185,37 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                       const _InboxSectionHeader(
                         icon: Icons.handshake_outlined,
                         title: 'Collaboration Requests',
-                        subtitle: 'Requests, responses, and project follow-ups.',
+                        subtitle:
+                            'Requests, responses, and project follow-ups.',
                       ),
                       ...visibleRequests.map(
                         (request) => _RequestTile(
                           request: request,
                           onOpenPost: (request.postId?.isEmpty ?? true)
                               ? null
-                              : () => context.push('/project/${request.postId}'),
+                              : () async {
+                                  await context
+                                      .read<MessageCubit>()
+                                      .markCollaborationRequestViewed(
+                                        request.id,
+                                      );
+                                  if (!context.mounted) return;
+                                  await context
+                                      .push('/project/${request.postId}');
+                                },
                           onMessage: request.counterpartId.isEmpty
                               ? null
                               : () async {
-                                  final currentUserId = sl<AuthCubit>().currentUser?.id;
-                                  if (currentUserId != null && currentUserId.isNotEmpty) {
+                                  await context
+                                      .read<MessageCubit>()
+                                      .markCollaborationRequestViewed(
+                                        request.id,
+                                      );
+                                  if (!context.mounted) return;
+                                  final currentUserId =
+                                      sl<AuthCubit>().currentUser?.id;
+                                  if (currentUserId != null &&
+                                      currentUserId.isNotEmpty) {
                                     unawaited(sl<ActivityLogDao>().logAction(
                                       userId: currentUserId,
                                       action: 'start_chat',
@@ -205,12 +227,17 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                                     '/chat/${request.counterpartId}',
                                     extra: {
                                       'peerName': request.counterpartName,
-                                      'peerPhotoUrl': request.counterpartPhotoUrl,
+                                      'peerPhotoUrl':
+                                          request.counterpartPhotoUrl,
                                       'isPeerLecturer': false,
                                     },
                                   );
                                   if (!context.mounted) return;
-                                  context.read<MessageCubit>().loadConversations();
+                                  context
+                                      .read<MessageCubit>()
+                                      .refreshConversations(
+                                        syncRemoteFirst: false,
+                                      );
                                 },
                         ),
                       ),
@@ -219,15 +246,24 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                       const _InboxSectionHeader(
                         icon: Icons.chat_bubble_outline_rounded,
                         title: 'Chats',
-                        subtitle: 'Direct conversations and follow-up messages.',
+                        subtitle:
+                            'Direct conversations and follow-up messages.',
                       ),
                       ...visibleConvos.map(
                         (convo) => _ConversationTile(
                           convo: convo,
-                          onDelete: () => context.read<MessageCubit>().deleteConversation(convo.id),
+                          onDelete: () => context
+                              .read<MessageCubit>()
+                              .deleteConversation(convo.id),
                           onTap: () async {
-                            final currentUserId = sl<AuthCubit>().currentUser?.id;
-                            if (currentUserId != null && currentUserId.isNotEmpty) {
+                            await context
+                                .read<MessageCubit>()
+                                .markConversationVisited(convo.id);
+                            if (!context.mounted) return;
+                            final currentUserId =
+                                sl<AuthCubit>().currentUser?.id;
+                            if (currentUserId != null &&
+                                currentUserId.isNotEmpty) {
                               unawaited(sl<ActivityLogDao>().logAction(
                                 userId: currentUserId,
                                 action: 'start_chat',
@@ -244,7 +280,9 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                               },
                             );
                             if (!context.mounted) return;
-                            context.read<MessageCubit>().loadConversations();
+                            context.read<MessageCubit>().refreshConversations(
+                                  syncRemoteFirst: false,
+                                );
                           },
                         ),
                       ),
@@ -295,14 +333,16 @@ class _InboxSectionHeader extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 title,
-                style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w700),
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 15, fontWeight: FontWeight.w700),
               ),
             ],
           ),
           const SizedBox(height: 4),
           Text(
             subtitle,
-            style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.textSecondaryLight),
+            style: GoogleFonts.plusJakartaSans(
+                fontSize: 12, color: AppColors.textSecondaryLight),
           ),
         ],
       ),
@@ -324,6 +364,7 @@ class _ConversationTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUnread = convo.unreadCount > 0;
+    final firestore = sl<FirestoreService>();
 
     return Dismissible(
       key: Key(convo.id),
@@ -344,68 +385,108 @@ class _ConversationTile extends StatelessWidget {
           border: Border.all(color: AppColors.border(context)),
         ),
         child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: CircleAvatar(
-          radius: 26,
-          backgroundColor: AppColors.primaryTint10,
-          backgroundImage: convo.peerPhotoUrl != null
-              ? NetworkImage(convo.peerPhotoUrl!) : null,
-          child: convo.peerPhotoUrl == null
-              ? Text(convo.peerName[0].toUpperCase(),
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 18, fontWeight: FontWeight.w700,
-                    color: AppColors.primary))
-              : null,
-        ),
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(convo.peerName,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 14,
-                  fontWeight: isUnread ? FontWeight.w700 : FontWeight.w600),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          leading: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              CircleAvatar(
+                radius: 26,
+                backgroundColor: AppColors.primaryTint10,
+                backgroundImage: convo.peerPhotoUrl != null
+                    ? NetworkImage(convo.peerPhotoUrl!)
+                    : null,
+                child: convo.peerPhotoUrl == null
+                    ? Text(convo.peerName[0].toUpperCase(),
+                        style: GoogleFonts.plusJakartaSans(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary))
+                    : null,
               ),
-            ),
-            if (convo.isPeerLecturer)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.roleLecturer.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(AppDimensions.radiusFull)),
-                child: Text('Lecturer',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 9, fontWeight: FontWeight.w700,
-                    color: AppColors.roleLecturer)),
+              Positioned(
+                right: -2,
+                bottom: -2,
+                child: StreamBuilder<UserDevicePresenceSummary>(
+                  stream: firestore.watchUserDevicePresence(convo.peerId),
+                  builder: (context, snapshot) {
+                    final isOnline = snapshot.data?.isOnline ?? false;
+                    return Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: isOnline
+                            ? AppColors.success
+                            : AppColors.textSecondaryLight,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1.5),
+                      ),
+                    );
+                  },
+                ),
               ),
-          ],
-        ),
-        subtitle: Text(convo.lastMessage,
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 12,
-            color: isUnread ? AppColors.textPrimaryLight : AppColors.textSecondaryLight,
-            fontWeight: isUnread ? FontWeight.w600 : FontWeight.normal),
-          maxLines: 1, overflow: TextOverflow.ellipsis),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(timeago.format(convo.lastMessageAt, allowFromNow: true),
+            ],
+          ),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  convo.peerName,
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 14,
+                      fontWeight: isUnread ? FontWeight.w700 : FontWeight.w600),
+                ),
+              ),
+              if (convo.isPeerLecturer)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                      color: AppColors.roleLecturer.withValues(alpha: 0.12),
+                      borderRadius:
+                          BorderRadius.circular(AppDimensions.radiusFull)),
+                  child: Text('Lecturer',
+                      style: GoogleFonts.plusJakartaSans(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.roleLecturer)),
+                ),
+            ],
+          ),
+          subtitle: Text(convo.lastMessage,
               style: GoogleFonts.plusJakartaSans(
-                fontSize: 10, color: AppColors.textSecondaryLight)),
-            const SizedBox(height: 4),
-            if (convo.unreadCount > 0)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(AppDimensions.radiusFull)),
-                child: Text(convo.unreadCount.toString(),
+                  fontSize: 12,
+                  color: isUnread
+                      ? AppColors.textPrimaryLight
+                      : AppColors.textSecondaryLight,
+                  fontWeight: isUnread ? FontWeight.w600 : FontWeight.normal),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+          trailing: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(timeago.format(convo.lastMessageAt, allowFromNow: true),
                   style: GoogleFonts.plusJakartaSans(
-                    fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white)),
-              ),
-          ],
-        ),
-        onTap: onTap,
+                      fontSize: 10, color: AppColors.textSecondaryLight)),
+              const SizedBox(height: 4),
+              if (convo.unreadCount > 0)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius:
+                          BorderRadius.circular(AppDimensions.radiusFull)),
+                  child: Text(convo.unreadCount.toString(),
+                      style: GoogleFonts.plusJakartaSans(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white)),
+                ),
+            ],
+          ),
+          onTap: onTap,
         ),
       ),
     );
@@ -470,7 +551,8 @@ class _RequestTile extends StatelessWidget {
                   children: [
                     Text(
                       request.counterpartName,
-                      style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w700),
+                      style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14, fontWeight: FontWeight.w700),
                     ),
                     Text(
                       request.isIncoming
@@ -485,7 +567,8 @@ class _RequestTile extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
@@ -504,7 +587,8 @@ class _RequestTile extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             request.postTitle,
-            style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w600),
+            style: GoogleFonts.plusJakartaSans(
+                fontSize: 14, fontWeight: FontWeight.w600),
           ),
           if (request.message.isNotEmpty) ...[
             const SizedBox(height: 6),
@@ -546,7 +630,8 @@ class _RequestTile extends StatelessWidget {
             alignment: Alignment.centerRight,
             child: Text(
               timeago.format(request.createdAt, allowFromNow: true),
-              style: GoogleFonts.plusJakartaSans(fontSize: 10, color: AppColors.textSecondaryLight),
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 10, color: AppColors.textSecondaryLight),
             ),
           ),
         ],
@@ -578,7 +663,8 @@ class _RequestFitPanel extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.auto_graph_rounded, size: 16, color: AppColors.primary),
+              const Icon(Icons.auto_graph_rounded,
+                  size: 16, color: AppColors.primary),
               const SizedBox(width: 8),
               Text(
                 'AI fit for this collaborator',
@@ -630,10 +716,12 @@ class _RequestFitPanel extends StatelessWidget {
               runSpacing: 6,
               children: request.aiMatchedSkills.take(4).map((skill) {
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: AppColors.success.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+                    borderRadius:
+                        BorderRadius.circular(AppDimensions.radiusFull),
                   ),
                   child: Text(
                     skill,
@@ -654,10 +742,12 @@ class _RequestFitPanel extends StatelessWidget {
               runSpacing: 6,
               children: reasons.take(3).map((reason) {
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+                    borderRadius:
+                        BorderRadius.circular(AppDimensions.radiusFull),
                     border: Border.all(color: AppColors.border(context)),
                   ),
                   child: Text(
@@ -694,4 +784,3 @@ class _RequestFitPanel extends StatelessWidget {
     }
   }
 }
-
