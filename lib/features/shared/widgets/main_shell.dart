@@ -22,6 +22,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/router/route_guards.dart';
+import '../../feed/screens/home_feed_screen.dart';
 import '../../messaging/bloc/message_cubit.dart';
 import 'lecturer_bottom_nav.dart';
 import 'startrack_bottom_nav.dart';
@@ -89,7 +90,8 @@ class MainShell extends StatelessWidget {
                     Expanded(
                       child: Text(
                         'Authentication Needed',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w700),
                       ),
                     ),
                   ],
@@ -155,7 +157,9 @@ class MainShell extends StatelessWidget {
         location.startsWith(RouteNames.lecturerRanking)) {
       return LecturerNavTab.dashboard;
     }
-    if (location.startsWith(RouteNames.lecturerSearch)) return LecturerNavTab.search;
+    if (location.startsWith(RouteNames.lecturerSearch)) {
+      return LecturerNavTab.search;
+    }
     if (location.startsWith(RouteNames.inbox)) return LecturerNavTab.inbox;
     if (location.startsWith(RouteNames.home) ||
         location.startsWith(RouteNames.discover)) {
@@ -172,39 +176,51 @@ class MainShell extends StatelessWidget {
     final unreadCount = () {
       final msgState = context.watch<MessageCubit>().state;
       if (msgState is ConversationsLoaded) {
-        return msgState.conversations.fold<int>(0, (sum, c) => sum + c.unreadCount);
+        return msgState.conversations
+            .fold<int>(0, (sum, c) => sum + c.unreadCount);
       }
       return 0;
     }();
 
     // Lecturers get their own nav bar with role-specific destinations.
     if (role == UserRole.lecturer) {
-      return Scaffold(
-        body: child,
-        bottomNavigationBar: LecturerBottomNav(
-          activeTab: _lecturerCurrentTab(location),
-          onFeedTap: () => context.go(RouteNames.home),
-          onDashboardTap: () => context.go(RouteNames.lecturerDashboard),
-          onAddTap: () => _handleAddTap(context),
-          onSearchTap: () => context.go(RouteNames.lecturerSearch),
-          onInboxTap: () => context.go(RouteNames.inbox),
-          unreadMessageCount: unreadCount,
+      return ValueListenableBuilder<bool>(
+        valueListenable: HomeFeedScreen.searchActive,
+        builder: (context, isSearching, _) => Scaffold(
+          body: child,
+          bottomNavigationBar: isSearching
+              ? null
+              : LecturerBottomNav(
+                  activeTab: _lecturerCurrentTab(location),
+                  onFeedTap: () => context.go(RouteNames.home),
+                  onDashboardTap: () =>
+                      context.go(RouteNames.lecturerDashboard),
+                  onAddTap: () => _handleAddTap(context),
+                  onSearchTap: () => context.go(RouteNames.lecturerSearch),
+                  onInboxTap: () => context.go(RouteNames.inbox),
+                  unreadMessageCount: unreadCount,
+                ),
         ),
       );
     }
 
     // Students, admins, super-admins — standard student nav.
     final currentTab = _currentTab(location);
-    return Scaffold(
-      body: child,
-      bottomNavigationBar: StarTrackBottomNav(
-        activeTab: currentTab,
-        onHomeTap: () => context.go(RouteNames.home),
-        onPeersTap: () => context.go(RouteNames.peers),
-        onAddTap: () => _handleAddTap(context),
-        onInboxTap: () => context.go(RouteNames.inbox),
-        onProjectsTap: () => context.go(RouteNames.projects),
-        unreadMessageCount: unreadCount,
+    return ValueListenableBuilder<bool>(
+      valueListenable: HomeFeedScreen.searchActive,
+      builder: (context, isSearching, _) => Scaffold(
+        body: child,
+        bottomNavigationBar: isSearching
+            ? null
+            : StarTrackBottomNav(
+                activeTab: currentTab,
+                onHomeTap: () => context.go(RouteNames.home),
+                onPeersTap: () => context.go(RouteNames.peers),
+                onAddTap: () => _handleAddTap(context),
+                onInboxTap: () => context.go(RouteNames.inbox),
+                onProjectsTap: () => context.go(RouteNames.projects),
+                unreadMessageCount: unreadCount,
+              ),
       ),
     );
   }
