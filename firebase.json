@@ -1,6 +1,29 @@
 {
-  "firestore": {
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
-  }
+	"firestore": {
+		"rules": "firestore.rules",
+		"indexes": "firestore.indexes.json"
+	},
+	"functions": {
+		"source": "functions"
+	},
+	"flutter": {
+		"platforms": {
+			"android": {
+				"default": {
+					"projectId": "star-track-4ba2b",
+					"appId": "1:417190454074:android:7ddb6c82c7be0390a8e603",
+					"fileOutput": "android/app/google-services.json"
+				}
+			},
+			"dart": {
+				"lib/firebase_options.dart": {
+					"projectId": "star-track-4ba2b",
+					"configurations": {
+						"android": "1:417190454074:android:7ddb6c82c7be0390a8e603",
+						"web": "1:417190454074:web:6e15e6a372100319a8e603"
+					}
+				}
+			}
+		}
+	}
 }

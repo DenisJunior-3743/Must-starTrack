@@ -5,7 +5,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:must_startrack/core/di/injection_container.dart';
 import 'package:must_startrack/data/local/dao/activity_log_dao.dart';
 import 'package:must_startrack/data/remote/firestore_service.dart';
-import 'package:must_startrack/data/remote/gemini_service.dart';
+import 'package:must_startrack/data/remote/openai_service.dart';
 import 'package:must_startrack/features/auth/bloc/auth_cubit.dart';
 import 'package:must_startrack/features/chatbot/data/chatbot_repository.dart';
 import 'package:must_startrack/features/chatbot/models/chatbot_models.dart';
@@ -30,6 +30,11 @@ void main() {
         payload: any(named: 'payload'),
       ),
     ).thenAnswer((_) async {});
+    when(
+      () => firestore.getRecentChatbotInteractions(
+        limit: any(named: 'limit'),
+      ),
+    ).thenAnswer((_) async => const <Map<String, dynamic>>[]);
 
     sl.registerSingleton<AuthCubit>(authCubit);
     sl.registerSingleton<FirestoreService>(firestore);
@@ -40,7 +45,7 @@ void main() {
     await sl.reset();
   });
 
-  testWidgets('shows AI badge for Gemini-powered chatbot response', (tester) async {
+  testWidgets('renders OpenAI response and follow-up chips', (tester) async {
     final repository = ChatbotRepository(
       faqs: const [
         ChatbotFaqEntry(
@@ -52,11 +57,11 @@ void main() {
       ],
       projectDocs: const [],
       knownRoutes: const {'/home'},
-      geminiService: _FakeGeminiService(
+      openAiService: _FakeOpenAiService(
         configured: true,
         response: '''
 {
-  "answer": "Gemini says this is an AI-generated response.",
+  "answer": "OpenAI produced this answer.",
   "confidence": 0.88,
   "followUps": ["Need more details?"],
   "actions": []
@@ -78,12 +83,13 @@ void main() {
     await tester.tap(find.byIcon(Icons.send_rounded));
     await tester.pumpAndSettle();
 
-    expect(
-      find.text('Gemini says this is an AI-generated response.'),
-      findsOneWidget,
-    );
-    expect(find.text('AI fallback'), findsOneWidget);
-    expect(find.text('Conf 88%'), findsOneWidget);
+    expect(find.text('OpenAI produced this answer.'), findsOneWidget);
+    expect(find.text('Need more details?'), findsOneWidget);
+
+    await tester.tap(find.text('Need more details?'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Need more details?'), findsWidgets);
     verifyNever(
       () => firestore.setChatbotInteraction(
         interactionId: any(named: 'interactionId'),
@@ -99,8 +105,8 @@ class MockFirestoreService extends Mock implements FirestoreService {}
 
 class MockActivityLogDao extends Mock implements ActivityLogDao {}
 
-class _FakeGeminiService extends GeminiService {
-  _FakeGeminiService({
+class _FakeOpenAiService extends OpenAiService {
+  _FakeOpenAiService({
     required this.configured,
     required this.response,
   }) : super(apiKey: 'test-key');

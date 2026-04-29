@@ -268,7 +268,15 @@ class StButton extends StatelessWidget {
                     Icon(leadingIcon, size: 20),
                     const SizedBox(width: 8),
                   ],
-                  Text(label),
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      softWrap: false,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
                   if (trailingIcon != null) ...[
                     const SizedBox(width: 8),
                     Icon(trailingIcon, size: 20),
@@ -318,7 +326,15 @@ class StOutlinedButton extends StatelessWidget {
                     Icon(leadingIcon, size: 20),
                     const SizedBox(width: 8),
                   ],
-                  Text(label),
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      softWrap: false,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
                 ],
               ),
       ),
@@ -371,14 +387,20 @@ class GoogleSignInButton extends StatelessWidget {
                   // Google G logo â€” built in pure Flutter, no asset needed
                   _GoogleLogo(),
                   const SizedBox(width: 12),
-                  Text(
-                    label,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: isDark
-                          ? AppColors.textPrimaryDark
-                          : AppColors.textPrimaryLight,
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      softWrap: false,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: isDark
+                            ? AppColors.textPrimaryDark
+                            : AppColors.textPrimaryLight,
+                      ),
                     ),
                   ),
                 ],

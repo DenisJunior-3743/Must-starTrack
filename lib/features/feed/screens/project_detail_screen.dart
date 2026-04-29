@@ -1,4 +1,4 @@
-﻿// lib/features/feed/screens/project_detail_screen.dart
+// lib/features/feed/screens/project_detail_screen.dart
 //
 // MUST StarTrack â€” Project Detail Screen (Phase 3)
 //
@@ -21,9 +21,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:video_player/video_player.dart';
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
@@ -42,7 +42,6 @@ import '../../../data/models/post_model.dart';
 import '../../../data/remote/firestore_service.dart';
 import '../../../data/remote/sync_service.dart';
 import '../../../features/auth/bloc/auth_cubit.dart';
-import '../../shared/screens/offline_video_player_screen.dart';
 import '../../shared/hci_components/post_card.dart';
 
 class ProjectDetailScreen extends StatefulWidget {
@@ -57,8 +56,6 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   PostModel? _post;
   bool _loading = true;
   String? _error;
-  int _currentImageIndex = 0;
-  bool _appBarOpaque = false;
   bool _isFollowing = false;
   bool _followLoading = false;
   bool _commentSubmitting = false;
@@ -74,24 +71,15 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
   String? get _currentUserId => sl<AuthCubit>().currentUser?.id;
   String get _currentUserName =>
-      sl<AuthCubit>().currentUser?.displayName
-      ?? sl<AuthCubit>().currentUser?.email
-      ?? 'Someone';
-
-  // Hero height minus toolbar height = collapse threshold
-  static const double _collapseAt = 240 - kToolbarHeight;
+      sl<AuthCubit>().currentUser?.displayName ??
+      sl<AuthCubit>().currentUser?.email ??
+      'Someone';
 
   @override
   void initState() {
     super.initState();
     _load();
-    _scrollCtrl = ScrollController()
-      ..addListener(() {
-        final opaque = _scrollCtrl.offset > _collapseAt;
-        if (opaque != _appBarOpaque) {
-          setState(() => _appBarOpaque = opaque);
-        }
-      });
+    _scrollCtrl = ScrollController();
   }
 
   @override
@@ -110,12 +98,32 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
       // Fallback: if not cached locally, fetch from Firestore and cache it.
       if (post == null && FirebaseAuth.instance.currentUser != null) {
-        debugPrint('[ProjectDetail] Post ${widget.postId} not in local DB â€” fetching from Firestore');
-        final remote = await sl<FirestoreService>().getPostById(widget.postId);
-        if (remote != null) {
-          await _dao.insertPost(remote);
-          post = remote;
-          debugPrint('[ProjectDetail] Cached post ${widget.postId} from Firestore');
+        debugPrint(
+            '[ProjectDetail] Post ${widget.postId} not in local DB â€” fetching from Firestore');
+        try {
+          final remote =
+              await sl<FirestoreService>().getPostById(widget.postId);
+          if (remote != null) {
+            await _dao.insertPost(remote);
+            post = remote;
+            debugPrint(
+                '[ProjectDetail] Cached post ${widget.postId} from Firestore');
+          }
+        } catch (e) {
+          final raw = e.toString().toLowerCase();
+          if (raw.contains('permission-denied') ||
+              raw.contains('permission_denied')) {
+            if (!mounted) return;
+            setState(() {
+              _loading = false;
+              _post = null;
+              _comments = const [];
+              _error =
+                  'This project is under review and not publicly available yet.';
+            });
+            return;
+          }
+          rethrow;
         }
       }
 
@@ -128,7 +136,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
             postId: widget.postId,
             userId: uid,
           );
-          debugPrint('[ProjectDetail] View check post=${widget.postId} user=$uid isNewView=$isNewView');
+          debugPrint(
+              '[ProjectDetail] View check post=${widget.postId} user=$uid isNewView=$isNewView');
           if (isNewView) {
             await _dao.incrementViewCount(widget.postId);
             post = post.copyWith(viewCount: post.viewCount + 1);
@@ -144,7 +153,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 'post_title': post.title,
               },
             );
-            debugPrint('[ProjectDetail] Queued unique view sync post=${post.id} viewer=$uid author=${post.authorId}');
+            debugPrint(
+                '[ProjectDetail] Queued unique view sync post=${post.id} viewer=$uid author=${post.authorId}');
             unawaited(sl<SyncService>().processPendingSync());
           }
 
@@ -175,7 +185,10 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         _error = post == null ? 'Project not found.' : null;
       });
     } catch (e) {
-      setState(() { _loading = false; _error = e.toString(); });
+      setState(() {
+        _loading = false;
+        _error = e.toString();
+      });
     }
   }
 
@@ -187,7 +200,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     }
     setState(() => _followLoading = true);
     try {
-      debugPrint('[ProjectDetail] Attempting follow toggle follower=$uid followee=${post.authorId}');
+      debugPrint(
+          '[ProjectDetail] Attempting follow toggle follower=$uid followee=${post.authorId}');
       final db = await DatabaseHelper.instance.database;
       final existing = await db.query(
         DatabaseSchema.tableFollows,
@@ -214,7 +228,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
             'follower_name': _currentUserName,
           },
         );
-        debugPrint('[ProjectDetail] Follow queued follower=$uid followee=${post.authorId}');
+        debugPrint(
+            '[ProjectDetail] Follow queued follower=$uid followee=${post.authorId}');
         await sl<ActivityLogDao>().logAction(
           userId: uid,
           action: 'follow_user',
@@ -238,12 +253,14 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
             'following_id': post.authorId,
           },
         );
-        debugPrint('[ProjectDetail] Unfollow queued follower=$uid followee=${post.authorId}');
+        debugPrint(
+            '[ProjectDetail] Unfollow queued follower=$uid followee=${post.authorId}');
         setState(() => _isFollowing = false);
       }
       unawaited(sl<SyncService>().processPendingSync());
     } catch (_) {
-      debugPrint('[ProjectDetail] Follow toggle failed follower=$uid followee=${post.authorId}');
+      debugPrint(
+          '[ProjectDetail] Follow toggle failed follower=$uid followee=${post.authorId}');
     } finally {
       setState(() => _followLoading = false);
     }
@@ -329,6 +346,21 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     Share.share('${post.title}\n\nCheck out this project on MUST StarTrack!');
   }
 
+  Future<void> _openMediaPreview(
+    List<_ProjectMediaItem> items,
+    int index,
+  ) async {
+    if (items.isEmpty || index < 0 || index >= items.length) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _ProjectMediaPreviewScreen(
+          items: items,
+          initialIndex: index,
+        ),
+      ),
+    );
+  }
+
   Future<void> _reportPost(PostModel post) async {
     final uid = _currentUserId;
     if (uid == null) {
@@ -358,30 +390,39 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheetState) => Padding(
           padding: EdgeInsets.only(
-            left: 20, right: 20, top: 24,
+            left: 20,
+            right: 20,
+            top: 24,
             bottom: MediaQuery.of(ctx).viewInsets.bottom +
-                MediaQuery.of(ctx).padding.bottom + 24,
+                MediaQuery.of(ctx).padding.bottom +
+                24,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Report Post',
-                style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w700)),
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 18, fontWeight: FontWeight.w700)),
               const SizedBox(height: 4),
               Text('Why are you reporting this post?',
-                style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AppColors.textSecondaryLight)),
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13, color: AppColors.textSecondaryLight)),
               const SizedBox(height: 16),
               RadioGroup<String>(
                 groupValue: selectedReason ?? '',
                 onChanged: (v) => setSheetState(() => selectedReason = v),
                 child: Column(
-                  children: reasons.map((r) => RadioListTile<String>(
-                    title: Text(r, style: GoogleFonts.plusJakartaSans(fontSize: 14)),
-                    value: r,
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                  )).toList(),
+                  children: reasons
+                      .map((r) => RadioListTile<String>(
+                            title: Text(r,
+                                style:
+                                    GoogleFonts.plusJakartaSans(fontSize: 14)),
+                            value: r,
+                            contentPadding: EdgeInsets.zero,
+                            dense: true,
+                          ))
+                      .toList(),
                 ),
               ),
               const SizedBox(height: 16),
@@ -453,6 +494,16 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     final post = _post;
     final uid = _currentUserId;
     if (post == null || !mounted) return;
+    if (uid == null || uid.isEmpty) return;
+    if (uid == post.authorId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You cannot send a collaboration request to yourself.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     final messageCtrl = TextEditingController();
     final confirmed = await showModalBottomSheet<bool>(
       context: context,
@@ -462,7 +513,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       ),
       builder: (ctx) => SingleChildScrollView(
         padding: EdgeInsets.only(
-          left: 20, right: 20, top: 24,
+          left: 20,
+          right: 20,
+          top: 24,
           bottom: MediaQuery.of(ctx).viewInsets.bottom +
               MediaQuery.of(ctx).padding.bottom +
               24,
@@ -472,19 +525,20 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Request to Collaborate',
-              style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w700)),
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 18, fontWeight: FontWeight.w700)),
             const SizedBox(height: 4),
             Text('Send a message to ${post.authorName ?? "the author"}',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 13, color: AppColors.textSecondaryLight)),
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 13, color: AppColors.textSecondaryLight)),
             const SizedBox(height: 16),
             TextField(
               controller: messageCtrl,
               maxLines: 4,
               decoration: InputDecoration(
                 hintText: 'Describe your skills and how you can contributeâ€¦',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
             const SizedBox(height: 16),
@@ -504,14 +558,16 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     // Do NOT call messageCtrl.dispose() here â€” the bottom sheet widget tree
     // is still unwinding (TextField animation listener) when the future
     // resolves. The local variable will be GC'd naturally after this scope.
-    debugPrint('[Collab] Sheet closed â€” confirmed=$confirmed uid=$uid message="$message"');
-    if (confirmed != true || uid == null) {
+    debugPrint(
+        '[Collab] Sheet closed â€” confirmed=$confirmed uid=$uid message="$message"');
+    if (confirmed != true) {
       debugPrint('[Collab] Aborted: confirmed=$confirmed, uid=$uid');
       return;
     }
     try {
       final collabId = _uuid.v4();
-      debugPrint('[Collab] Inserting SQLite row â€” id=$collabId sender=$uid receiver=${_post?.authorId} postId=${_post?.id}');
+      debugPrint(
+          '[Collab] Inserting SQLite row â€” id=$collabId sender=$uid receiver=${_post?.authorId} postId=${_post?.id}');
       final db = await DatabaseHelper.instance.database;
       await db.insert(DatabaseSchema.tableCollabRequests, {
         'id': collabId,
@@ -529,9 +585,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
       // Push the collab request to Firestore via the sync queue.
       debugPrint('[Collab] Enqueuing sync job for collabId=$collabId');
-      final senderName = sl<AuthCubit>().currentUser?.displayName
-          ?? sl<AuthCubit>().currentUser?.email
-          ?? 'Someone';
+      final senderName = sl<AuthCubit>().currentUser?.displayName ??
+          sl<AuthCubit>().currentUser?.email ??
+          'Someone';
       await _syncQueue.enqueue(
         operation: 'create',
         entity: 'collab_requests',
@@ -559,7 +615,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
       // Note: Self-notifications are not sent. Only the receiver gets a notification
       // via _syncCollabRequest in sync_service.dart.
-      debugPrint('[Collab] âœ… Collaboration request synced for author=${post.authorId}');
+      debugPrint(
+          '[Collab] âœ… Collaboration request synced for author=${post.authorId}');
       debugPrint('[Collab] âœ… All steps complete for collabId=$collabId');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -613,13 +670,15 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       );
       unawaited(sl<SyncService>().processPendingSync());
 
-      // Note: Self-notifications are not sent. The UI feedback is shown via 
+      // Note: Self-notifications are not sent. The UI feedback is shown via
       // setState above, which updates _hasJoined status in real-time.
 
       setState(() {
         _hasJoined = isNowJoined;
         _post = post.copyWith(
-          joinCount: isNowJoined ? post.joinCount + 1 : (post.joinCount - 1).clamp(0, 9999),
+          joinCount: isNowJoined
+              ? post.joinCount + 1
+              : (post.joinCount - 1).clamp(0, 9999),
         );
       });
 
@@ -663,171 +722,96 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
     final post = _post!;
 
-    final Color barBg = _appBarOpaque
-        ? Theme.of(context).scaffoldBackgroundColor
-        : Colors.transparent;
-    final Color iconColor =
-        _appBarOpaque ? AppColors.primary : Colors.white;
-
     return Scaffold(
-      body: CustomScrollView(
-        controller: _scrollCtrl,
-        slivers: [
-          // â”€â”€ AppBar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-          SliverAppBar(
-            expandedHeight: 240,
-            pinned: true,
-            backgroundColor: barBg,
-            surfaceTintColor: Colors.transparent,
-            elevation: _appBarOpaque ? 0 : 0,
-            scrolledUnderElevation: 1,
-            shadowColor: Colors.black12,
-            forceMaterialTransparency: !_appBarOpaque,
-            leading: Padding(
-              padding: const EdgeInsets.all(8),
-              child: _appBarOpaque
-                  ? _SolidIconButton(
-                      icon: Icons.arrow_back_rounded,
-                      color: iconColor,
-                      onPressed: () => context.pop(),
-                    )
-                  : _GlassIconButton(
-                      icon: Icons.arrow_back_rounded,
-                      onPressed: () => context.pop(),
-                    ),
-            ),
-            title: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              child: _appBarOpaque
-                  ? Text(
-                      'Project Showcase',
-                      key: const ValueKey('opaque'),
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimaryLight,
-                      ),
-                    )
-                  : _GlassPill(
-                      key: const ValueKey('glass'),
-                      child: Text(
-                        'Project Showcase',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-            ),
-            centerTitle: true,
-            actions: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(0, 8, 4, 8),
-                child: _appBarOpaque
-                    ? _SolidIconButton(
-                        icon: Icons.flag_outlined,
-                        color: iconColor,
-                        onPressed: () => _reportPost(post),
-                      )
-                    : _GlassIconButton(
-                        icon: Icons.flag_outlined,
-                        onPressed: () => _reportPost(post),
-                      ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(0, 8, 8, 8),
-                child: _appBarOpaque
-                    ? _SolidIconButton(
-                        icon: Icons.share_rounded,
-                        color: iconColor,
-                        onPressed: _sharePost,
-                      )
-                    : _GlassIconButton(
-                        icon: Icons.share_rounded,
-                        onPressed: _sharePost,
-                      ),
-              ),
-            ],
-            flexibleSpace: FlexibleSpaceBar(
-              background: _HeroGallery(
-                urls: post.mediaUrls,
-                currentIndex: _currentImageIndex,
-                onPageChanged: (i) => setState(() => _currentImageIndex = i),
-                title: post.title,
-              ),
-            ),
+      appBar: AppBar(
+        title: Text(
+          'Project Showcase',
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Report',
+            icon: const Icon(Icons.flag_outlined),
+            onPressed: () => _reportPost(post),
           ),
-
-          SliverList(
-            delegate: SliverChildListDelegate([
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
-                child: Row(
-                  children: [
-                    const Icon(Icons.folder_rounded,
-                        size: 16, color: AppColors.primary),
-                    const SizedBox(width: 6),
-                    Text(post.category ?? post.type,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 13, fontWeight: FontWeight.w600,
-                        color: AppColors.primary)),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                child: Text(post.title,
+          IconButton(
+            tooltip: 'Share',
+            icon: const Icon(Icons.share_rounded),
+            onPressed: _sharePost,
+          ),
+        ],
+      ),
+      body: ListView(
+        controller: _scrollCtrl,
+        padding: const EdgeInsets.only(bottom: 100),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+            child: Row(
+              children: [
+                const Icon(Icons.folder_rounded,
+                    size: 16, color: AppColors.primary),
+                const SizedBox(width: 6),
+                Text(
+                  post.category ?? post.type,
                   style: GoogleFonts.plusJakartaSans(
-                    fontSize: 26, fontWeight: FontWeight.w700,
-                    letterSpacing: -0.4, height: 1.2)),
-              ),
-              _AuthorSnippet(
-                post: post,
-                isFollowing: _isFollowing,
-                followLoading: _followLoading,
-                canFollow: _currentUserId != post.authorId,
-                onFollow: _toggleFollow,
-                onAuthorTap: () => context.go('/profile/${post.authorId}'),
-              ),
-              const Divider(height: 1),
-              if (post.description != null) ...[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  child: Text('Project Overview',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 17, fontWeight: FontWeight.w700)),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                  child: Text(post.description!,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14, color: AppColors.textSecondaryLight,
-                      height: 1.6)),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  ),
                 ),
               ],
-              _StatsGrid(post: post),
-              if (post.type == 'opportunity')
-                _OpportunityMeta(post: post),
-              _CommentsSection(
-                comments: _comments,
-                controller: _commentCtrl,
-                isSubmitting: _commentSubmitting,
-                onSubmit: _submitComment,
-                replyingTo: _replyingTo,
-                onReply: (c) => setState(() {
-                  _replyingTo = c;
-                  _commentCtrl.clear();
-                }),
-                onCancelReply: () => setState(() => _replyingTo = null),
-              ),
-              if (post.skillsUsed.isNotEmpty) _SkillsSection(post: post),
-              _CollabSection(post: post, onCollaborate: _requestCollaborate),
-              if (post.externalLinks.isNotEmpty)
-                _ExternalLinks(links: post.externalLinks),
-              const SizedBox(height: 100),
-            ]),
+            ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            child: Text(
+              post.title,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 26,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.4,
+                height: 1.2,
+              ),
+            ),
+          ),
+          _AuthorSnippet(
+            post: post,
+            isFollowing: _isFollowing,
+            followLoading: _followLoading,
+            canFollow: _currentUserId != post.authorId,
+            onFollow: _toggleFollow,
+            onAuthorTap: () => context.go('/profile/${post.authorId}'),
+          ),
+          const Divider(height: 1),
+          _ProjectDescription(post: post),
+          _ProjectMediaTabs(
+            post: post,
+            onOpenMedia: _openMediaPreview,
+          ),
+          _StatsGrid(post: post),
+          if (post.type == 'opportunity') _OpportunityMeta(post: post),
+          if (post.skillsUsed.isNotEmpty) _SkillsSection(post: post),
+          _CollabSection(
+            post: post,
+            onCollaborate: _requestCollaborate,
+            canCollaborate: _currentUserId != post.authorId,
+          ),
+          if (post.externalLinks.isNotEmpty)
+            _ExternalLinks(links: post.externalLinks),
+          _CommentsSection(
+            comments: _comments,
+            controller: _commentCtrl,
+            isSubmitting: _commentSubmitting,
+            onSubmit: _submitComment,
+            replyingTo: _replyingTo,
+            onReply: (c) => setState(() {
+              _replyingTo = c;
+              _commentCtrl.clear();
+            }),
+            onCancelReply: () => setState(() => _replyingTo = null),
+          ),
+          const SizedBox(height: 100),
         ],
       ),
 
@@ -836,6 +820,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         post: post,
         onShare: _sharePost,
         onCollaborate: _requestCollaborate,
+        canCollaborate: _currentUserId != post.authorId,
         onJoin: _joinOpportunity,
         hasJoined: _hasJoined,
         joinLoading: _joinLoading,
@@ -875,9 +860,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
             final wasLiked = post.isLikedByMe;
             _post = post.copyWith(
               isDislikedByMe: !wasDisliked,
-              dislikeCount: wasDisliked
-                  ? post.dislikeCount - 1
-                  : post.dislikeCount + 1,
+              dislikeCount:
+                  wasDisliked ? post.dislikeCount - 1 : post.dislikeCount + 1,
               // If disliking, remove like
               isLikedByMe: wasDisliked ? wasLiked : false,
               likeCount: (!wasDisliked && wasLiked)
@@ -905,7 +889,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
             entityId: post.id,
             metadata: {'author_id': post.authorId},
           );
-          debugPrint('[ProjectDetail] Local like toggle post=${post.id} user=$uid isLiking=${!post.isLikedByMe}');
+          debugPrint(
+              '[ProjectDetail] Local like toggle post=${post.id} user=$uid isLiking=${!post.isLikedByMe}');
           await _syncQueue.enqueue(
             operation: post.isLikedByMe ? 'delete' : 'create',
             entity: 'likes',
@@ -919,14 +904,14 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
               'post_title': post.title,
             },
           );
-          debugPrint('[ProjectDetail] Like queued post=${post.id} user=$uid isLiking=${!post.isLikedByMe}');
+          debugPrint(
+              '[ProjectDetail] Like queued post=${post.id} user=$uid isLiking=${!post.isLikedByMe}');
           unawaited(sl<SyncService>().processPendingSync());
           setState(() {
             _post = post.copyWith(
               isLikedByMe: !post.isLikedByMe,
-              likeCount: post.isLikedByMe
-                  ? post.likeCount - 1
-                  : post.likeCount + 1,
+              likeCount:
+                  post.isLikedByMe ? post.likeCount - 1 : post.likeCount + 1,
             );
           });
         },
@@ -939,111 +924,666 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 // Hero image gallery
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-class _HeroGallery extends StatelessWidget {
-  final List<String> urls;
-  final int currentIndex;
-  final ValueChanged<int> onPageChanged;
-  final String title;
+enum _ProjectMediaType { image, video }
 
-  const _HeroGallery({
-    required this.urls,
-    required this.currentIndex,
-    required this.onPageChanged,
+class _ProjectMediaItem {
+  final String source;
+  final String title;
+  final _ProjectMediaType type;
+
+  const _ProjectMediaItem({
+    required this.source,
     required this.title,
+    required this.type,
+  });
+
+  bool get isVideo => type == _ProjectMediaType.video;
+}
+
+List<_ProjectMediaItem> _videoItemsFor(PostModel post) {
+  final items = <_ProjectMediaItem>[];
+  for (final url in post.mediaUrls.where(_isVideoUrl)) {
+    items.add(_ProjectMediaItem(
+      source: url,
+      title: post.title,
+      type: _ProjectMediaType.video,
+    ));
+  }
+  final youtube = post.youtubeUrl?.trim();
+  if (youtube != null && youtube.isNotEmpty) {
+    items.add(_ProjectMediaItem(
+      source: youtube,
+      title: post.title,
+      type: _ProjectMediaType.video,
+    ));
+  }
+  return items;
+}
+
+List<_ProjectMediaItem> _pictureItemsFor(PostModel post) {
+  return post.mediaUrls
+      .where((url) => !_isVideoUrl(url))
+      .map((url) => _ProjectMediaItem(
+            source: url,
+            title: post.title,
+            type: _ProjectMediaType.image,
+          ))
+      .toList(growable: false);
+}
+
+class _ProjectDescription extends StatelessWidget {
+  final PostModel post;
+
+  const _ProjectDescription({required this.post});
+
+  @override
+  Widget build(BuildContext context) {
+    final description = post.description?.trim();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+          border: Border.all(color: AppColors.borderLight),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Description',
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 17, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Text(
+              description?.isNotEmpty == true
+                  ? description!
+                  : 'No description was added for this project yet.',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 14,
+                color: AppColors.textSecondaryLight,
+                height: 1.6,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProjectMediaTabs extends StatefulWidget {
+  final PostModel post;
+  final void Function(List<_ProjectMediaItem> items, int index) onOpenMedia;
+
+  const _ProjectMediaTabs({
+    required this.post,
+    required this.onOpenMedia,
+  });
+
+  @override
+  State<_ProjectMediaTabs> createState() => _ProjectMediaTabsState();
+}
+
+class _ProjectMediaTabsState extends State<_ProjectMediaTabs> {
+  int _selected = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final videos = _videoItemsFor(widget.post);
+    final pictures = _pictureItemsFor(widget.post);
+    final showcase = [...pictures, ...videos];
+    final tabs = [
+      ('Videos', Icons.play_circle_outline_rounded, videos),
+      ('Pictures', Icons.image_outlined, pictures),
+      ('Showcase', Icons.auto_awesome_motion_rounded, showcase),
+    ];
+    final currentItems = tabs[_selected].$3;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Media',
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 17, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: List.generate(tabs.length, (index) {
+                final selected = _selected == index;
+                final tab = tabs[index];
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    selected: selected,
+                    avatar: Icon(tab.$2,
+                        size: 17,
+                        color: selected ? Colors.white : AppColors.primary),
+                    label: Text('${tab.$1} (${tab.$3.length})'),
+                    onSelected: (_) => setState(() => _selected = index),
+                    selectedColor: AppColors.primary,
+                    labelStyle: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color:
+                          selected ? Colors.white : AppColors.textPrimaryLight,
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (currentItems.isEmpty)
+            _EmptyMediaPanel(label: tabs[_selected].$1)
+          else
+            _MediaTileGrid(
+              items: currentItems,
+              onOpen: (index) => widget.onOpenMedia(currentItems, index),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyMediaPanel extends StatelessWidget {
+  final String label;
+
+  const _EmptyMediaPanel({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.primaryTint10,
+        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.10)),
+      ),
+      child: Text(
+        'No ${label.toLowerCase()} added yet.',
+        style: GoogleFonts.plusJakartaSans(
+          fontSize: 13,
+          color: AppColors.textSecondaryLight,
+        ),
+      ),
+    );
+  }
+}
+
+class _MediaTileGrid extends StatelessWidget {
+  final List<_ProjectMediaItem> items;
+  final ValueChanged<int> onOpen;
+
+  const _MediaTileGrid({
+    required this.items,
+    required this.onOpen,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (urls.isEmpty) {
+    return GridView.builder(
+      itemCount: items.length,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 1.25,
+      ),
+      itemBuilder: (context, index) {
+        final item = items[index];
+        return InkWell(
+          onTap: () => onOpen(index),
+          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _MediaThumbnail(item: item),
+                Positioned(
+                  left: 8,
+                  bottom: 8,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.58),
+                      borderRadius:
+                          BorderRadius.circular(AppDimensions.radiusFull),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          item.isVideo
+                              ? Icons.play_arrow_rounded
+                              : Icons.zoom_out_map_rounded,
+                          size: 14,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          item.isVideo ? 'Watch' : 'View',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _MediaThumbnail extends StatelessWidget {
+  final _ProjectMediaItem item;
+
+  const _MediaThumbnail({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    if (item.isVideo) {
       return Container(
         color: AppColors.primaryTint10,
         child: const Center(
-          child: Icon(Icons.rocket_launch_rounded, size: 80, color: AppColors.primary),
+          child: Icon(Icons.play_circle_outline_rounded,
+              size: 56, color: AppColors.primary),
         ),
       );
     }
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        PageView.builder(
-          itemCount: urls.length,
-          onPageChanged: onPageChanged,
-          itemBuilder: (context, i) => GestureDetector(
-            onTap: () {
-              if (_isVideoUrl(urls[i])) {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => OfflineVideoPlayerScreen(
-                      source: urls[i],
-                      title: title,
-                    ),
-                  ),
-                );
-              }
-            },
-            child: _isVideoUrl(urls[i])
-                ? Container(
-                    color: AppColors.primaryTint10,
-                    child: const Center(
-                      child: Icon(Icons.play_circle_outline_rounded,
-                          size: 72, color: AppColors.primary),
-                    ),
-                  )
-                : isLocalMediaPath(urls[i])
-                    ? Image.file(
-                        File(urls[i]),
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          color: AppColors.primaryTint10,
-                          child: const Icon(Icons.image_outlined, size: 60, color: AppColors.primary),
-                        ),
-                      )
-                    : CachedNetworkImage(
-                        imageUrl: urls[i],
-                        fit: BoxFit.cover,
-                        placeholder: (_, __) => Container(
-                          color: AppColors.primaryTint10,
-                        ),
-                        errorWidget: (_, __, ___) => Container(
-                          color: AppColors.primaryTint10,
-                          child: const Icon(Icons.image_outlined, size: 60, color: AppColors.primary),
-                        ),
-                      ),
-          ),
+    if (isLocalMediaPath(item.source)) {
+      final localPath = item.source.startsWith('file://')
+          ? Uri.parse(item.source).toFilePath()
+          : item.source;
+      return Image.file(
+        File(localPath),
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => const _MediaErrorThumbnail(),
+      );
+    }
+
+    return CachedNetworkImage(
+      imageUrl: item.source,
+      fit: BoxFit.cover,
+      placeholder: (_, __) => Container(color: AppColors.primaryTint10),
+      errorWidget: (_, __, ___) => const _MediaErrorThumbnail(),
+    );
+  }
+}
+
+class _MediaErrorThumbnail extends StatelessWidget {
+  const _MediaErrorThumbnail();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppColors.primaryTint10,
+      child: const Icon(Icons.broken_image_outlined,
+          size: 42, color: AppColors.primary),
+    );
+  }
+}
+
+class _ProjectMediaPreviewScreen extends StatefulWidget {
+  final List<_ProjectMediaItem> items;
+  final int initialIndex;
+
+  const _ProjectMediaPreviewScreen({
+    required this.items,
+    required this.initialIndex,
+  });
+
+  @override
+  State<_ProjectMediaPreviewScreen> createState() =>
+      _ProjectMediaPreviewScreenState();
+}
+
+class _ProjectMediaPreviewScreenState
+    extends State<_ProjectMediaPreviewScreen> {
+  late final PageController _pageController;
+  late int _index;
+
+  @override
+  void initState() {
+    super.initState();
+    _index = widget.initialIndex.clamp(0, widget.items.length - 1);
+    _pageController = PageController(initialPage: _index);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.items[_index];
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text(
+          '${_index + 1} of ${widget.items.length}',
+          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
         ),
-        // Slideshow dot indicators
-        if (urls.length > 1)
-          Positioned(
-            bottom: 16,
-            left: 0,
-            right: 0,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(
-                urls.length,
-                (i) => AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  width: i == currentIndex ? 20 : 7,
-                  height: 7,
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  decoration: BoxDecoration(
-                    color: i == currentIndex
-                        ? Colors.white
-                        : Colors.white.withValues(alpha: 0.45),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
+        actions: [
+          if (_isExternalWebVideo(item.source))
+            IconButton(
+              tooltip: 'Open video',
+              icon: const Icon(Icons.open_in_new_rounded),
+              onPressed: () async {
+                final uri = Uri.tryParse(item.source);
+                if (uri != null) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              },
+            ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          PageView.builder(
+            controller: _pageController,
+            itemCount: widget.items.length,
+            onPageChanged: (value) => setState(() => _index = value),
+            itemBuilder: (context, index) {
+              final item = widget.items[index];
+              return item.isVideo
+                  ? _InlineVideoPreview(item: item)
+                  : _ImagePreview(item: item);
+            },
+          ),
+          if (widget.items.length > 1) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _PreviewNavButton(
+                icon: Icons.chevron_left_rounded,
+                onPressed: _index == 0
+                    ? null
+                    : () => _pageController.previousPage(
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeOut,
+                        ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: _PreviewNavButton(
+                icon: Icons.chevron_right_rounded,
+                onPressed: _index == widget.items.length - 1
+                    ? null
+                    : () => _pageController.nextPage(
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeOut,
+                        ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PreviewNavButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  const _PreviewNavButton({
+    required this.icon,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton.filled(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 32),
+      style: IconButton.styleFrom(
+        backgroundColor: Colors.black.withValues(alpha: 0.46),
+        foregroundColor: Colors.white,
+        disabledBackgroundColor: Colors.black.withValues(alpha: 0.14),
+      ),
+    );
+  }
+}
+
+class _ImagePreview extends StatelessWidget {
+  final _ProjectMediaItem item;
+
+  const _ImagePreview({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final child = isLocalMediaPath(item.source)
+        ? Image.file(
+            File(item.source.startsWith('file://')
+                ? Uri.parse(item.source).toFilePath()
+                : item.source),
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => const _PreviewError(),
+          )
+        : CachedNetworkImage(
+            imageUrl: item.source,
+            fit: BoxFit.contain,
+            placeholder: (_, __) => const Center(
+              child: CircularProgressIndicator(color: Colors.white),
+            ),
+            errorWidget: (_, __, ___) => const _PreviewError(),
+          );
+
+    return Center(
+      child: InteractiveViewer(
+        minScale: 0.7,
+        maxScale: 4,
+        child: child,
+      ),
+    );
+  }
+}
+
+class _InlineVideoPreview extends StatefulWidget {
+  final _ProjectMediaItem item;
+
+  const _InlineVideoPreview({required this.item});
+
+  @override
+  State<_InlineVideoPreview> createState() => _InlineVideoPreviewState();
+}
+
+class _InlineVideoPreviewState extends State<_InlineVideoPreview> {
+  VideoPlayerController? _controller;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _prepare();
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _prepare() async {
+    if (_isExternalWebVideo(widget.item.source)) {
+      setState(() {
+        _loading = false;
+        _error = 'Open this hosted video in your browser.';
+      });
+      return;
+    }
+
+    try {
+      final source = widget.item.source;
+      final controller = isLocalMediaPath(source)
+          ? VideoPlayerController.file(File(source.startsWith('file://')
+              ? Uri.parse(source).toFilePath()
+              : source))
+          : VideoPlayerController.networkUrl(Uri.parse(source));
+      await controller.initialize();
+      await controller.setLooping(true);
+      await controller.play();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      setState(() {
+        _controller = controller;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = error.toString();
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    if (_loading) {
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.white),
+      );
+    }
+    if (_error != null ||
+        controller == null ||
+        !controller.value.isInitialized) {
+      return _VideoFallback(
+        source: widget.item.source,
+        message: _error ?? 'This video could not be loaded.',
+      );
+    }
+
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AspectRatio(
+            aspectRatio: controller.value.aspectRatio,
+            child: VideoPlayer(controller),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: VideoProgressIndicator(
+              controller,
+              allowScrubbing: true,
+              colors: const VideoProgressColors(
+                playedColor: AppColors.primary,
+                bufferedColor: Colors.white38,
+                backgroundColor: Colors.white12,
               ),
             ),
           ),
-      ],
+          const SizedBox(height: 12),
+          IconButton.filled(
+            onPressed: () {
+              setState(() {
+                controller.value.isPlaying
+                    ? controller.pause()
+                    : controller.play();
+              });
+            },
+            icon: Icon(controller.value.isPlaying
+                ? Icons.pause_rounded
+                : Icons.play_arrow_rounded),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VideoFallback extends StatelessWidget {
+  final String source;
+  final String message;
+
+  const _VideoFallback({
+    required this.source,
+    required this.message,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.play_circle_outline_rounded,
+                size: 72, color: Colors.white70),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.plusJakartaSans(color: Colors.white70),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: () async {
+                final uri = Uri.tryParse(source);
+                if (uri != null) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              },
+              icon: const Icon(Icons.open_in_new_rounded),
+              label: const Text('Open video'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PreviewError extends StatelessWidget {
+  const _PreviewError();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Icon(Icons.broken_image_outlined, size: 64, color: Colors.white70),
     );
   }
 }
 
 bool _isVideoUrl(String url) {
-  return isVideoMediaPath(url);
+  return isVideoMediaPath(url) || _isExternalWebVideo(url);
+}
+
+bool _isExternalWebVideo(String url) {
+  final lower = url.toLowerCase();
+  return lower.contains('youtube.com') ||
+      lower.contains('youtu.be') ||
+      lower.contains('vimeo.com');
 }
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1087,8 +1627,9 @@ class _AuthorSnippet extends StatelessWidget {
                           ? post.authorName![0].toUpperCase()
                           : '?',
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 18, fontWeight: FontWeight.w700,
-                        color: AppColors.primary))
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary))
                   : null,
             ),
           ),
@@ -1101,18 +1642,19 @@ class _AuthorSnippet extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(post.authorName ?? 'Unknown',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 15, fontWeight: FontWeight.w700)),
+                      style: GoogleFonts.plusJakartaSans(
+                          fontSize: 15, fontWeight: FontWeight.w700)),
                   Text(post.faculty ?? post.authorRole ?? '',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12, color: AppColors.textSecondaryLight)),
+                      style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12, color: AppColors.textSecondaryLight)),
                 ],
               ),
             ),
           ),
           if (followLoading)
             const SizedBox(
-              width: 36, height: 36,
+              width: 36,
+              height: 36,
               child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
             )
           else
@@ -1123,13 +1665,13 @@ class _AuthorSnippet extends StatelessWidget {
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 textStyle: GoogleFonts.plusJakartaSans(
-                  fontSize: 13, fontWeight: FontWeight.w700),
+                    fontSize: 13, fontWeight: FontWeight.w700),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppDimensions.radiusSm)),
+                    borderRadius:
+                        BorderRadius.circular(AppDimensions.radiusSm)),
                 backgroundColor:
-                  isFollowing ? Colors.transparent : AppColors.primary,
-                foregroundColor:
-                    isFollowing ? AppColors.primary : Colors.white,
+                    isFollowing ? Colors.transparent : AppColors.primary,
+                foregroundColor: isFollowing ? AppColors.primary : Colors.white,
                 side: isFollowing
                     ? const BorderSide(color: AppColors.primary)
                     : null,
@@ -1164,9 +1706,7 @@ class _CommentsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Separate top-level comments and replies
-    final topLevel = comments
-        .where((c) => c.parentCommentId == null)
-        .toList()
+    final topLevel = comments.where((c) => c.parentCommentId == null).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     final repliesByParent = <String, List<CommentRecord>>{};
     for (final c in comments.where((c) => c.parentCommentId != null)) {
@@ -1183,8 +1723,8 @@ class _CommentsSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Comments',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 17, fontWeight: FontWeight.w700)),
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 17, fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
 
           // Reply indicator
@@ -1204,13 +1744,13 @@ class _CommentsSection extends StatelessWidget {
                     child: Text(
                       'Replying to ${replyingTo!.authorName ?? 'Unknown'}',
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12, color: AppColors.primary),
+                          fontSize: 12, color: AppColors.primary),
                     ),
                   ),
                   GestureDetector(
                     onTap: onCancelReply,
-                    child: const Icon(Icons.close, size: 16,
-                        color: AppColors.textSecondaryLight),
+                    child: const Icon(Icons.close,
+                        size: 16, color: AppColors.textSecondaryLight),
                   ),
                 ],
               ),
@@ -1267,10 +1807,10 @@ class _CommentsSection extends StatelessWidget {
                 return [
                   _CommentTile(comment: comment, onReply: onReply),
                   ...replies.map((r) => Padding(
-                    padding: const EdgeInsets.only(left: 32),
-                    child: _CommentTile(comment: r, onReply: onReply,
-                        isReply: true),
-                  )),
+                        padding: const EdgeInsets.only(left: 32),
+                        child: _CommentTile(
+                            comment: r, onReply: onReply, isReply: true),
+                      )),
                 ];
               }).toList(),
             ),
@@ -1393,7 +1933,8 @@ class _StatsGrid extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.primaryTint10,
               borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-              border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
+              border:
+                  Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
             ),
             child: Row(
               children: [
@@ -1406,15 +1947,17 @@ class _StatsGrid extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(value,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 14, fontWeight: FontWeight.w700,
-                          color: AppColors.primary),
-                        overflow: TextOverflow.ellipsis),
+                          style: GoogleFonts.plusJakartaSans(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary),
+                          overflow: TextOverflow.ellipsis),
                       Text(label,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 10, color: AppColors.textSecondaryLight,
-                          fontWeight: FontWeight.w600),
-                        overflow: TextOverflow.ellipsis),
+                          style: GoogleFonts.plusJakartaSans(
+                              fontSize: 10,
+                              color: AppColors.textSecondaryLight,
+                              fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis),
                     ],
                   ),
                 ),
@@ -1444,20 +1987,28 @@ class _SkillsSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Skills Used',
-            style: GoogleFonts.plusJakartaSans(fontSize: 17, fontWeight: FontWeight.w700)),
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 17, fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
           Wrap(
-            spacing: 8, runSpacing: 8,
-            children: post.skillsUsed.map((s) => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceLight,
-                borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
-              ),
-              child: Text(s, style: GoogleFonts.plusJakartaSans(
-                fontSize: 13, fontWeight: FontWeight.w500,
-                color: AppColors.textSecondaryLight)),
-            )).toList(),
+            spacing: 8,
+            runSpacing: 8,
+            children: post.skillsUsed
+                .map((s) => Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceLight,
+                        borderRadius:
+                            BorderRadius.circular(AppDimensions.radiusFull),
+                      ),
+                      child: Text(s,
+                          style: GoogleFonts.plusJakartaSans(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textSecondaryLight)),
+                    ))
+                .toList(),
           ),
         ],
       ),
@@ -1472,7 +2023,12 @@ class _SkillsSection extends StatelessWidget {
 class _CollabSection extends StatelessWidget {
   final PostModel post;
   final VoidCallback onCollaborate;
-  const _CollabSection({required this.post, required this.onCollaborate});
+  final bool canCollaborate;
+  const _CollabSection({
+    required this.post,
+    required this.onCollaborate,
+    required this.canCollaborate,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1484,8 +2040,8 @@ class _CollabSection extends StatelessWidget {
           Row(
             children: [
               Text('Collaboration',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 17, fontWeight: FontWeight.w700)),
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 17, fontWeight: FontWeight.w700)),
               const Spacer(),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -1494,9 +2050,11 @@ class _CollabSection extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text('HIRING',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 10, fontWeight: FontWeight.w800,
-                    color: AppColors.success, letterSpacing: 0.08)),
+                    style: GoogleFonts.plusJakartaSans(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.success,
+                        letterSpacing: 0.08)),
               ),
             ],
           ),
@@ -1504,8 +2062,10 @@ class _CollabSection extends StatelessWidget {
           Text(
             '"Looking for collaborators to help bring this project to life."',
             style: GoogleFonts.plusJakartaSans(
-              fontSize: 13, fontStyle: FontStyle.italic,
-              color: AppColors.textSecondaryLight, height: 1.5),
+                fontSize: 13,
+                fontStyle: FontStyle.italic,
+                color: AppColors.textSecondaryLight,
+                height: 1.5),
           ),
           const SizedBox(height: 12),
           CollaboratorBubbles(
@@ -1516,13 +2076,16 @@ class _CollabSection extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: onCollaborate,
+              onPressed: canCollaborate ? onCollaborate : null,
               icon: const Icon(Icons.group_add_rounded),
-              label: const Text('Request to Collaborate'),
+              label: Text(
+                canCollaborate ? 'Request to Collaborate' : 'Your Project',
+              ),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppDimensions.radiusMd)),
+                    borderRadius:
+                        BorderRadius.circular(AppDimensions.radiusMd)),
               ),
             ),
           ),
@@ -1548,7 +2111,8 @@ class _ExternalLinks extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('External Resources',
-            style: GoogleFonts.plusJakartaSans(fontSize: 17, fontWeight: FontWeight.w700)),
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 17, fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
           ...links.map((link) => _LinkRow(link: link)),
         ],
@@ -1583,12 +2147,13 @@ class _LinkRow extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(
-                isGithub ? Icons.code_rounded : Icons.description_outlined,
-                size: 20, color: AppColors.textSecondaryLight),
+              Icon(isGithub ? Icons.code_rounded : Icons.description_outlined,
+                  size: 20, color: AppColors.textSecondaryLight),
               const SizedBox(width: 12),
-              Expanded(child: Text(label,
-                style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w500))),
+              Expanded(
+                  child: Text(label,
+                      style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14, fontWeight: FontWeight.w500))),
               const Icon(Icons.open_in_new_rounded,
                   size: 16, color: AppColors.textSecondaryLight),
             ],
@@ -1618,7 +2183,10 @@ class _OpportunityMeta extends StatelessWidget {
     final expertise = post.areaOfExpertise;
     final joinCount = post.joinCount;
 
-    if (deadline == null && maxP == null && (expertise == null || expertise.isEmpty) && joinCount == 0) {
+    if (deadline == null &&
+        maxP == null &&
+        (expertise == null || expertise.isEmpty) &&
+        joinCount == 0) {
       return const SizedBox.shrink();
     }
 
@@ -1634,7 +2202,8 @@ class _OpportunityMeta extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Opportunity Details',
-              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14)),
+                style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w700, fontSize: 14)),
             const SizedBox(height: 10),
             if (expertise != null && expertise.isNotEmpty)
               _MetaRow(
@@ -1672,7 +2241,8 @@ class _MetaRow extends StatelessWidget {
   final String label;
   final String value;
 
-  const _MetaRow({required this.icon, required this.label, required this.value});
+  const _MetaRow(
+      {required this.icon, required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -1683,12 +2253,13 @@ class _MetaRow extends StatelessWidget {
           Icon(icon, size: 16, color: AppColors.primary),
           const SizedBox(width: 8),
           Text('$label: ',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 13, fontWeight: FontWeight.w600,
-              color: AppColors.textSecondaryLight)),
+              style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondaryLight)),
           Expanded(
-            child: Text(value,
-              style: GoogleFonts.plusJakartaSans(fontSize: 13)),
+            child:
+                Text(value, style: GoogleFonts.plusJakartaSans(fontSize: 13)),
           ),
         ],
       ),
@@ -1706,6 +2277,7 @@ class _StickyBar extends StatelessWidget {
   final VoidCallback onDislike;
   final VoidCallback onShare;
   final VoidCallback onCollaborate;
+  final bool canCollaborate;
   final VoidCallback onJoin;
   final bool hasJoined;
   final bool joinLoading;
@@ -1716,6 +2288,7 @@ class _StickyBar extends StatelessWidget {
     required this.onDislike,
     required this.onShare,
     required this.onCollaborate,
+    required this.canCollaborate,
     required this.onJoin,
     required this.hasJoined,
     required this.joinLoading,
@@ -1775,7 +2348,8 @@ class _StickyBar extends StatelessWidget {
                   child: joinLoading
                       ? const Center(
                           child: SizedBox(
-                            width: 24, height: 24,
+                            width: 24,
+                            height: 24,
                             child: CircularProgressIndicator(strokeWidth: 2.5),
                           ),
                         )
@@ -1787,7 +2361,8 @@ class _StickyBar extends StatelessWidget {
                                 : Icons.how_to_reg_rounded,
                             size: 18,
                           ),
-                          label: Text(hasJoined ? 'Joined' : 'Join Opportunity'),
+                          label:
+                              Text(hasJoined ? 'Joined' : 'Join Opportunity'),
                           style: ElevatedButton.styleFrom(
                             minimumSize: const Size(0, 48),
                             backgroundColor: hasJoined
@@ -1795,7 +2370,7 @@ class _StickyBar extends StatelessWidget {
                                 : AppColors.primary,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
+                                horizontal: 16, vertical: 12),
                           ),
                         ),
                 ),
@@ -1804,19 +2379,20 @@ class _StickyBar extends StatelessWidget {
                   Text(
                     '${post.joinCount}',
                     style: GoogleFonts.plusJakartaSans(
-                      fontWeight: FontWeight.w600, fontSize: 13),
+                        fontWeight: FontWeight.w600, fontSize: 13),
                   ),
               ] else ...[
                 // Collaborate button for project posts
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: onCollaborate,
+                    onPressed: canCollaborate ? onCollaborate : null,
                     icon: const Icon(Icons.group_add_rounded, size: 18),
-                    label: const Text('Collaborate'),
+                    label:
+                        Text(canCollaborate ? 'Collaborate' : 'Your Project'),
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size(0, 48),
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
+                          horizontal: 16, vertical: 12),
                     ),
                   ),
                 ),
@@ -1834,95 +2410,3 @@ class _StickyBar extends StatelessWidget {
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // Plain icon button for the opaque/white AppBar state
-class _SolidIconButton extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final VoidCallback? onPressed;
-
-  const _SolidIconButton({
-    required this.icon,
-    required this.color,
-    this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 36,
-      height: 36,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(12),
-          child: Center(child: Icon(icon, size: 20, color: color)),
-        ),
-      ),
-    );
-  }
-}
-
-class _GlassIconButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback? onPressed;
-
-  const _GlassIconButton({required this.icon, this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.28),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.35),
-            ),
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: onPressed,
-              borderRadius: BorderRadius.circular(12),
-              child: Center(
-                child: Icon(icon, size: 18, color: Colors.white),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GlassPill extends StatelessWidget {
-  final Widget child;
-
-  const _GlassPill({super.key, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.28),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.35),
-            ),
-          ),
-          child: child,
-        ),
-      ),
-    );
-  }
-}

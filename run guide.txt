@@ -1,0 +1,25 @@
+
+####Running browser locally with AI rerank
+
+taskkill /PID 13764 /F
+
+netstat -ano | findstr :8787
+
+cd D:\start_track\must_startrack\functions
+$env:OPENAI_API_KEY = (Get-Content "..\Open API.txt" -Raw).Trim()
+node .\local-proxy.js
+
+
+cd D:\start_track\must_startrack
+flutter run -d chrome --dart-define=OPENAI_PROXY_URL=http://127.0.0.1:8787/openAiRerank --dart-define=FIREBASE_PROJECT_ID=star-track-4ba2b
+
+
+
+
+
+
+
+
+Password: Admin@StarTrack2026!
+
+ogH9gDs4

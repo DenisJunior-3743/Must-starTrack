@@ -21,7 +21,7 @@
 
 abstract final class DatabaseSchema {
   static const String databaseName = 'must_startrack.db';
-  static const int databaseVersion = 12;
+  static const int databaseVersion = 13;
 
   // ── Table Names ────────────────────────────────────────────────────────────
   static const String tableUsers = 'users';
@@ -304,6 +304,7 @@ abstract final class DatabaseSchema {
       post_id      TEXT,
       message      TEXT,
       status       TEXT NOT NULL DEFAULT 'pending',
+      receiver_viewed_at TEXT,
       responded_at TEXT,
       created_at   TEXT NOT NULL,
       updated_at   TEXT NOT NULL,
@@ -623,14 +624,18 @@ abstract final class DatabaseSchema {
     'CREATE INDEX IF NOT EXISTS idx_comments_post ON $tableComments(post_id)',
     'CREATE INDEX IF NOT EXISTS idx_conversations_user ON $tableConversations(user_id)',
     'CREATE INDEX IF NOT EXISTS idx_conversations_time ON $tableConversations(last_message_at DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_conversations_user_time ON $tableConversations(user_id, last_message_at DESC)',
     'CREATE INDEX IF NOT EXISTS idx_messages_thread ON $tableMessages(thread_id)',
     'CREATE INDEX IF NOT EXISTS idx_messages_sent ON $tableMessages(sent_at DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_messages_conversation_time ON $tableMessages(conversation_id, created_at DESC)',
     'CREATE INDEX IF NOT EXISTS idx_notif_user ON $tableNotifications(user_id)',
     'CREATE INDEX IF NOT EXISTS idx_notif_read ON $tableNotifications(is_read)',
     'CREATE INDEX IF NOT EXISTS idx_sync_queue_retry ON $tableSyncQueue(next_retry_at)',
     'CREATE INDEX IF NOT EXISTS idx_moderation_status ON $tableModerationQueue(status)',
     'CREATE INDEX IF NOT EXISTS idx_follows_follower ON $tableFollows(follower_id)',
     'CREATE INDEX IF NOT EXISTS idx_follows_followee ON $tableFollows(followee_id)',
+    'CREATE INDEX IF NOT EXISTS idx_collab_sender_status_time ON $tableCollabRequests(sender_id, status, updated_at DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_collab_receiver_status_time ON $tableCollabRequests(receiver_id, status, updated_at DESC)',
     'CREATE INDEX IF NOT EXISTS idx_activity_user ON $tableActivityLogs(user_id)',
     'CREATE INDEX IF NOT EXISTS idx_post_joins_user ON $tablePostJoins(user_id)',
     'CREATE INDEX IF NOT EXISTS idx_post_joins_post ON $tablePostJoins(post_id)',

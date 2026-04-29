@@ -109,24 +109,40 @@ class ProfileModel extends Equatable {
   // ── Firestore ─────────────────────────────────────────────────────────────
 
   factory ProfileModel.fromJson(Map<String, dynamic> j) => ProfileModel(
-    id: j['id'] as String, userId: j['userId'] as String,
-    bio: j['bio'] as String?, gender: j['gender'] as String?,
-    phone: j['phone'] as String?, regNumber: j['regNumber'] as String?,
-    admissionYear: j['admissionYear'] as String?,
-    programName: j['programName'] as String?, courseName: j['courseName'] as String?,
-    faculty: j['faculty'] as String?, department: j['department'] as String?,
-    yearOfStudy: j['yearOfStudy'] as int?,
+    id: (j['id'] ?? '').toString(),
+    userId: (j['userId'] ?? j['user_id'] ?? '').toString(),
+    bio: (j['bio'] ?? j['bio_text']) as String?,
+    gender: j['gender'] as String?,
+    phone: j['phone'] as String?,
+    regNumber: (j['regNumber'] ?? j['reg_number']) as String?,
+    admissionYear: (j['admissionYear'] ?? j['admission_year']) as String?,
+    programName: (j['programName'] ?? j['program_name']) as String?,
+    courseName: (j['courseName'] ?? j['course_name']) as String?,
+    faculty: j['faculty'] as String?,
+    department: j['department'] as String?,
+    yearOfStudy: _asInt(j['yearOfStudy'] ?? j['year_of_study']),
     skills: List<String>.from(j['skills'] as List? ?? []),
-    portfolioLinks: Map<String, String>.from(j['portfolioLinks'] as Map? ?? {}),
-    profileVisibility: j['profileVisibility'] as String? ?? 'public',
-    activityStreak: j['activityStreak'] as int? ?? 0,
-    lastActiveDate: j['lastActiveDate'] != null ? DateTime.tryParse(j['lastActiveDate'] as String) : null,
-    totalPosts: j['totalPosts'] as int? ?? 0,
-    totalFollowers: j['totalFollowers'] as int? ?? 0,
-    totalFollowing: j['totalFollowing'] as int? ?? 0,
-    totalCollabs: j['totalCollabs'] as int? ?? 0,
-    createdAt: DateTime.parse(j['createdAt'] as String),
-    updatedAt: DateTime.parse(j['updatedAt'] as String),
+    portfolioLinks: Map<String, String>.from(
+      (j['portfolioLinks'] ?? j['portfolio_links']) as Map? ?? {},
+    ),
+    profileVisibility:
+        (j['profileVisibility'] ?? j['profile_visibility']) as String? ??
+            'public',
+    activityStreak:
+        _asInt(j['activityStreak'] ?? j['activity_streak']) ?? 0,
+    lastActiveDate: _tryParseDate(
+      j['lastActiveDate'] ?? j['last_active_date'],
+    ),
+    totalPosts: _asInt(j['totalPosts'] ?? j['total_posts']) ?? 0,
+    totalFollowers:
+        _asInt(j['totalFollowers'] ?? j['total_followers']) ?? 0,
+    totalFollowing:
+        _asInt(j['totalFollowing'] ?? j['total_following']) ?? 0,
+    totalCollabs: _asInt(j['totalCollabs'] ?? j['total_collabs']) ?? 0,
+    createdAt: _tryParseDate(j['createdAt'] ?? j['created_at']) ??
+        DateTime.now(),
+    updatedAt: _tryParseDate(j['updatedAt'] ?? j['updated_at']) ??
+        DateTime.now(),
   );
 
   Map<String, dynamic> toJson() => {
@@ -151,6 +167,21 @@ class ProfileModel extends Equatable {
   static Map<String, String> _parseJsonMap(String? raw) {
     if (raw == null || raw.isEmpty) return {};
     try { return Map<String, String>.from(jsonDecode(raw) as Map); } catch (_) { return {}; }
+  }
+
+  static int? _asInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.round();
+    if (value is String) return int.tryParse(value.trim());
+    return null;
+  }
+
+  static DateTime? _tryParseDate(dynamic value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
+    return null;
   }
 
   ProfileModel copyWith({

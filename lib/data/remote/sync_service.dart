@@ -305,6 +305,17 @@ class SyncService {
             'created_at': createdAtMs,
             'is_read': 0,
           };
+          final rowUserId = row['user_id'] as String;
+          final rowSenderId = row['sender_id'] as String?;
+          if (rowSenderId != null &&
+              rowSenderId.isNotEmpty &&
+              rowSenderId == rowUserId) {
+            debugPrint(
+              '[SyncDownlink] Skipping self notification=$notificationId user=$rowUserId',
+            );
+            unawaited(_preferences.markNotificationDelivered(notificationId));
+            continue;
+          }
 
           // Persist immediately so receiver device notification center updates
           // in real time without waiting for the next hydration pass.
@@ -659,6 +670,19 @@ class SyncService {
               'is_read': effectiveIsRead ? 1 : 0,
               'extra_json': localExtraJson ?? remoteExtraJson,
             };
+            final rowUserId = row['user_id'] as String;
+            final rowSenderId = row['sender_id'] as String?;
+            if (rowSenderId != null &&
+                rowSenderId.isNotEmpty &&
+                rowSenderId == rowUserId) {
+              debugPrint(
+                '[SyncService] Skipping self notification hydration id=$notificationId user=$rowUserId',
+              );
+              if (!alreadyDelivered) {
+                await _preferences.markNotificationDelivered(notificationId);
+              }
+              continue;
+            }
             await db.insert('notifications', row,
                 conflictAlgorithm: ConflictAlgorithm.replace);
             if (!alreadyDelivered && !notifSnap.metadata.isFromCache) {
@@ -723,6 +747,47 @@ class SyncService {
     } catch (error) {
       debugPrint(
           '[SyncService] markConversationReadRemote failed for conversation=$conversationId user=$userId: $error');
+    }
+  }
+
+  Future<void> markCollaborationRequestViewedRemote(String requestId) async {
+    try {
+      final now = DateTime.now().toIso8601String();
+      await FirebaseFirestore.instance
+          .collection('collab_requests')
+          .doc(requestId)
+          .update({
+        'receiver_viewed_at': now,
+        'updated_at': now,
+      });
+    } catch (error) {
+      debugPrint(
+          '[SyncService] markCollaborationRequestViewedRemote failed for request=$requestId: $error');
+    }
+  }
+
+  Future<void> markAllIncomingRequestsViewedRemote(String userId) async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('collab_requests')
+          .where('receiver_id', isEqualTo: userId)
+          .where('receiver_viewed_at', isNull: true)
+          .get();
+
+      if (snap.docs.isEmpty) return;
+
+      final batch = FirebaseFirestore.instance.batch();
+      final now = DateTime.now().toIso8601String();
+      for (final doc in snap.docs) {
+        batch.update(doc.reference, {
+          'receiver_viewed_at': now,
+          'updated_at': now,
+        });
+      }
+      await batch.commit();
+    } catch (error) {
+      debugPrint(
+          '[SyncService] markAllIncomingRequestsViewedRemote failed for user=$userId: $error');
     }
   }
 
@@ -1337,10 +1402,31 @@ class SyncService {
         '[SyncMessage] Payload: conversationId=${payload['conversation_id']} '
         'senderId=${payload['sender_id']} content="${payload['content']}"');
 
+    final conversationId = (payload['conversation_id'] as String?)?.trim();
+    final senderId = (payload['sender_id'] as String?)?.trim();
+    if (conversationId == null ||
+        conversationId.isEmpty ||
+        senderId == null ||
+        senderId.isEmpty) {
+      debugPrint(
+        '[SyncMessage] Skipping malformed message payload for job ${job.id}: $payload',
+      );
+      return true;
+    }
+    final convoParts = conversationId.split('_');
+    final convoPeerId = convoParts.length >= 2 ? convoParts[1].trim() : '';
+    if (convoPeerId.isNotEmpty && convoPeerId == senderId) {
+      debugPrint(
+        '[SyncMessage] Skipping self-target message job ${job.id}: '
+        'conversationId=$conversationId senderId=$senderId',
+      );
+      return true;
+    }
+
     final msg = MessageModel(
       id: job.entityId,
-      conversationId: payload['conversation_id'] as String,
-      senderId: payload['sender_id'] as String,
+      conversationId: conversationId,
+      senderId: senderId,
       content: payload['content'] as String,
       messageType: payload['message_type'] as String? ?? 'text',
       fileUrl: payload['file_url'] as String?,
@@ -1907,6 +1993,7 @@ class SyncService {
     final normalizedViewId = payloadViewerId == currentUid
         ? job.entityId
         : '${viewerId}_$postId';
+    final authorId = payload['author_id'] as String?;
 
     final docRef =
         FirebaseFirestore.instance.collection('post_views').doc(normalizedViewId);
@@ -1918,10 +2005,11 @@ class SyncService {
       'userName': _uplinkUserLabel(name: viewerName, id: viewerId),
       'viewerId': viewerId,
     });
+    var createdRemoteView = false;
     try {
       await docRef.update({
         'viewer_name': payload['viewer_name'] as String?,
-        'author_id': payload['author_id'] as String?,
+        'author_id': authorId,
         'post_title': payload['post_title'] as String?,
         'updated_at': FieldValue.serverTimestamp(),
       });
@@ -1933,11 +2021,12 @@ class SyncService {
         rethrow;
       }
 
+      createdRemoteView = true;
       await docRef.set({
         'id': normalizedViewId,
         'viewer_id': viewerId,
         'viewer_name': payload['viewer_name'] as String?,
-        'author_id': payload['author_id'] as String?,
+        'author_id': authorId,
         'post_id': postId,
         'post_title': payload['post_title'] as String?,
         'created_at': FieldValue.serverTimestamp(),
@@ -1961,7 +2050,15 @@ class SyncService {
       },
     );
 
-    final authorId = payload['author_id'] as String?;
+    if (createdRemoteView) {
+      await _bestEffortIncrementPostViewCount(
+        postId: postId,
+        viewerId: viewerId,
+        authorId: authorId,
+        jobId: job.id,
+      );
+    }
+
     if (authorId != null && authorId != viewerId) {
       final viewerName = payload['viewer_name'] as String? ?? 'Someone';
       final postTitle = payload['post_title'] as String? ?? 'your project';
@@ -1978,6 +2075,61 @@ class SyncService {
     }
 
     return true;
+  }
+
+  Future<void> _bestEffortIncrementPostViewCount({
+    required String postId,
+    required String viewerId,
+    required String jobId,
+    String? authorId,
+  }) async {
+    final postRef = FirebaseFirestore.instance.collection('posts').doc(postId);
+    try {
+      await postRef.update({
+        'view_count': FieldValue.increment(1),
+        'updated_at': FieldValue.serverTimestamp(),
+      });
+      _uplinkTrace('VIEW_COUNT_INCREMENTED', details: {
+        'jobId': jobId,
+        'postId': postId,
+        'viewerId': viewerId,
+        'authorId': authorId ?? '',
+      });
+    } on FirebaseException catch (error) {
+      if (error.code == 'not-found') {
+        _uplinkTrace('VIEW_COUNT_INCREMENT_SKIPPED_POST_NOT_FOUND', details: {
+          'jobId': jobId,
+          'postId': postId,
+          'viewerId': viewerId,
+          'authorId': authorId ?? '',
+        });
+        return;
+      }
+      debugPrint(
+        '[SyncView] Could not increment post view_count post=$postId '
+        'viewer=$viewerId code=${error.code}: ${error.message}',
+      );
+      _uplinkTrace('VIEW_COUNT_INCREMENT_FAILED', details: {
+        'jobId': jobId,
+        'postId': postId,
+        'viewerId': viewerId,
+        'authorId': authorId ?? '',
+        'code': error.code,
+        'message': error.message ?? '',
+      });
+    } catch (error) {
+      debugPrint(
+        '[SyncView] Could not increment post view_count post=$postId '
+        'viewer=$viewerId error=$error',
+      );
+      _uplinkTrace('VIEW_COUNT_INCREMENT_FAILED', details: {
+        'jobId': jobId,
+        'postId': postId,
+        'viewerId': viewerId,
+        'authorId': authorId ?? '',
+        'error': error.toString(),
+      });
+    }
   }
 
   Future<bool> _syncOpportunityJoin(SyncJob job) async {
@@ -2106,6 +2258,14 @@ class SyncService {
     final postId = payload['post_id'] as String?;
     final message = payload['message'] as String? ?? '';
     final status = payload['status'] as String? ?? 'pending';
+    if (payloadSenderId != null &&
+        receiverId != null &&
+        payloadSenderId == receiverId) {
+      debugPrint(
+        '[SyncCollab] Skipping self-target collab job ${job.id}: sender=$payloadSenderId receiver=$receiverId',
+      );
+      return true;
+    }
 
     debugPrint(
         '[SyncCollab] Payload — sender=$payloadSenderId receiver=$receiverId postId=$postId status=$status');
@@ -2132,6 +2292,12 @@ class SyncService {
         '[SyncCollab] sender_id mismatch on job ${job.id}: '
         'payload=$payloadSenderId auth=$currentUid; normalizing to auth uid.',
       );
+    }
+    if (senderId == receiverId) {
+      debugPrint(
+        '[SyncCollab] Skipping self-target collab job ${job.id}: sender=$senderId receiver=$receiverId',
+      );
+      return true;
     }
 
     debugPrint(
@@ -2196,6 +2362,22 @@ class SyncService {
     String? entityId,
     String? senderName,
   }) async {
+    final normalizedReceiver = receiverId.trim();
+    final normalizedSender = senderId.trim();
+    if (normalizedReceiver.isEmpty || normalizedSender.isEmpty) {
+      debugPrint(
+        '[SyncNotification] Skipping notification $notificationId due to missing sender/receiver.',
+      );
+      return;
+    }
+    if (normalizedReceiver == normalizedSender) {
+      debugPrint(
+        '[SyncNotification] Skipping self-notification '
+        'source=$source notification=$notificationId user=$normalizedSender',
+      );
+      return;
+    }
+
     final senderLabel = _uplinkUserLabel(name: senderName, id: senderId);
     final receiverLabel = receiverId.trim().isNotEmpty ? receiverId : 'unknown';
     _notificationDebugBlock(
@@ -2511,6 +2693,18 @@ class SyncService {
       final counterpartId = userId == currentUid ? peerId : userId;
       final counterpart = usersById[counterpartId];
       final lastMessageAt = data['last_message_at'];
+      final localMessageRows = await db.query(
+        DatabaseSchema.tableMessages,
+        columns: ['id', 'is_read'],
+        where: 'conversation_id = ?',
+        whereArgs: [doc.id],
+      );
+      final localReadByMessageId = <String, bool>{};
+      for (final row in localMessageRows) {
+        final messageId = row['id'] as String? ?? '';
+        if (messageId.isEmpty) continue;
+        localReadByMessageId[messageId] = (row['is_read'] as int? ?? 0) == 1;
+      }
 
       await db.insert(
         DatabaseSchema.tableConversations,
@@ -2534,6 +2728,56 @@ class SyncService {
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
+
+      // Merge any duplicate local conversations for the same peer that were
+      // created before the first sync (e.g. from a push-notification tap).
+      // Their messages need to be remapped to the canonical Firestore ID so
+      // that localReadByMessageId correctly preserves read state on subsequent
+      // syncs.
+      final duplicates = await db.query(
+        DatabaseSchema.tableConversations,
+        columns: ['id'],
+        where: 'user_id = ? AND peer_id = ? AND id != ?',
+        whereArgs: [currentUid, counterpartId, doc.id],
+      );
+      for (final dup in duplicates) {
+        final oldId = dup['id'] as String;
+        // Remap messages stored under the old local ID.
+        await db.rawUpdate('''
+          UPDATE ${DatabaseSchema.tableMessages}
+          SET conversation_id = ?, thread_id = ?
+          WHERE conversation_id = ?
+        ''', [doc.id, doc.id, oldId]);
+        // Remove the orphaned conversation row.
+        await db.delete(
+          DatabaseSchema.tableConversations,
+          where: 'id = ?',
+          whereArgs: [oldId],
+        );
+        await db.delete(
+          DatabaseSchema.tableMessageThreads,
+          where: 'id = ?',
+          whereArgs: [oldId],
+        );
+      }
+
+      // Rebuild localReadByMessageId now that any remapped messages are
+      // under doc.id (re-query to pick up the migrated rows).
+      if (duplicates.isNotEmpty) {
+        final refreshed = await db.query(
+          DatabaseSchema.tableMessages,
+          columns: ['id', 'is_read'],
+          where: 'conversation_id = ?',
+          whereArgs: [doc.id],
+        );
+        localReadByMessageId.clear();
+        for (final row in refreshed) {
+          final messageId = row['id'] as String? ?? '';
+          if (messageId.isEmpty) continue;
+          localReadByMessageId[messageId] =
+              (row['is_read'] as int? ?? 0) == 1;
+        }
+      }
 
       await db.insert(
         DatabaseSchema.tableMessageThreads,
@@ -2563,13 +2807,19 @@ class SyncService {
           .get(const GetOptions(source: Source.serverAndCache));
 
       var unreadCount = 0;
+      var hasReadSyncDrift = false;
       for (final msgDoc in msgSnap.docs) {
         final msg = msgDoc.data();
         final createdAt = msg['created_at'];
-        final isRead = msg['is_read'] as bool? ?? false;
+        final remoteIsRead = msg['is_read'] as bool? ?? false;
+        final localIsRead = localReadByMessageId[msgDoc.id] ?? false;
+        final effectiveIsRead = remoteIsRead || localIsRead;
         final senderId = msg['sender_id'] as String? ?? '';
-        if (senderId != currentUid && !isRead) {
+        if (senderId != currentUid && !effectiveIsRead) {
           unreadCount++;
+        }
+        if (senderId != currentUid && localIsRead && !remoteIsRead) {
+          hasReadSyncDrift = true;
         }
         await db.insert(
           DatabaseSchema.tableMessages,
@@ -2584,14 +2834,14 @@ class SyncService {
             'file_name': msg['file_name'] as String?,
             'file_size': msg['file_size'] as String?,
             'media_url': msg['file_url'] as String?,
-            'status': isRead ? 'read' : 'sent',
+            'status': effectiveIsRead ? 'read' : 'sent',
             'created_at': createdAt is Timestamp
                 ? createdAt.millisecondsSinceEpoch
                 : DateTime.now().millisecondsSinceEpoch,
             'sent_at': createdAt is Timestamp
                 ? createdAt.toDate().toIso8601String()
                 : DateTime.now().toIso8601String(),
-            'is_read': isRead ? 1 : 0,
+            'is_read': effectiveIsRead ? 1 : 0,
             'is_deleted': 0,
             'is_queued': 0,
             'sync_status': 1,
@@ -2610,6 +2860,13 @@ class SyncService {
         where: 'id = ?',
         whereArgs: [doc.id],
       );
+
+      if (hasReadSyncDrift) {
+        unawaited(markConversationReadRemote(
+          conversationId: doc.id,
+          userId: currentUid,
+        ));
+      }
     }
 
     debugPrint(
@@ -3212,6 +3469,12 @@ class SyncService {
       if (senderId == null || receiverId == null) {
         continue;
       }
+      if (senderId == receiverId) {
+        debugPrint(
+          '[SyncService] Skipping self collab_request ${doc.id}: sender=$senderId receiver=$receiverId',
+        );
+        continue;
+      }
 
       final sender = await _userDao.getUserById(senderId);
       final receiver = await _userDao.getUserById(receiverId);
@@ -3228,6 +3491,21 @@ class SyncService {
       final updatedAt = data['updated_at'];
       final respondedAt = data['responded_at'];
       try {
+        // Preserve receiver_viewed_at that was set locally (e.g. when the
+        // user opened the inbox). ConflictAlgorithm.replace would otherwise
+        // wipe it on every sync, making the badge re-appear after every
+        // app restart.
+        final existingRow = await db.query(
+          DatabaseSchema.tableCollabRequests,
+          columns: ['receiver_viewed_at'],
+          where: 'id = ?',
+          whereArgs: [doc.id],
+          limit: 1,
+        );
+        final preservedViewedAt = existingRow.isNotEmpty
+            ? existingRow.first['receiver_viewed_at'] as String?
+            : null;
+
         await db.insert(
           DatabaseSchema.tableCollabRequests,
           {
@@ -3246,6 +3524,7 @@ class SyncService {
             'updated_at': updatedAt is Timestamp
                 ? updatedAt.toDate().toIso8601String()
                 : DateTime.now().toIso8601String(),
+            'receiver_viewed_at': preservedViewedAt,
             'sync_status': 1,
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
@@ -3467,6 +3746,16 @@ class SyncService {
     String? entityId,
     String? senderName,
   }) async {
+    if (receiverId.trim().isEmpty ||
+        senderId.trim().isEmpty ||
+        receiverId.trim() == senderId.trim()) {
+      debugPrint(
+        '[SyncNotification] Upsert skipped for self/invalid notification '
+        'notification=$notificationId receiver=$receiverId sender=$senderId',
+      );
+      return;
+    }
+
     final docRef = FirebaseFirestore.instance
         .collection('notifications')
         .doc(notificationId);

@@ -14,12 +14,15 @@
 // Uses Material 3 NavigationBar (not the older BottomNavigationBar)
 // for proper M3 indicator animation and theming.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/di/injection_container.dart';
+import '../../../core/network/connectivity_service.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/router/route_guards.dart';
 import '../../feed/screens/home_feed_screen.dart';
@@ -27,9 +30,67 @@ import '../../messaging/bloc/message_cubit.dart';
 import 'lecturer_bottom_nav.dart';
 import 'startrack_bottom_nav.dart';
 
-class MainShell extends StatelessWidget {
+class MainShell extends StatefulWidget {
   final Widget child;
   const MainShell({super.key, required this.child});
+
+  @override
+  State<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends State<MainShell> {
+  final ConnectivityService _connectivityService = sl<ConnectivityService>();
+  StreamSubscription<bool>? _connectivitySub;
+  Timer? _onlineBannerTimer;
+  bool _isOnline = true;
+  bool _showOnlineBanner = false;
+  int _lastUnreadCount = 0;
+
+  void _setStateAfterPointerFrame(VoidCallback update) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(update);
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _isOnline = _connectivityService.isOnline;
+
+    _connectivityService.checkConnectivity().then((online) {
+      if (!mounted) return;
+      _setStateAfterPointerFrame(() => _isOnline = online);
+    });
+
+    _connectivitySub =
+        _connectivityService.onConnectivityChanged.listen((online) {
+      if (!mounted) return;
+      final wasOnline = _isOnline;
+      _setStateAfterPointerFrame(() {
+        _isOnline = online;
+        if (!online) {
+          _showOnlineBanner = false;
+        }
+      });
+
+      if (online && !wasOnline) {
+        _setStateAfterPointerFrame(() => _showOnlineBanner = true);
+        _onlineBannerTimer?.cancel();
+        _onlineBannerTimer = Timer(const Duration(seconds: 2), () {
+          if (!mounted) return;
+          _setStateAfterPointerFrame(() => _showOnlineBanner = false);
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _onlineBannerTimer?.cancel();
+    _connectivitySub?.cancel();
+    super.dispose();
+  }
 
   void _handleAddTap(BuildContext context) {
     final guards = sl<RouteGuards>();
@@ -141,8 +202,8 @@ class MainShell extends StatelessWidget {
   StarTrackNavTab _currentTab(String location) {
     if (location.startsWith(RouteNames.peers)) return StarTrackNavTab.peers;
     if (location.startsWith(RouteNames.inbox)) return StarTrackNavTab.inbox;
-    if (location.startsWith(RouteNames.projects)) {
-      return StarTrackNavTab.projects;
+    if (location.startsWith(RouteNames.globalRanks)) {
+      return StarTrackNavTab.leaderboard;
     }
     if (location.startsWith(RouteNames.home) ||
         location.startsWith(RouteNames.discover)) {
@@ -168,6 +229,103 @@ class MainShell extends StatelessWidget {
     return LecturerNavTab.none;
   }
 
+  Widget _withNetworkIndicator(BuildContext context, Widget scaffold) {
+    final showBanner = !_isOnline || _showOnlineBanner;
+    final isOffline = !_isOnline;
+    final bannerColor = isOffline ? Colors.black : AppColors.success;
+    final message = isOffline ? 'No internet connection' : 'Back online';
+    final icon = isOffline ? Icons.wifi_off_rounded : Icons.wifi_rounded;
+
+    return Stack(
+      children: [
+        Positioned.fill(child: scaffold),
+        Positioned(
+          left: 0,
+          right: 0,
+          top: MediaQuery.of(context).padding.top + 8,
+          child: IgnorePointer(
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 420),
+                reverseDuration: const Duration(milliseconds: 260),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) {
+                  final fade = CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeOut,
+                  );
+                  final slide = Tween<Offset>(
+                    begin: const Offset(0, -0.35),
+                    end: Offset.zero,
+                  ).animate(CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeOutBack,
+                  ));
+
+                  return FadeTransition(
+                    opacity: fade,
+                    child: SlideTransition(
+                      position: slide,
+                      child: child,
+                    ),
+                  );
+                },
+                child: showBanner
+                    ? Padding(
+                        key: ValueKey<String>(isOffline ? 'offline' : 'online'),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 520),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: bannerColor,
+                              borderRadius: BorderRadius.circular(999),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x38000000),
+                                  blurRadius: 14,
+                                  offset: Offset(0, 5),
+                                ),
+                              ],
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 10),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(icon, size: 16, color: Colors.white),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(
+                                      message,
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 12,
+                                        height: 1.1,
+                                        decoration: TextDecoration.none,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(key: ValueKey<String>('hidden')),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
@@ -176,52 +334,42 @@ class MainShell extends StatelessWidget {
     final unreadCount = () {
       final msgState = context.watch<MessageCubit>().state;
       if (msgState is ConversationsLoaded) {
-        return msgState.conversations
-            .fold<int>(0, (sum, c) => sum + c.unreadCount);
+        return msgState.conversations.fold<int>(0, (sum, c) => sum + c.unreadCount);
       }
-      return 0;
+      return _lastUnreadCount;
     }();
 
     // Lecturers get their own nav bar with role-specific destinations.
     if (role == UserRole.lecturer) {
-      return ValueListenableBuilder<bool>(
-        valueListenable: HomeFeedScreen.searchActive,
-        builder: (context, isSearching, _) => Scaffold(
-          body: child,
-          bottomNavigationBar: isSearching
-              ? null
-              : LecturerBottomNav(
-                  activeTab: _lecturerCurrentTab(location),
-                  onFeedTap: () => context.go(RouteNames.home),
-                  onDashboardTap: () =>
-                      context.go(RouteNames.lecturerDashboard),
-                  onAddTap: () => _handleAddTap(context),
-                  onSearchTap: () => context.go(RouteNames.lecturerSearch),
-                  onInboxTap: () => context.go(RouteNames.inbox),
-                  unreadMessageCount: unreadCount,
-                ),
+      return Scaffold(
+        body: child,
+        bottomNavigationBar: LecturerBottomNav(
+          activeTab: _lecturerCurrentTab(location),
+          onFeedTap: () => context.go(RouteNames.home),
+          onDashboardTap: () => context.go(RouteNames.lecturerDashboard),
+          onAddTap: () => _handleAddTap(context),
+          onSearchTap: () => context.go(RouteNames.lecturerSearch),
+          onInboxTap: () => context.go(RouteNames.inbox),
+          unreadMessageCount: unreadCount,
         ),
       );
+      return _withNetworkIndicator(context, scaffold);
     }
 
     // Students, admins, super-admins — standard student nav.
     final currentTab = _currentTab(location);
-    return ValueListenableBuilder<bool>(
-      valueListenable: HomeFeedScreen.searchActive,
-      builder: (context, isSearching, _) => Scaffold(
-        body: child,
-        bottomNavigationBar: isSearching
-            ? null
-            : StarTrackBottomNav(
-                activeTab: currentTab,
-                onHomeTap: () => context.go(RouteNames.home),
-                onPeersTap: () => context.go(RouteNames.peers),
-                onAddTap: () => _handleAddTap(context),
-                onInboxTap: () => context.go(RouteNames.inbox),
-                onProjectsTap: () => context.go(RouteNames.projects),
-                unreadMessageCount: unreadCount,
-              ),
+    return Scaffold(
+      body: child,
+      bottomNavigationBar: StarTrackBottomNav(
+        activeTab: currentTab,
+        onHomeTap: () => context.go(RouteNames.home),
+        onPeersTap: () => context.go(RouteNames.peers),
+        onAddTap: () => _handleAddTap(context),
+        onInboxTap: () => context.go(RouteNames.inbox),
+        onProjectsTap: () => context.go(RouteNames.projects),
+        unreadMessageCount: unreadCount,
       ),
     );
+    return _withNetworkIndicator(context, scaffold);
   }
 }

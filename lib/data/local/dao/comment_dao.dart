@@ -65,6 +65,50 @@ class CommentDao {
     }).toList();
   }
 
+  Future<Map<String, List<String>>> getRecentCommentSnippetsForPosts(
+    List<String> postIds, {
+    int perPostLimit = 4,
+    int maxChars = 220,
+  }) async {
+    final cleanedPostIds = postIds
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+    if (cleanedPostIds.isEmpty) return const {};
+
+    final db = await _db.database;
+    final placeholders = List.filled(cleanedPostIds.length, '?').join(',');
+    final rows = await db.rawQuery(
+      '''
+      SELECT c.post_id, c.content, c.created_at
+      FROM ${DatabaseSchema.tableComments} c
+      WHERE c.post_id IN ($placeholders)
+        AND c.is_deleted = 0
+      ORDER BY c.created_at DESC
+      ''',
+      cleanedPostIds,
+    );
+
+    final result = <String, List<String>>{};
+    for (final row in rows) {
+      final postId = row['post_id']?.toString();
+      final content = row['content']?.toString().trim() ?? '';
+      if (postId == null || postId.isEmpty || content.isEmpty) continue;
+
+      final bucket = result.putIfAbsent(postId, () => <String>[]);
+      if (bucket.length >= perPostLimit) continue;
+      final normalized = content.replaceAll(RegExp(r'\s+'), ' ').trim();
+      bucket.add(
+        normalized.length > maxChars
+            ? normalized.substring(0, maxChars)
+            : normalized,
+      );
+    }
+
+    return result;
+  }
+
   Future<void> addLocalComment({
     required String postId,
     required String authorId,

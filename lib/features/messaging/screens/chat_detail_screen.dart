@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -13,10 +13,12 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
-
+import 'package:timeago/timeago.dart' as timeago;
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
+import '../../../core/di/injection_container.dart';
+import '../../../data/remote/firestore_service.dart';
 import '../../../data/local/dao/message_dao.dart';
 import '../bloc/message_cubit.dart';
 
@@ -49,6 +51,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   Duration _playbackPosition = Duration.zero;
   Duration _playbackDuration = Duration.zero;
   double _playbackSpeed = 1.0;
+  int _audioPlaybackRequestId = 0;
 
   MessageModel? _replyToMessage;
   String? _replyToSenderLabel;
@@ -56,6 +59,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   StreamSubscription<PlayerState>? _playerStateSub;
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<Duration?>? _durationSub;
+  StreamSubscription<UserDevicePresenceSummary>? _peerPresenceSub;
+  final _firestore = sl<FirestoreService>();
+
+  String? _peerStatusText;
+  bool _peerActiveRecently = false;
+  String? _lastLoadedPeerId;
 
   @override
   void initState() {
@@ -98,11 +107,42 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     _playerStateSub?.cancel();
     _positionSub?.cancel();
     _durationSub?.cancel();
+    _peerPresenceSub?.cancel();
     _recorder.dispose();
     _audioPlayer.dispose();
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _refreshPeerPresence(String peerId) async {
+    if (peerId.trim().isEmpty) return;
+    await _peerPresenceSub?.cancel();
+    _peerPresenceSub =
+        _firestore.watchUserDevicePresence(peerId).listen((summary) {
+      if (!mounted) return;
+      final lastSeen = summary.lastSeenAt;
+      if (summary.isOnline) {
+        setState(() {
+          _peerActiveRecently = true;
+          _peerStatusText = 'Online';
+        });
+        return;
+      }
+
+      if (lastSeen == null) {
+        setState(() {
+          _peerActiveRecently = false;
+          _peerStatusText = 'Offline';
+        });
+        return;
+      }
+
+      setState(() {
+        _peerActiveRecently = false;
+        _peerStatusText = 'Last seen ${timeago.format(lastSeen)}';
+      });
+    });
   }
 
   Future<void> _startRecording() async {
@@ -138,7 +178,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     }
 
     final tempDir = await getTemporaryDirectory();
-    final path = p.join(tempDir.path, 'voice_${DateTime.now().millisecondsSinceEpoch}.m4a');
+    final path = p.join(
+        tempDir.path, 'voice_${DateTime.now().millisecondsSinceEpoch}.m4a');
 
     await _recorder.start(
       const RecordConfig(
@@ -311,50 +352,101 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
   }
 
   Future<void> _toggleAudioPlayback(MessageModel message) async {
-    final urlOrPath = message.fileUrl;
-    if (urlOrPath == null || urlOrPath.trim().isEmpty) {
+    final source = _normalizedAudioSource(message.fileUrl);
+    if (source == null) {
       return;
     }
 
-    if (_playingMessageId == message.id && _audioPlayer.playing) {
-      await _audioPlayer.pause();
-      if (!mounted) {
+    final requestId = ++_audioPlaybackRequestId;
+    try {
+      final isSameMessage = _activeAudioMessageId == message.id;
+      if (isSameMessage && _audioPlayer.playing) {
+        await _audioPlayer.pause();
+        if (!mounted || requestId != _audioPlaybackRequestId) {
+          return;
+        }
+        setState(() {
+          _playingMessageId = null;
+        });
+        return;
+      }
+
+      if (!isSameMessage) {
+        await _audioPlayer.stop();
+        if (!_isRemotePath(source)) {
+          final localFile = File(source);
+          if (!await localFile.exists()) {
+            _showInfo('Voice note file is missing on this device.');
+            return;
+          }
+          await _audioPlayer.setFilePath(source);
+        } else {
+          await _audioPlayer.setUrl(source);
+        }
+        await _audioPlayer.setSpeed(_playbackSpeed);
+
+        if (!mounted || requestId != _audioPlaybackRequestId) {
+          return;
+        }
+        setState(() {
+          _activeAudioMessageId = message.id;
+          _playbackPosition = Duration.zero;
+          _playbackDuration = _audioPlayer.duration ?? Duration.zero;
+        });
+      } else {
+        final value = _audioPlayer.playerState;
+        final durationMs = _playbackDuration.inMilliseconds;
+        final restartThresholdMs = math.max(0, durationMs - 120);
+        final isNearEnd = durationMs > 0 &&
+            _playbackPosition.inMilliseconds >= restartThresholdMs;
+        if (value.processingState == ProcessingState.completed || isNearEnd) {
+          await _audioPlayer.seek(Duration.zero);
+          if (!mounted || requestId != _audioPlaybackRequestId) {
+            return;
+          }
+          setState(() {
+            _playbackPosition = Duration.zero;
+          });
+        }
+      }
+
+      await _audioPlayer.play();
+      if (!mounted || requestId != _audioPlaybackRequestId) {
         return;
       }
       setState(() {
+        _playingMessageId = message.id;
+      });
+    } catch (error) {
+      if (!mounted || requestId != _audioPlaybackRequestId) {
+        return;
+      }
+      setState(() {
+        if (_activeAudioMessageId == message.id) {
+          _activeAudioMessageId = null;
+        }
         _playingMessageId = null;
       });
-      return;
+      _showInfo('Could not play this voice note.');
+      debugPrint(
+          '[ChatDetail] audio playback failed for ${message.id}: $error');
     }
-
-    if (_activeAudioMessageId != message.id) {
-      if (_isRemotePath(urlOrPath)) {
-        await _audioPlayer.setUrl(urlOrPath);
-      } else {
-        await _audioPlayer.setFilePath(urlOrPath);
-      }
-      await _audioPlayer.setSpeed(_playbackSpeed);
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _activeAudioMessageId = message.id;
-        _playbackPosition = Duration.zero;
-        _playbackDuration = _audioPlayer.duration ?? Duration.zero;
-      });
-    }
-
-    await _audioPlayer.play();
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _playingMessageId = message.id;
-    });
   }
 
   bool _isRemotePath(String input) {
     return input.startsWith('http://') || input.startsWith('https://');
+  }
+
+  String? _normalizedAudioSource(String? input) {
+    final raw = input?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    if (_isRemotePath(raw)) return raw;
+    if (!raw.startsWith('file://')) return raw;
+    try {
+      return Uri.parse(raw).toFilePath(windows: Platform.isWindows);
+    } catch (_) {
+      return raw;
+    }
   }
 
   void _setReplyTo(MessageModel msg) {
@@ -415,7 +507,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
               ),
               FilledButton(
                 onPressed: () => Navigator.of(ctx).pop(true),
-                style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+                style:
+                    FilledButton.styleFrom(backgroundColor: AppColors.danger),
                 child: const Text('Delete'),
               ),
             ],
@@ -424,7 +517,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         false;
     if (!shouldDelete) return;
 
-    if (_activeAudioMessageId == message.id || _playingMessageId == message.id) {
+    if (_activeAudioMessageId == message.id ||
+        _playingMessageId == message.id) {
       await _audioPlayer.stop();
       if (mounted) {
         setState(() {
@@ -450,7 +544,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     _showInfo('Voice message deleted');
   }
 
-  Future<void> _showMessageContextSheet(MessageModel message, bool isMine) async {
+  Future<void> _showMessageContextSheet(
+      MessageModel message, bool isMine) async {
     await showModalBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -471,7 +566,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             ),
             const SizedBox(height: 8),
             ListTile(
-              leading: const Icon(Icons.reply_rounded, color: AppColors.primary),
+              leading:
+                  const Icon(Icons.reply_rounded, color: AppColors.primary),
               title: const Text('Reply'),
               onTap: () {
                 Navigator.of(ctx).pop();
@@ -500,7 +596,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _showNotImplemented(String featureName) {
@@ -550,10 +647,16 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         title: BlocBuilder<MessageCubit, MessageState>(
           builder: (context, state) {
             if (state is ThreadLoaded) {
+              if (_lastLoadedPeerId != state.peerId) {
+                _lastLoadedPeerId = state.peerId;
+                unawaited(_refreshPeerPresence(state.peerId));
+              }
               return _ChatHeader(
                 peerName: state.peerName,
                 peerPhotoUrl: state.peerPhotoUrl,
                 isPeerLecturer: state.isPeerLecturer,
+                statusText: _peerStatusText ?? 'Offline',
+                isActiveRecently: _peerActiveRecently,
               );
             }
             return const _ChatHeader(peerName: 'Conversation');
@@ -627,17 +730,23 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                       )
                     : ListView.builder(
                         controller: _scrollCtrl,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
                         itemCount: messages.length,
                         itemBuilder: (context, index) {
                           final message = messages[index];
-                          final previous = index > 0 ? messages[index - 1] : null;
-                          final showDate = previous == null || !_isSameDay(previous.createdAt, message.createdAt);
+                          final previous =
+                              index > 0 ? messages[index - 1] : null;
+                          final showDate = previous == null ||
+                              !_isSameDay(
+                                  previous.createdAt, message.createdAt);
 
                           return Column(
                             children: [
                               if (showDate)
-                                _DateDivider(label: _formatDateDivider(message.createdAt)),
+                                _DateDivider(
+                                    label:
+                                        _formatDateDivider(message.createdAt)),
                               _SwipeToReplyBubble(
                                 onReply: () => _setReplyTo(message),
                                 child: GestureDetector(
@@ -649,15 +758,16 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                                     message: message,
                                     isMine: message.senderId == currentUserId,
                                     isAudioPlaying:
-                                      _playingMessageId == message.id && _audioPlayer.playing,
+                                        _playingMessageId == message.id &&
+                                            _audioPlayer.playing,
                                     playbackPosition:
-                                      _activeAudioMessageId == message.id
-                                        ? _playbackPosition
-                                        : Duration.zero,
+                                        _activeAudioMessageId == message.id
+                                            ? _playbackPosition
+                                            : Duration.zero,
                                     playbackDuration:
-                                      _activeAudioMessageId == message.id
-                                        ? _playbackDuration
-                                        : Duration.zero,
+                                        _activeAudioMessageId == message.id
+                                            ? _playbackDuration
+                                            : Duration.zero,
                                     playbackSpeed: _playbackSpeed,
                                     onAudioTap: message.messageType == 'audio'
                                         ? () => _toggleAudioPlayback(message)
@@ -721,11 +831,15 @@ class _ChatHeader extends StatelessWidget {
   final String peerName;
   final String? peerPhotoUrl;
   final bool isPeerLecturer;
+  final String statusText;
+  final bool isActiveRecently;
 
   const _ChatHeader({
     required this.peerName,
     this.peerPhotoUrl,
     this.isPeerLecturer = false,
+    this.statusText = 'Offline',
+    this.isActiveRecently = false,
   });
 
   @override
@@ -737,7 +851,8 @@ class _ChatHeader extends StatelessWidget {
             CircleAvatar(
               radius: 20,
               backgroundColor: AppColors.primaryTint10,
-              backgroundImage: peerPhotoUrl != null ? NetworkImage(peerPhotoUrl!) : null,
+              backgroundImage:
+                  peerPhotoUrl != null ? NetworkImage(peerPhotoUrl!) : null,
               child: peerPhotoUrl == null
                   ? Text(
                       peerName.isNotEmpty ? peerName[0].toUpperCase() : '?',
@@ -756,7 +871,9 @@ class _ChatHeader extends StatelessWidget {
                 width: 10,
                 height: 10,
                 decoration: BoxDecoration(
-                  color: AppColors.success,
+                  color: isActiveRecently
+                      ? AppColors.success
+                      : AppColors.textSecondaryLight,
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white, width: 1.5),
                 ),
@@ -787,10 +904,12 @@ class _ChatHeader extends StatelessWidget {
                   if (isPeerLecturer) ...[
                     const SizedBox(width: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: AppColors.roleLecturer.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+                        borderRadius:
+                            BorderRadius.circular(AppDimensions.radiusFull),
                       ),
                       child: Text(
                         'Lecturer',
@@ -805,11 +924,13 @@ class _ChatHeader extends StatelessWidget {
                 ],
               ),
               Text(
-                'Online',
+                statusText,
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.primary,
+                  color: isActiveRecently
+                      ? AppColors.primary
+                      : AppColors.textSecondaryLight,
                 ),
               ),
             ],
@@ -877,11 +998,11 @@ class _MessageBubble extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final timeLabel = DateFormat('hh:mm a').format(message.createdAt);
     final isAudio = message.messageType == 'audio';
-    final bubbleText = isAudio ? (message.fileName ?? 'Voice message') : message.content;
+    final bubbleText = message.content;
 
     final normalizedDuration = playbackDuration.inMilliseconds <= 0
-      ? const Duration(seconds: 1)
-      : playbackDuration;
+        ? const Duration(seconds: 1)
+        : playbackDuration;
     final progress = isAudio
         ? (playbackPosition.inMilliseconds / normalizedDuration.inMilliseconds)
             .clamp(0.0, 1.0)
@@ -896,51 +1017,50 @@ class _MessageBubble extends StatelessWidget {
                 onTap: onAudioTap,
                 borderRadius: BorderRadius.circular(16),
                 child: Row(
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisSize: MainAxisSize.max,
                   children: [
-                    Icon(
-                      isAudioPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded,
-                      color: isMine ? Colors.white : AppColors.primary,
-                      size: 26,
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: isMine
+                            ? Colors.white.withValues(alpha: 0.16)
+                            : AppColors.primary.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        isAudioPlaying
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                        color: isMine ? Colors.white : AppColors.primary,
+                        size: 28,
+                      ),
                     ),
                     const SizedBox(width: 10),
-                    Flexible(
-                      child: Text(
-                        bubbleText,
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: isMine ? Colors.white : null,
-                        ),
+                    Expanded(
+                      child: _AudioWaveform(
+                        progress: isAudioPlaying ? progress : 0,
+                        activeColor: isMine ? Colors.white : AppColors.primary,
+                        inactiveColor: isMine
+                            ? Colors.white.withValues(alpha: 0.28)
+                            : AppColors.primary.withValues(alpha: 0.18),
                       ),
                     ),
                   ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  minHeight: 4,
-                  value: isAudioPlaying ? progress : 0,
-                  backgroundColor: isMine
-                      ? Colors.white.withValues(alpha: 0.25)
-                      : AppColors.primaryTint10,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    isMine ? Colors.white : AppColors.primary,
-                  ),
                 ),
               ),
               const SizedBox(height: 6),
               Row(
                 children: [
                   Text(
-                    '${_formatDuration(isAudioPlaying ? playbackPosition : Duration.zero)} / ${_formatDuration(playbackDuration)}',
+                    _formatDuration(
+                      isAudioPlaying ? playbackPosition : playbackDuration,
+                    ),
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 10,
-                      color: isMine ? Colors.white70 : AppColors.textSecondaryLight,
+                      color: isMine
+                          ? Colors.white70
+                          : AppColors.textSecondaryLight,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -949,7 +1069,8 @@ class _MessageBubble extends StatelessWidget {
                       onSpeedTap?.call();
                     },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: isMine
                             ? Colors.white.withValues(alpha: 0.18)
@@ -984,7 +1105,8 @@ class _MessageBubble extends StatelessWidget {
     if (message.replyToPreview != null && message.replyToPreview!.isNotEmpty) {
       final parts = message.replyToPreview!.split(': ');
       final senderName = parts.length > 1 ? parts.first : 'Reply';
-      final previewBody = parts.length > 1 ? parts.sublist(1).join(': ') : parts.first;
+      final previewBody =
+          parts.length > 1 ? parts.sublist(1).join(': ') : parts.first;
       replyQuote = Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1104,7 +1226,8 @@ class _MessageBubble extends StatelessWidget {
           const CircleAvatar(
             radius: 16,
             backgroundColor: AppColors.primaryTint10,
-            child: Icon(Icons.person_rounded, size: 18, color: AppColors.primary),
+            child:
+                Icon(Icons.person_rounded, size: 18, color: AppColors.primary),
           ),
           const SizedBox(width: 8),
           Column(
@@ -1150,7 +1273,8 @@ class _MessageBubble extends StatelessWidget {
   }
 
   IconData _statusIcon() {
-    final localOnlyAudio = message.messageType == 'audio' && !_isRemotePath(message.fileUrl);
+    final localOnlyAudio =
+        message.messageType == 'audio' && !_isRemotePath(message.fileUrl);
     if (localOnlyAudio) {
       return Icons.schedule_rounded;
     }
@@ -1161,7 +1285,8 @@ class _MessageBubble extends StatelessWidget {
   }
 
   Color _statusColor() {
-    final localOnlyAudio = message.messageType == 'audio' && !_isRemotePath(message.fileUrl);
+    final localOnlyAudio =
+        message.messageType == 'audio' && !_isRemotePath(message.fileUrl);
     if (localOnlyAudio) {
       return AppColors.textSecondaryLight;
     }
@@ -1172,7 +1297,8 @@ class _MessageBubble extends StatelessWidget {
   }
 
   String _statusLabel() {
-    final localOnlyAudio = message.messageType == 'audio' && !_isRemotePath(message.fileUrl);
+    final localOnlyAudio =
+        message.messageType == 'audio' && !_isRemotePath(message.fileUrl);
     if (localOnlyAudio) {
       return 'Sending';
     }
@@ -1261,7 +1387,9 @@ class _InputBar extends StatelessWidget {
                   children: [
                     Icon(
                       Icons.fiber_manual_record_rounded,
-                      color: willCancelRecording ? AppColors.danger : AppColors.primary,
+                      color: willCancelRecording
+                          ? AppColors.danger
+                          : AppColors.primary,
                       size: 12,
                     ),
                     const SizedBox(width: 6),
@@ -1270,11 +1398,14 @@ class _InputBar extends StatelessWidget {
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: willCancelRecording ? AppColors.danger : AppColors.primary,
+                        color: willCancelRecording
+                            ? AppColors.danger
+                            : AppColors.primary,
                       ),
                     ),
                     const SizedBox(width: 10),
-                    _RecordWave(phase: recordWavePhase, isDanger: willCancelRecording),
+                    _RecordWave(
+                        phase: recordWavePhase, isDanger: willCancelRecording),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Align(
@@ -1327,7 +1458,8 @@ class _InputBar extends StatelessWidget {
                       isRecording: isRecording,
                       willCancel: willCancelRecording,
                       dragDy: recordDragDy,
-                      onHintTap: () => _showInfo(context, 'Hold the mic to record. Slide up to lock. Slide left to cancel.'),
+                      onHintTap: () => _showInfo(context,
+                          'Hold the mic to record. Slide up to lock. Slide left to cancel.'),
                       onLongPressStart: onRecordStart,
                       onLongPressMove: onRecordDrag,
                       onLongPressEnd: onRecordEnd,
@@ -1349,9 +1481,11 @@ class _InputBar extends StatelessWidget {
                     decoration: InputDecoration(
                       hintText: 'Type a message...',
                       hintStyle: GoogleFonts.plusJakartaSans(fontSize: 14),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+                        borderRadius:
+                            BorderRadius.circular(AppDimensions.radiusFull),
                         borderSide: BorderSide.none,
                       ),
                       filled: true,
@@ -1394,7 +1528,67 @@ class _InputBar extends StatelessWidget {
   }
 
   static void _showInfo(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+class _AudioWaveform extends StatelessWidget {
+  final double progress;
+  final Color activeColor;
+  final Color inactiveColor;
+
+  const _AudioWaveform({
+    required this.progress,
+    required this.activeColor,
+    required this.inactiveColor,
+  });
+
+  static const List<double> _barHeights = [
+    8,
+    14,
+    10,
+    18,
+    12,
+    20,
+    9,
+    16,
+    13,
+    19,
+    11,
+    17,
+    8,
+    14,
+    10,
+    18,
+    12,
+    20,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final activeBars = (_barHeights.length * progress).round();
+
+    return SizedBox(
+      height: 26,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: List.generate(_barHeights.length, (index) {
+          final isActive = index < activeBars;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOut,
+            width: 3,
+            height: _barHeights[index],
+            decoration: BoxDecoration(
+              color: isActive ? activeColor : inactiveColor,
+              borderRadius: BorderRadius.circular(999),
+            ),
+          );
+        }),
+      ),
+    );
   }
 }
 
@@ -1482,7 +1676,9 @@ class _LockGuide extends StatelessWidget {
           Icon(
             progress > 0.94 ? Icons.lock_rounded : Icons.lock_open_rounded,
             size: 16,
-            color: progress > 0.94 ? AppColors.primary : AppColors.textSecondaryLight,
+            color: progress > 0.94
+                ? AppColors.primary
+                : AppColors.textSecondaryLight,
           ),
           const SizedBox(height: 2),
           Container(
@@ -1675,7 +1871,8 @@ class _SwipeToReplyBubbleState extends State<_SwipeToReplyBubble>
     );
     _snapCtrl.addListener(() {
       setState(() {
-        _dragX = _snapStartX * (1.0 - Curves.easeOut.transform(_snapCtrl.value));
+        _dragX =
+            _snapStartX * (1.0 - Curves.easeOut.transform(_snapCtrl.value));
       });
     });
     _snapCtrl.addStatusListener((status) {
@@ -1802,7 +1999,8 @@ class _ReplyPreviewBar extends StatelessWidget {
           ),
           GestureDetector(
             onTap: onClear,
-            child: const Icon(Icons.close_rounded, size: 18, color: AppColors.textSecondaryLight),
+            child: const Icon(Icons.close_rounded,
+                size: 18, color: AppColors.textSecondaryLight),
           ),
         ],
       ),
@@ -1815,7 +2013,8 @@ class _ToolbarBtn extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
 
-  const _ToolbarBtn({required this.icon, required this.label, required this.onTap});
+  const _ToolbarBtn(
+      {required this.icon, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {

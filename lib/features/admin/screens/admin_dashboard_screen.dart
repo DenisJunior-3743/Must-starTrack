@@ -759,6 +759,27 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   icon: Icons.auto_graph_outlined,
                   title: 'AI Recommendations',
                 ),
+                ListTile(
+                  dense: true,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+                  ),
+                  leading: const Icon(Icons.hub_rounded, size: 20),
+                  title: Text(
+                    'Recommendation Web Lab',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  onTap: () {
+                    final scaffold = Scaffold.maybeOf(context);
+                    if (scaffold?.isDrawerOpen ?? false) {
+                      Navigator.of(context).pop();
+                    }
+                    context.push(RouteNames.adminRecommendationLab);
+                  },
+                ),
                 navTile(
                   tab: 6,
                   icon: Icons.history_outlined,

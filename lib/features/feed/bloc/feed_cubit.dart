@@ -27,14 +27,18 @@ import 'package:flutter/foundation.dart';
 import '../../../data/local/dao/activity_log_dao.dart';
 import '../../../core/utils/media_path_utils.dart';
 import '../../../data/local/schema/database_schema.dart';
+import '../../../data/local/dao/comment_dao.dart';
 import '../../../data/local/dao/post_dao.dart';
 import '../../../data/local/dao/recommendation_log_dao.dart';
 import '../../../data/local/dao/sync_queue_dao.dart';
 import '../../../data/local/dao/user_dao.dart';
 import '../../../core/router/route_guards.dart';
+import '../../../core/utils/video_cache_utils.dart';
 import '../../../data/models/post_model.dart';
+import '../../../data/models/skill_pattern_model.dart';
 import '../../../data/remote/firestore_service.dart';
 import '../../../data/remote/recommender_service.dart';
+import '../../../data/remote/skill_pattern_service.dart';
 import '../../../data/remote/sync_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
 
@@ -188,7 +192,9 @@ class FeedCubit extends Cubit<FeedState> {
   final PostDao _postDao;
   final UserDao _userDao;
   final ActivityLogDao _activityLogDao;
+  final CommentDao _commentDao;
   final RecommenderService _recommenderService;
+  final SkillPatternService? _skillPatternService;
   final RecommendationLogDao? _recLogDao;
   final SyncQueueDao _syncQueue;
   final SyncService? _syncService;
@@ -200,15 +206,25 @@ class FeedCubit extends Cubit<FeedState> {
   Timer? _feedRefreshDebounce;
   String? _lastObservedAuthUserId;
   DateTime? _lastSuccessfulLoadAt;
+  DateTime? _lastHybridRerankAt;
+  bool _hybridRerankInFlight = false;
   static const _pageSize = 40;
   static const _targetAuthorGroups = 12;
   static const _maxPrefetchPages = 6;
+  static const _videoPrefetchBatchSize = 6;
+  static const _fastStartVideoSampleSize = 18;
+  DateTime? _lastVideoPrefetchAt;
+  String? _lastFeedUserId;
+  final Set<String> _videoPrefetchedSources = <String>{};
+  final Set<String> _videoPrefetchInFlight = <String>{};
 
   FeedCubit({
     PostDao? postDao,
     UserDao? userDao,
     ActivityLogDao? activityLogDao,
+    CommentDao? commentDao,
     RecommenderService? recommenderService,
+    SkillPatternService? skillPatternService,
     RecommendationLogDao? recLogDao,
     SyncQueueDao? syncQueue,
     SyncService? syncService,
@@ -218,7 +234,9 @@ class FeedCubit extends Cubit<FeedState> {
   })  : _postDao = postDao ?? PostDao(),
         _userDao = userDao ?? UserDao(),
         _activityLogDao = activityLogDao ?? ActivityLogDao(),
+        _commentDao = commentDao ?? CommentDao(),
         _recommenderService = recommenderService ?? RecommenderService(),
+        _skillPatternService = skillPatternService,
         _recLogDao = recLogDao,
         _syncQueue = syncQueue ?? SyncQueueDao(),
         _syncService = syncService,
@@ -242,7 +260,13 @@ class FeedCubit extends Cubit<FeedState> {
       _lastObservedAuthUserId = nextUserId;
       // Always reset to "All" when auth identity changes so the new session
       // starts from an unfiltered feed. Users can then apply filters in UI.
-      unawaited(loadFeed(filter: const FeedFilter(), forceSync: true));
+      final shouldForceSync = nextUserId != null && nextUserId.isNotEmpty;
+      unawaited(
+        loadFeed(
+          filter: const FeedFilter(),
+          forceSync: shouldForceSync,
+        ),
+      );
     });
   }
 
@@ -306,11 +330,31 @@ class FeedCubit extends Cubit<FeedState> {
     bool forceSync = false,
   }) async {
     _ensureAuthListener();
-    final shouldForceSync = forceSync ||
-        (state is FeedInitial && (_activeUserId?.isNotEmpty ?? false));
-    _emitIfOpen(const FeedLoading());
+    final shouldForceSync = forceSync;
+    final requestedFilter = filter ?? const FeedFilter();
+    final activeUserId = _activeUserId;
+    final isUserContextChanged = _lastFeedUserId != activeUserId;
+    final shouldPrimeFastStart = _shouldPrimeFastStartVideos(
+      filter: requestedFilter,
+      isUserContextChanged: isUserContextChanged,
+    );
+
+    var didEmitFastStart = false;
+    if (shouldPrimeFastStart) {
+      didEmitFastStart = await _emitFastStartVideos(
+        filter: requestedFilter,
+      );
+    }
+
+    final shouldBlockForUserSwitch =
+        isUserContextChanged && activeUserId != null && activeUserId.isNotEmpty;
+    final shouldBlockWithLoading =
+        !didEmitFastStart && (state is! FeedLoaded || shouldBlockForUserSwitch);
+    if (shouldBlockWithLoading) {
+      _emitIfOpen(const FeedLoading());
+    }
+
     try {
-      final requestedFilter = filter ?? const FeedFilter();
       final startTime = DateTime.now();
       debugPrint(
         '[FeedCubit] loadFeed starting '
@@ -335,6 +379,7 @@ class FeedCubit extends Cubit<FeedState> {
       final batch = await _loadGroupedBatch(
         filter: f,
         existingAuthorIds: const <String>{},
+        useHybridRanking: false,
       );
       final queryEndTime = DateTime.now();
       debugPrint(
@@ -342,23 +387,161 @@ class FeedCubit extends Cubit<FeedState> {
         'posts=${batch.posts.length} '
         'totalDuration=${queryEndTime.difference(startTime).inMilliseconds}ms',
       );
+      final previous = state;
+      final stablePosts = previous is FeedLoaded && previous.filter == f
+          ? _stabilizeVideoFeedTransition(
+              filter: f,
+              previousPosts: previous.posts,
+              nextPosts: batch.posts,
+            )
+          : batch.posts;
       _emitIfOpen(FeedLoaded(
-        posts: batch.posts,
+        posts: stablePosts,
         hasMore: batch.hasMore,
         filter: f,
       ));
+      _lastFeedUserId = _activeUserId;
       _lastSuccessfulLoadAt = DateTime.now();
       _startFeedRealtimeWatcher();
+      _prefetchAuthenticatedVideos(batch.posts);
+
+      unawaited(_maybeRerankWithHybrid(filter: f));
 
       if (!shouldForceSync) {
         unawaited(_syncFeedInBackground(filter: f));
       }
     } catch (e) {
       debugPrint('Feed load error: $e');
-      _emitIfOpen(const FeedError(
-        'Could not load your feed right now. Please try again.',
-      ));
+      if (state is! FeedLoaded) {
+        _emitIfOpen(const FeedError(
+          'Could not load your feed right now. Please try again.',
+        ));
+      }
     }
+  }
+
+  bool _shouldPrimeFastStartVideos({
+    required FeedFilter filter,
+    required bool isUserContextChanged,
+  }) {
+    if (filter.isActive) return false;
+
+    final current = state;
+    if (current is FeedLoaded &&
+        current.posts.isNotEmpty &&
+        !isUserContextChanged) {
+      return false;
+    }
+    return true;
+  }
+
+  Future<bool> _emitFastStartVideos({
+    required FeedFilter filter,
+  }) async {
+    final uid = _activeUserId;
+    if (uid != null && uid.isNotEmpty) {
+      final didSeedFaculty = await _emitFacultyVideoFastStart(filter: filter);
+      if (didSeedFaculty) {
+        return true;
+      }
+    }
+    return _emitGlobalVideoFastStart(filter: filter);
+  }
+
+  Future<bool> _emitFacultyVideoFastStart({
+    required FeedFilter filter,
+  }) async {
+    try {
+      final faculty = await _resolveViewerFaculty();
+      if (faculty == null || faculty.isEmpty) return false;
+
+      final facultyPosts = await _postDao.getFeedPage(
+        pageSize: _pageSize * 2,
+        filterFaculty: faculty,
+        currentUserId: _activeUserId,
+        includePendingForAdmin: _canViewPendingModeration,
+      );
+      final videoPool = facultyPosts
+          .where((post) => !_isExpiredAdvert(post))
+          .where(_isVideoPost)
+          .toList(growable: false);
+      if (videoPool.isEmpty) return false;
+
+      final randomized = List<PostModel>.from(videoPool)..shuffle(Random());
+      final seeded =
+          randomized.take(_fastStartVideoSampleSize).toList(growable: false);
+      final hasMore = videoPool.length > seeded.length;
+
+      _emitIfOpen(FeedLoaded(
+        posts: seeded,
+        hasMore: hasMore,
+        filter: filter,
+      ));
+      _lastFeedUserId = _activeUserId;
+      _startFeedRealtimeWatcher();
+      _prefetchAuthenticatedVideos(seeded);
+      debugPrint(
+        '[FeedCubit] fast-start seeded '
+        'faculty=$faculty videos=${seeded.length}',
+      );
+      return true;
+    } catch (e) {
+      debugPrint('[FeedCubit] fast-start skipped: $e');
+      return false;
+    }
+  }
+
+  Future<bool> _emitGlobalVideoFastStart({
+    required FeedFilter filter,
+  }) async {
+    try {
+      final posts = await _postDao.getFeedPage(
+        pageSize: _pageSize * 2,
+        currentUserId: _activeUserId,
+        includePendingForAdmin: _canViewPendingModeration,
+      );
+      final videoPool = posts
+          .where((post) => !_isExpiredAdvert(post))
+          .where(_isVideoPost)
+          .toList(growable: false);
+      if (videoPool.isEmpty) return false;
+
+      final randomized = List<PostModel>.from(videoPool)..shuffle(Random());
+      final seeded =
+          randomized.take(_fastStartVideoSampleSize).toList(growable: false);
+      final hasMore = videoPool.length > seeded.length;
+
+      _emitIfOpen(FeedLoaded(
+        posts: seeded,
+        hasMore: hasMore,
+        filter: filter,
+      ));
+      _lastFeedUserId = _activeUserId;
+      _startFeedRealtimeWatcher();
+      _prefetchAuthenticatedVideos(seeded);
+      debugPrint(
+        '[FeedCubit] fast-start seeded '
+        'scope=global videos=${seeded.length}',
+      );
+      return true;
+    } catch (e) {
+      debugPrint('[FeedCubit] global fast-start skipped: $e');
+      return false;
+    }
+  }
+
+  Future<String?> _resolveViewerFaculty() async {
+    final fromAuth = _authCubit?.currentUser?.profile?.faculty?.trim();
+    if (fromAuth != null && fromAuth.isNotEmpty) {
+      return fromAuth;
+    }
+
+    final uid = _activeUserId;
+    if (uid == null || uid.isEmpty) return null;
+    final localUser = await _userDao.getUserById(uid);
+    final fromLocal = localUser?.profile?.faculty?.trim();
+    if (fromLocal == null || fromLocal.isEmpty) return null;
+    return fromLocal;
   }
 
   Future<void> _syncFeedInBackground({required FeedFilter filter}) async {
@@ -374,15 +557,23 @@ class FeedCubit extends Cubit<FeedState> {
       final refreshedBatch = await _loadGroupedBatch(
         filter: filter,
         existingAuthorIds: const <String>{},
+        useHybridRanking: false,
       );
 
       final latest = state;
       if (latest is FeedLoaded && latest.filter == filter) {
+        final stablePosts = _stabilizeVideoFeedTransition(
+          filter: filter,
+          previousPosts: latest.posts,
+          nextPosts: refreshedBatch.posts,
+        );
         _emitIfOpen(latest.copyWith(
-          posts: refreshedBatch.posts,
+          posts: stablePosts,
           hasMore: refreshedBatch.hasMore,
         ));
+        _lastFeedUserId = _activeUserId;
         _lastSuccessfulLoadAt = DateTime.now();
+        unawaited(_maybeRerankWithHybrid(filter: filter));
       }
     } catch (e) {
       debugPrint('[FeedCubit] background sync failed: $e');
@@ -412,15 +603,77 @@ class FeedCubit extends Cubit<FeedState> {
         hasMore: batch.hasMore,
         isLoadingMore: false,
       ));
+      _prefetchAuthenticatedVideos(batch.posts);
     } catch (e) {
       _emitIfOpen(current.copyWith(isLoadingMore: false));
     }
+  }
+
+  void _prefetchAuthenticatedVideos(List<PostModel> posts) {
+    final uid = _activeUserId;
+    if (uid == null || uid.isEmpty) return;
+    if (posts.isEmpty) return;
+
+    final lastRun = _lastVideoPrefetchAt;
+    if (lastRun != null &&
+        DateTime.now().difference(lastRun) < const Duration(seconds: 20)) {
+      return;
+    }
+    _lastVideoPrefetchAt = DateTime.now();
+
+    var scheduled = 0;
+    for (final post in posts) {
+      final source = _resolveVideoSource(post);
+      if (source == null) continue;
+      if (_videoPrefetchedSources.contains(source)) continue;
+      if (!_videoPrefetchInFlight.add(source)) continue;
+
+      scheduled++;
+      unawaited(() async {
+        try {
+          await resolveVideoFile(getPreferredPlaybackSource(source));
+          _videoPrefetchedSources.add(source);
+        } catch (_) {
+          // Best effort prefetch: keep playback path resilient on failures.
+        } finally {
+          _videoPrefetchInFlight.remove(source);
+        }
+      }());
+
+      if (scheduled >= _videoPrefetchBatchSize) {
+        break;
+      }
+    }
+  }
+
+  String? _resolveVideoSource(PostModel post) {
+    for (final mediaUrl in post.mediaUrls) {
+      if (_isVideoCandidate(mediaUrl)) {
+        return mediaUrl;
+      }
+    }
+
+    final youtube = post.youtubeUrl?.trim();
+    if (youtube != null && youtube.isNotEmpty && _isVideoCandidate(youtube)) {
+      return youtube;
+    }
+    return null;
+  }
+
+  bool _isVideoCandidate(String source) {
+    if (isVideoMediaPath(source)) return true;
+    final lower = source.toLowerCase();
+    if (RegExp(r'\.(mp4|mov|m4v|3gp|webm|mkv)(\?|$)').hasMatch(lower)) {
+      return true;
+    }
+    return lower.contains('/videos/') || lower.contains('video/upload');
   }
 
   Future<_FeedBatchResult> _loadGroupedBatch({
     required FeedFilter filter,
     required Set<String> existingAuthorIds,
     int? afterCursor,
+    bool useHybridRanking = true,
   }) async {
     final collectedPosts = <PostModel>[];
     final seenPostIds = <String>{};
@@ -500,7 +753,7 @@ class FeedCubit extends Cubit<FeedState> {
 
     final rankedPosts = await _rankPosts(
       posts: collectedPosts,
-      useHybrid: afterCursor == null,
+      useHybrid: useHybridRanking && afterCursor == null,
     );
 
     var finalPosts = rankedPosts.isEmpty && collectedPosts.isNotEmpty
@@ -521,6 +774,42 @@ class FeedCubit extends Cubit<FeedState> {
     return _FeedBatchResult(posts: finalPosts, hasMore: hasMore);
   }
 
+  Future<void> _maybeRerankWithHybrid({
+    required FeedFilter filter,
+    Duration minInterval = const Duration(minutes: 3),
+  }) async {
+    if (_hybridRerankInFlight) return;
+
+    final current = state;
+    if (current is! FeedLoaded || current.filter != filter) return;
+    if (current.posts.isEmpty) return;
+    if (_activeUserId == null || _activeUserId!.isEmpty) return;
+
+    final last = _lastHybridRerankAt;
+    if (last != null && DateTime.now().difference(last) < minInterval) {
+      return;
+    }
+
+    _hybridRerankInFlight = true;
+    try {
+      final reranked = await _rankPosts(
+        posts: current.posts,
+        useHybrid: true,
+      );
+
+      final latest = state;
+      if (latest is FeedLoaded && latest.filter == filter) {
+        _emitIfOpen(latest.copyWith(posts: reranked));
+        _lastFeedUserId = _activeUserId;
+        _lastHybridRerankAt = DateTime.now();
+      }
+    } catch (e) {
+      debugPrint('[FeedCubit] hybrid rerank skipped: $e');
+    } finally {
+      _hybridRerankInFlight = false;
+    }
+  }
+
   Future<List<PostModel>> _rankPosts({
     required List<PostModel> posts,
     required bool useHybrid,
@@ -533,8 +822,9 @@ class FeedCubit extends Cubit<FeedState> {
     log.writeln('  Candidates : ${posts.length}');
 
     // ── Fallback helper ─────────────────────────────────────────────────────
-    List<PostModel> dateSorted() =>
-        ([...posts]..sort((a, b) => b.createdAt.compareTo(a.createdAt)));
+    List<PostModel> dateSorted([List<PostModel>? input]) => ([
+          ...(input ?? posts)
+        ]..sort((a, b) => b.createdAt.compareTo(a.createdAt)));
 
     if (posts.isEmpty) {
       log.writeln('  ⚠  Nothing to rank — list is empty');
@@ -592,6 +882,10 @@ class FeedCubit extends Cubit<FeedState> {
         await _activityLogDao.getPostRatingSignalsForPosts(
       posts.map((post) => post.id).toList(),
     );
+    final commentSnippetsByPost =
+        await _commentDao.getRecentCommentSnippetsForPosts(
+      posts.map((post) => post.id).toList(),
+    );
     log.writeln(
         '  Viewed cats: ${recentlyViewedCategories.isEmpty ? 'none yet' : recentlyViewedCategories.take(4).join(', ')}');
     log.writeln(
@@ -599,26 +893,74 @@ class FeedCubit extends Cubit<FeedState> {
     log.writeln(
         '  Ratings    : lecturer=${postRatingSignals.lecturerRatings.length}, student=${postRatingSignals.studentRatings.length}');
     log.writeln(
-        '  Mode       : ${useHybrid ? 'hybrid (local + Gemini rerank)' : 'local scoring only'}');
+        '  Comments   : snippets for ${commentSnippetsByPost.length} post(s)');
+
+    // ── Stage 1: video candidate queue (behavior + preference filter) ──────
+    final videoQueue = _recommenderService.buildFeedVideoQueue(
+      user: user,
+      candidates: posts,
+      recentlyViewedCategories: recentlyViewedCategories,
+      recentSearchTerms: recentSearchTerms,
+    );
+    final eligibleVideoIds = videoQueue
+        .where((item) => item.isEligible)
+        .map((item) => item.post.id)
+        .toSet();
+    final filteredPool = posts.where((post) {
+      if (!_isVideoPost(post)) return true;
+      return eligibleVideoIds.contains(post.id);
+    }).toList(growable: false);
+    final candidatePool = filteredPool.isEmpty ? posts : filteredPool;
+
+    final eligibleVideos = videoQueue.where((item) => item.isEligible).length;
+    final droppedVideos = videoQueue.length - eligibleVideos;
+    log.writeln(
+        '  Queue      : videos=${videoQueue.length}, eligible=$eligibleVideos, dropped=$droppedVideos');
+    if (videoQueue.isNotEmpty) {
+      final preview = videoQueue
+          .take(3)
+          .map((item) =>
+              '${item.post.id}:${item.eligibilityScore.toStringAsFixed(2)}${item.isEligible ? '✓' : 'x'}')
+          .join(' | ');
+      log.writeln('  Queue top3 : $preview');
+    }
+
+    log.writeln(
+        '  Mode       : ${useHybrid ? 'hybrid (local + OpenAI rerank)' : 'local scoring only'}');
     log.writeln('──────────────────────────────────────────────────────');
+
+    SkillPatternResult? skillPatterns;
+    if (_skillPatternService != null) {
+      skillPatterns = await _skillPatternService.buildFromContext(
+        userSkills: user.profile?.skills ?? const <String>[],
+        candidatePosts: candidatePool,
+        mode: useHybrid ? 'personalized' : 'feed',
+      );
+      log.writeln(
+          '  Skill AI   : source=${skillPatterns.source}, clusters=${skillPatterns.clusters.length}, skills=${skillPatterns.normalizedSkills.length}');
+    }
 
     // ── Run ranker ────────────────────────────────────────────────────────────
     final ranked = useHybrid
         ? await _recommenderService.rankHybrid(
             user: user,
-            candidates: posts,
+            candidates: candidatePool,
+            skillPatterns: skillPatterns,
             recentlyViewedCategories: recentlyViewedCategories,
             recentSearchTerms: recentSearchTerms,
             lecturerRatingsByPost: postRatingSignals.lecturerRatings,
             studentRatingsByPost: postRatingSignals.studentRatings,
+            commentSnippetsByPost: commentSnippetsByPost,
           )
         : _recommenderService.rankLocally(
             user: user,
-            candidates: posts,
+            candidates: candidatePool,
+            skillPatterns: skillPatterns,
             recentlyViewedCategories: recentlyViewedCategories,
             recentSearchTerms: recentSearchTerms,
             lecturerRatingsByPost: postRatingSignals.lecturerRatings,
             studentRatingsByPost: postRatingSignals.studentRatings,
+            commentSnippetsByPost: commentSnippetsByPost,
           );
 
     // ── Log ranked results ────────────────────────────────────────────────────
@@ -649,7 +991,7 @@ class FeedCubit extends Cubit<FeedState> {
 
     // ── Guarantee non-empty result ────────────────────────────────────────────
     if (ranked.isEmpty) {
-      final sorted = dateSorted();
+      final sorted = dateSorted(candidatePool);
       log.writeln('  FALLBACK   : date-descending (${sorted.length} posts)');
       log.writeln('══════════════════════════════════════════════════════');
       debugPrint(log.toString());
@@ -683,18 +1025,34 @@ class FeedCubit extends Cubit<FeedState> {
 
     // Log top 25 scored posts to recommendation_logs (SQLite + Firestore)
     if (_recLogDao != null && ranked.isNotEmpty) {
+      final queueEntries = videoQueue.take(25).map((item) {
+        final queueReasons = <String>[
+          ...item.reasons,
+          'queue_score:${item.eligibilityScore.toStringAsFixed(3)}',
+          'queue_eligible:${item.isEligible ? 1 : 0}',
+        ];
+        return RecommendationLogEntry(
+          userId: currentUserId,
+          itemId: item.post.id,
+          itemType: 'post',
+          algorithm: 'feed_video_queue',
+          score: item.eligibilityScore,
+          reasons: queueReasons,
+        );
+      }).toList();
+
       final algoLabel = useHybrid ? 'hybrid' : 'local';
-      final entries = ranked
-          .take(25)
-          .map((r) => RecommendationLogEntry(
-                userId: currentUserId,
-                itemId: r.post.id,
-                itemType: 'post',
-                algorithm: algoLabel,
-                score: r.score,
-                reasons: r.reasons,
-              ))
-          .toList();
+      final entries = [
+        ...queueEntries,
+        ...ranked.take(25).map((r) => RecommendationLogEntry(
+              userId: currentUserId,
+              itemId: r.post.id,
+              itemType: 'post',
+              algorithm: algoLabel,
+              score: r.score,
+              reasons: r.reasons,
+            )),
+      ];
       _recLogDao.insertBatch(entries).catchError(
             (e) => debugPrint('[FeedCubit] rec log failed: $e'),
           );
@@ -781,6 +1139,39 @@ class FeedCubit extends Cubit<FeedState> {
       }
     }
     return false;
+  }
+
+  List<PostModel> _stabilizeVideoFeedTransition({
+    required FeedFilter filter,
+    required List<PostModel> previousPosts,
+    required List<PostModel> nextPosts,
+  }) {
+    if (filter.isActive) return nextPosts;
+    if (previousPosts.isEmpty) return nextPosts;
+    if (nextPosts.isEmpty) return previousPosts;
+
+    final previousVideos =
+        previousPosts.where(_isVideoPost).toList(growable: false);
+    final hasPreviousVideos = previousVideos.isNotEmpty;
+    final hasNextVideos = nextPosts.any(_isVideoPost);
+    if (!hasPreviousVideos || hasNextVideos) {
+      return nextPosts;
+    }
+
+    // Keep currently playable videos visible and append fresh feed data.
+    final merged = <PostModel>[];
+    final seenIds = <String>{};
+    for (final post in previousVideos) {
+      if (seenIds.add(post.id)) {
+        merged.add(post);
+      }
+    }
+    for (final post in nextPosts) {
+      if (seenIds.add(post.id)) {
+        merged.add(post);
+      }
+    }
+    return merged;
   }
 
   int _countMovedSlots(List<PostModel> original, List<PostModel> adjusted) {
@@ -1050,6 +1441,16 @@ class FeedCubit extends Cubit<FeedState> {
     if (index == -1) return;
 
     final original = current.posts[index];
+    if (original.authorId == currentUserId) {
+      _traceAction(
+        'collaborate',
+        'blocked_self_target',
+        userId: currentUserId,
+        details: {'postId': postId, 'authorId': original.authorId},
+      );
+      return;
+    }
+
     _traceAction(
       'collaborate',
       'ui_tap',
@@ -1616,10 +2017,49 @@ class FeedCubit extends Cubit<FeedState> {
       _feedRefreshDebounce = Timer(const Duration(milliseconds: 800), () {
         final current = state;
         if (current is FeedLoaded) {
-          unawaited(_syncFeedInBackground(filter: current.filter));
+          unawaited(_refreshFeedFromRealtimeTick(filter: current.filter));
         }
       });
     });
+  }
+
+  Future<void> _refreshFeedFromRealtimeTick({
+    required FeedFilter filter,
+  }) async {
+    final current = state;
+    if (current is! FeedLoaded) return;
+
+    final candidatePostIds =
+        current.posts.take(120).map((post) => post.id).toList(growable: false);
+
+    try {
+      await _syncService?.syncRealtimeInteractionSlices(
+        candidatePostIds: candidatePostIds,
+      );
+
+      final refreshedBatch = await _loadGroupedBatch(
+        filter: filter,
+        existingAuthorIds: const <String>{},
+        useHybridRanking: false,
+      );
+
+      final latest = state;
+      if (latest is FeedLoaded && latest.filter == filter) {
+        final stablePosts = _stabilizeVideoFeedTransition(
+          filter: filter,
+          previousPosts: latest.posts,
+          nextPosts: refreshedBatch.posts,
+        );
+        _emitIfOpen(latest.copyWith(
+          posts: stablePosts,
+          hasMore: refreshedBatch.hasMore,
+        ));
+        _lastFeedUserId = _activeUserId;
+        _lastSuccessfulLoadAt = DateTime.now();
+      }
+    } catch (e) {
+      debugPrint('[FeedCubit] realtime feed refresh failed: $e');
+    }
   }
 
   void _stopFeedRealtimeWatcher() {

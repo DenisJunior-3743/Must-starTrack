@@ -239,20 +239,22 @@ class DatabaseHelper {
             '[DatabaseHelper] Posts table missing columns after v8 migration: $missing');
       }
 
-      debugPrint('✅ Database v8 migration complete: posts table columns verified');
+      debugPrint(
+          '✅ Database v8 migration complete: posts table columns verified');
     }
     if (oldVersion < 9) {
       await _ensureColumn(
           db, DatabaseSchema.tableMessages, 'reply_to_id', 'TEXT');
       await _ensureColumn(
           db, DatabaseSchema.tableMessages, 'reply_to_preview', 'TEXT');
-      debugPrint('✅ Database v9 migration complete: reply columns added to messages');
+      debugPrint(
+          '✅ Database v9 migration complete: reply columns added to messages');
     }
     if (oldVersion < 10) {
       // Create faculties and courses tables for master data management
       await db.execute(DatabaseSchema.createFaculties);
       await db.execute(DatabaseSchema.createCourses);
-      
+
       // Create indexes for performance
       await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_courses_faculty ON ${DatabaseSchema.tableCourses}(faculty_id)');
@@ -260,8 +262,9 @@ class DatabaseHelper {
           'CREATE INDEX IF NOT EXISTS idx_courses_active ON ${DatabaseSchema.tableCourses}(is_active)');
       await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_faculties_active ON ${DatabaseSchema.tableFaculties}(is_active)');
-      
-      debugPrint('✅ Database v10 migration complete: faculties and courses tables created');
+
+      debugPrint(
+          '✅ Database v10 migration complete: faculties and courses tables created');
     }
     if (oldVersion < 11) {
       await db.execute(DatabaseSchema.createRecommendationLogs);
@@ -271,16 +274,39 @@ class DatabaseHelper {
           'CREATE INDEX IF NOT EXISTS idx_rec_logs_algo ON ${DatabaseSchema.tableRecommendationLogs}(algorithm)');
       await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_rec_logs_time ON ${DatabaseSchema.tableRecommendationLogs}(logged_at DESC)');
-      debugPrint('✅ Database v11 migration complete: recommendation_logs table created');
+      debugPrint(
+          '✅ Database v11 migration complete: recommendation_logs table created');
     }
     if (oldVersion < 12) {
       await _ensureGroupSchema(db);
-      debugPrint('✅ Database v12 migration complete: groups and group_members created');
+      debugPrint(
+          '✅ Database v12 migration complete: groups and group_members created');
+    }
+    if (oldVersion < 13) {
+      await _ensureColumn(
+        db,
+        DatabaseSchema.tableCollabRequests,
+        'receiver_viewed_at',
+        'TEXT',
+      );
+      debugPrint(
+          '✅ Database v13 migration complete: collaboration request viewed tracking added');
     }
   }
 
   Future<void> _onOpen(Database db) async {
+    await _ensureCoreIndexes(db);
     await _ensureGroupSchema(db);
+  }
+
+  Future<void> _ensureCoreIndexes(Database db) async {
+    for (final idx in DatabaseSchema.indexes) {
+      try {
+        await db.execute(idx);
+      } catch (error) {
+        debugPrint('[DatabaseHelper] Skipped index init: $error');
+      }
+    }
   }
 
   Future<void> _ensureGroupSchema(Database db) async {

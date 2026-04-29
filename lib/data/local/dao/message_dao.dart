@@ -46,7 +46,8 @@ class MessageModel {
         fileName: map['file_name'] as String?,
         fileSize: map['file_size'] as String?,
         createdAt: _dateFromDb(map['created_at'] ?? map['sent_at']),
-        isRead: (map['is_read'] as int? ?? (map['read_at'] != null ? 1 : 0)) == 1,
+        isRead:
+            (map['is_read'] as int? ?? (map['read_at'] != null ? 1 : 0)) == 1,
         isDeleted: (map['is_deleted'] as int? ?? 0) == 1,
         replyToId: map['reply_to_id'] as String?,
         replyToPreview: map['reply_to_preview'] as String?,
@@ -111,7 +112,8 @@ class ConversationSummary {
     this.isPeerLecturer = false,
   });
 
-  factory ConversationSummary.fromMap(Map<String, dynamic> map) => ConversationSummary(
+  factory ConversationSummary.fromMap(Map<String, dynamic> map) =>
+      ConversationSummary(
         id: map['id'] as String,
         peerId: map['peer_id'] as String,
         peerName: map['peer_name'] as String? ?? 'Unknown',
@@ -134,6 +136,7 @@ class CollaborationInboxItem {
   final String status;
   final bool isIncoming;
   final DateTime createdAt;
+  final DateTime? receiverViewedAt;
   final double? aiFitScore;
   final List<String> aiReasons;
   final List<String> aiMatchedSkills;
@@ -149,12 +152,14 @@ class CollaborationInboxItem {
     required this.status,
     required this.isIncoming,
     required this.createdAt,
+    this.receiverViewedAt,
     this.aiFitScore,
     this.aiReasons = const [],
     this.aiMatchedSkills = const [],
   });
 
   CollaborationInboxItem copyWith({
+    DateTime? receiverViewedAt,
     double? aiFitScore,
     List<String>? aiReasons,
     List<String>? aiMatchedSkills,
@@ -170,6 +175,7 @@ class CollaborationInboxItem {
       status: status,
       isIncoming: isIncoming,
       createdAt: createdAt,
+      receiverViewedAt: receiverViewedAt ?? this.receiverViewedAt,
       aiFitScore: aiFitScore ?? this.aiFitScore,
       aiReasons: aiReasons ?? this.aiReasons,
       aiMatchedSkills: aiMatchedSkills ?? this.aiMatchedSkills,
@@ -244,9 +250,37 @@ class MessageDao {
     final previewText = _conversationPreviewText(message);
 
     await db.transaction((txn) async {
+      final existingRows = await txn.query(
+        DatabaseSchema.tableMessages,
+        columns: ['is_read'],
+        where: 'id = ?',
+        whereArgs: [message.id],
+        limit: 1,
+      );
+      final wasAlreadyStored = existingRows.isNotEmpty;
+      final existingWasRead =
+          wasAlreadyStored && (existingRows.first['is_read'] as int? ?? 0) == 1;
+      final storedMessage = existingWasRead && !message.isRead
+          ? MessageModel(
+              id: message.id,
+              conversationId: message.conversationId,
+              senderId: message.senderId,
+              content: message.content,
+              messageType: message.messageType,
+              fileUrl: message.fileUrl,
+              fileName: message.fileName,
+              fileSize: message.fileSize,
+              createdAt: message.createdAt,
+              isRead: true,
+              isDeleted: message.isDeleted,
+              replyToId: message.replyToId,
+              replyToPreview: message.replyToPreview,
+            )
+          : message;
+
       await txn.insert(
         DatabaseSchema.tableMessages,
-        message.toMap(),
+        storedMessage.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
 
@@ -256,14 +290,20 @@ class MessageDao {
             last_message_at = ?,
             updated_at = ?,
             unread_count = CASE
-              WHEN user_id != ? THEN unread_count + 1
-              ELSE 0
+              WHEN user_id != ? AND ? = 0 AND ? = 0 THEN unread_count + 1
+              WHEN user_id = ? THEN 0
+              ELSE unread_count
             END
         WHERE id = ?
       ''', [
-        previewText.length > 80 ? '${previewText.substring(0, 80)}…' : previewText,
+        previewText.length > 80
+            ? '${previewText.substring(0, 80)}…'
+            : previewText,
         message.createdAt.millisecondsSinceEpoch,
         message.createdAt.toIso8601String(),
+        message.senderId,
+        wasAlreadyStored ? 1 : 0,
+        storedMessage.isRead ? 1 : 0,
         message.senderId,
         message.conversationId,
       ]);
@@ -303,6 +343,7 @@ class MessageDao {
     DateTime? before,
   }) async {
     final db = await _db.database;
+    await _recalculateUnreadCountsForUser(db, userId);
     final whereArgs = <dynamic>[userId];
     var cursorClause = '';
     if (before != null) {
@@ -406,6 +447,7 @@ class MessageDao {
 
   Future<int> getTotalUnreadCount(String userId) async {
     final db = await _db.database;
+    await _recalculateUnreadCountsForUser(db, userId);
     final result = await db.rawQuery('''
       SELECT COALESCE(SUM(unread_count), 0) AS total
       FROM ${DatabaseSchema.tableConversations}
@@ -414,11 +456,62 @@ class MessageDao {
     return result.first['total'] as int? ?? 0;
   }
 
+  Future<void> _recalculateUnreadCountsForUser(
+    DatabaseExecutor db,
+    String userId,
+  ) async {
+    await db.rawUpdate('''
+      UPDATE ${DatabaseSchema.tableConversations}
+      SET unread_count = (
+        SELECT COUNT(*)
+        FROM ${DatabaseSchema.tableMessages} m
+        WHERE m.conversation_id = ${DatabaseSchema.tableConversations}.id
+          AND m.sender_id != ?
+          AND COALESCE(m.is_read, 0) = 0
+          AND COALESCE(m.is_deleted, 0) = 0
+      )
+      WHERE user_id = ?
+    ''', [userId, userId]);
+  }
+
+  /// Zeroes the unread badge for every conversation belonging to [userId].
+  /// Called when the user opens the inbox list so the bottom-nav badge clears.
+  Future<void> markAllConversationsAsViewed(String userId) async {
+    final db = await _db.database;
+    final now = DateTime.now().toIso8601String();
+    await db.transaction((txn) async {
+      await txn.rawUpdate('''
+        UPDATE ${DatabaseSchema.tableMessages}
+        SET is_read = 1,
+            read_at = COALESCE(read_at, ?),
+            status = 'read'
+        WHERE sender_id != ?
+          AND is_read = 0
+          AND conversation_id IN (
+            SELECT id
+            FROM ${DatabaseSchema.tableConversations}
+            WHERE user_id = ?
+          )
+      ''', [now, userId, userId]);
+
+      await txn.update(
+        DatabaseSchema.tableConversations,
+        {
+          'unread_count': 0,
+          'updated_at': now,
+        },
+        where: 'user_id = ? AND unread_count > 0',
+        whereArgs: [userId],
+      );
+    });
+  }
+
   Future<List<ConversationSummary>> searchConversations({
     required String userId,
     required String query,
   }) async {
     final db = await _db.database;
+    await _recalculateUnreadCountsForUser(db, userId);
     final rows = await db.rawQuery('''
       SELECT * FROM ${DatabaseSchema.tableConversations}
       WHERE user_id = ?
@@ -436,6 +529,12 @@ class MessageDao {
     String? peerPhotoUrl,
     bool isPeerLecturer = false,
   }) async {
+    if (userId.trim().isEmpty ||
+        peerId.trim().isEmpty ||
+        userId.trim() == peerId.trim()) {
+      throw ArgumentError('Cannot create a conversation with yourself.');
+    }
+
     final db = await _db.database;
     final existing = await db.query(
       DatabaseSchema.tableConversations,
@@ -489,15 +588,15 @@ class MessageDao {
     final whereClause = incomingOnly
         ? 'r.receiver_id = ?'
         : '(r.sender_id = ? OR r.receiver_id = ?)';
-    final whereArgs = incomingOnly
-        ? <Object?>[userId]
-        : <Object?>[userId, userId];
+    final whereArgs =
+        incomingOnly ? <Object?>[userId] : <Object?>[userId, userId];
     final rows = await db.rawQuery('''
       SELECT
         r.id,
         r.post_id,
         r.message,
         r.status,
+        r.receiver_viewed_at,
         r.created_at,
         r.updated_at,
         CASE WHEN r.receiver_id = ? THEN 1 ELSE 0 END AS is_incoming,
@@ -513,6 +612,7 @@ class MessageDao {
       LEFT JOIN ${DatabaseSchema.tableUsers} ur ON ur.id = r.receiver_id
       LEFT JOIN ${DatabaseSchema.tablePosts} p ON p.id = r.post_id
       WHERE $whereClause
+        AND COALESCE(r.sender_id, '') != COALESCE(r.receiver_id, '')
       ORDER BY COALESCE(r.updated_at, r.created_at) DESC
       LIMIT ?
     ''', [
@@ -536,10 +636,54 @@ class MessageDao {
             message: row['message'] as String? ?? '',
             status: row['status'] as String? ?? 'pending',
             isIncoming: (row['is_incoming'] as int? ?? 0) == 1,
-            createdAt: MessageModel._dateFromDb(row['updated_at'] ?? row['created_at']),
+            receiverViewedAt: row['receiver_viewed_at'] == null
+                ? null
+                : DateTime.tryParse(row['receiver_viewed_at'] as String),
+            createdAt: MessageModel._dateFromDb(
+                row['updated_at'] ?? row['created_at']),
           ),
         )
         .toList();
+  }
+
+  Future<void> markCollaborationRequestViewed({
+    required String requestId,
+    required String userId,
+  }) async {
+    final db = await _db.database;
+    await db.update(
+      DatabaseSchema.tableCollabRequests,
+      {
+        'receiver_viewed_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ? AND receiver_id = ? AND receiver_viewed_at IS NULL',
+      whereArgs: [requestId, userId],
+    );
+  }
+
+  Future<void> markAllIncomingRequestsViewed(String userId) async {
+    final db = await _db.database;
+    await db.update(
+      DatabaseSchema.tableCollabRequests,
+      {
+        'receiver_viewed_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'receiver_id = ? AND receiver_viewed_at IS NULL',
+      whereArgs: [userId],
+    );
+  }
+
+  Future<int> countUnviewedIncomingRequests(String userId) async {
+    final db = await _db.database;
+    final rows = await db.rawQuery('''
+      SELECT COUNT(*) AS total
+      FROM ${DatabaseSchema.tableCollabRequests}
+      WHERE receiver_id = ?
+        AND receiver_viewed_at IS NULL
+    ''', [userId]);
+    return rows.first['total'] as int? ?? 0;
   }
 
   Future<List<AcceptedPeerCollaboration>> getAcceptedCollaborators({
@@ -569,6 +713,7 @@ class MessageDao {
       LEFT JOIN ${DatabaseSchema.tableUsers} ur ON ur.id = r.receiver_id
       LEFT JOIN ${DatabaseSchema.tablePosts} p ON p.id = r.post_id
       WHERE (r.sender_id = ? OR r.receiver_id = ?)
+        AND COALESCE(r.sender_id, '') != COALESCE(r.receiver_id, '')
         AND r.status = 'accepted'
       ORDER BY COALESCE(r.updated_at, r.created_at) DESC
       LIMIT ?

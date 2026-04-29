@@ -334,6 +334,16 @@ class _Header extends StatelessWidget {
                                 fontWeight: FontWeight.w700)),
                       ),
                     ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => context.push(RouteNames.projects),
+                        icon: const Icon(Icons.folder_open_rounded, size: 16),
+                        label: Text('My Projects',
+                            style: GoogleFonts.plusJakartaSans(
+                                fontWeight: FontWeight.w600)),
+                      ),
+                    ),
                   ]
                 : [
                     Expanded(

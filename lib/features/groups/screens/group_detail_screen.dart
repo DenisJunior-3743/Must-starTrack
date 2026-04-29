@@ -416,9 +416,13 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
                     onPressed: () => _respondToInvite(false),
                     child: const Text('Decline'),
                   ),
-                  FilledButton(
-                    onPressed: () => _respondToInvite(true),
-                    child: const Text('Accept'),
+                  const SizedBox(width: 4),
+                  SizedBox(
+                    height: 36,
+                    child: FilledButton(
+                      onPressed: () => _respondToInvite(true),
+                      child: const Text('Accept'),
+                    ),
                   ),
                 ],
               ),
