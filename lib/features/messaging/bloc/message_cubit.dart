@@ -797,6 +797,17 @@ class MessageCubit extends Cubit<MessageState> {
   ///   2. Append to UI immediately
   ///   3. Persist to SQLite
   ///   4. Enqueue Firestore sync
+  Map<String, dynamic> _messageNotificationMeta(ThreadLoaded current) {
+    final user = _authCubit.currentUser;
+    return {
+      'receiver_id': current.peerId,
+      'receiver_name': current.peerName,
+      'receiver_photo_url': current.peerPhotoUrl,
+      'sender_name': user?.displayName,
+      'sender_photo_url': user?.photoUrl,
+    };
+  }
+
   Future<void> sendMessage(
     String text, {
     String? replyToId,
@@ -840,6 +851,7 @@ class MessageCubit extends Cubit<MessageState> {
         payload: {
           'conversation_id': msg.conversationId,
           'sender_id': msg.senderId,
+          ..._messageNotificationMeta(current),
           'content': msg.content,
           'message_type': msg.messageType,
           'file_url': msg.fileUrl,
@@ -956,6 +968,7 @@ class MessageCubit extends Cubit<MessageState> {
         payload: {
           'conversation_id': msg.conversationId,
           'sender_id': msg.senderId,
+          ..._messageNotificationMeta(current),
           'content': msg.content,
           'message_type': msg.messageType,
           'file_url': syncedFileUrl,
@@ -973,6 +986,125 @@ class MessageCubit extends Cubit<MessageState> {
       }
     } catch (_) {
       // Keep optimistic message in the thread if background sync fails.
+    }
+  }
+
+  Future<void> sendAttachmentMessage({
+    required File file,
+    required String messageType,
+    String? replyToId,
+    String? replyToPreview,
+  }) async {
+    final current = state;
+    if (current is! ThreadLoaded) return;
+    final uid = _currentUserId;
+    if (uid == null || uid.isEmpty) return;
+    if (current.peerId.trim() == uid.trim()) {
+      _emitIfOpen(
+        const MessageError('You cannot send a message to yourself.'),
+      );
+      return;
+    }
+    if (!await file.exists()) {
+      _emitIfOpen(const MessageError('Selected file is missing.'));
+      return;
+    }
+
+    final normalizedType =
+        messageType.trim().toLowerCase() == 'image' ? 'image' : 'file';
+    final fileName = file.path.split(Platform.pathSeparator).last;
+    final localPath = file.path;
+    final fileSize = (await file.length()).toString();
+    final content =
+        normalizedType == 'image' ? 'Image: $fileName' : 'Document: $fileName';
+
+    final msg = MessageModel(
+      id: _uuid.v4(),
+      conversationId: current.conversationId,
+      senderId: uid,
+      content: content,
+      messageType: normalizedType,
+      fileUrl: localPath,
+      fileName: fileName,
+      fileSize: fileSize,
+      createdAt: DateTime.now(),
+      isRead: false,
+      replyToId: replyToId,
+      replyToPreview: replyToPreview,
+    );
+
+    _emitIfOpen(current.copyWith(messages: [...current.messages, msg]));
+
+    try {
+      await _messageDao.insertMessage(msg);
+
+      String syncedFileUrl = localPath;
+      try {
+        final uploadedUrl = await _cloudinary.uploadFile(
+          file,
+          folder: normalizedType == 'image' ? 'chat_images' : 'chat_files',
+        );
+        syncedFileUrl = uploadedUrl;
+
+        await _messageDao.updateMessageMedia(
+          messageId: msg.id,
+          fileUrl: uploadedUrl,
+          fileName: fileName,
+          fileSize: fileSize,
+        );
+
+        final latest = state;
+        if (latest is ThreadLoaded) {
+          final updatedMessages = latest.messages
+              .map((item) => item.id == msg.id
+                  ? MessageModel(
+                      id: item.id,
+                      conversationId: item.conversationId,
+                      senderId: item.senderId,
+                      content: item.content,
+                      messageType: item.messageType,
+                      fileUrl: uploadedUrl,
+                      fileName: fileName,
+                      fileSize: fileSize,
+                      createdAt: item.createdAt,
+                      isRead: item.isRead,
+                      isDeleted: item.isDeleted,
+                      replyToId: item.replyToId,
+                      replyToPreview: item.replyToPreview,
+                    )
+                  : item)
+              .toList();
+          _emitIfOpen(latest.copyWith(messages: updatedMessages));
+        }
+      } catch (_) {
+        // Keep local-path attachment visible if upload fails.
+      }
+
+      await _syncDao.enqueue(
+        entity: 'message',
+        entityId: msg.id,
+        operation: 'create',
+        payload: {
+          'conversation_id': msg.conversationId,
+          'sender_id': msg.senderId,
+          ..._messageNotificationMeta(current),
+          'content': msg.content,
+          'message_type': msg.messageType,
+          'file_url': syncedFileUrl,
+          'file_name': fileName,
+          'file_size': fileSize,
+          'created_at': msg.createdAt.toIso8601String(),
+          'reply_to_id': msg.replyToId,
+          'reply_to_preview': msg.replyToPreview,
+        },
+      );
+      try {
+        await _syncService.processPendingSync();
+      } catch (_) {
+        // Message remains visible locally when remote sync is delayed.
+      }
+    } catch (_) {
+      // Keep optimistic message in thread when background sync fails.
     }
   }
 

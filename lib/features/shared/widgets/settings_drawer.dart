@@ -2,12 +2,11 @@
 //
 // MUST StarTrack — Settings Side Drawer
 //
-// Opened by the hamburger (☰) button that lives in each screen's app bar.
+// Opened by the shared hamburger (☰) button in StudentExperienceOverlay.
 // Contains: theme mode selector, notification prefs link, about, logout.
 //
-// To open from any screen:
-//   Scaffold.of(context).openEndDrawer();
-// (The hosting screen must declare `endDrawer: const SettingsDrawer()`.)
+// Screens can still open it directly with Scaffold.of(context).openEndDrawer()
+// when they host their own scaffold drawer.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -27,13 +26,24 @@ import '../../../core/theme/theme_cubit.dart';
 import '../../auth/bloc/auth_cubit.dart';
 
 class SettingsDrawer extends StatelessWidget {
-  const SettingsDrawer({super.key});
+  const SettingsDrawer({super.key, this.router});
+
+  final GoRouter? router;
+
+  GoRouter? _resolveRouter(BuildContext context) {
+    return router ?? GoRouter.maybeOf(context);
+  }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isGuest = sl<AuthCubit>().currentUser == null;
     final isAdmin = sl<AuthCubit>().isAdmin;
+    // Resolve the router NOW while context is still active.
+    // After Navigator.pop() closes the drawer the context is deactivated,
+    // so GoRouter.maybeOf(context) would return null. Capturing the instance
+    // here means every onTap closure can navigate reliably.
+    final resolvedRouter = _resolveRouter(context);
 
     return Drawer(
       width: 300,
@@ -61,11 +71,19 @@ class SettingsDrawer extends StatelessWidget {
                 // Account section
                 const _SectionLabel('Account'),
                 _DrawerTile(
+                  icon: Icons.home_outlined,
+                  label: 'Home Feed',
+                  onTap: () {
+                    Scaffold.of(context).closeEndDrawer();
+                    resolvedRouter?.go(RouteNames.home);
+                  },
+                ),
+                _DrawerTile(
                   icon: Icons.person_outline_rounded,
                   label: 'My Profile',
                   onTap: () {
-                    Navigator.of(context).pop();
-                    context.push(RouteNames.myProfile);
+                    Scaffold.of(context).closeEndDrawer();
+                    resolvedRouter?.push(RouteNames.myProfile);
                   },
                 ),
                 if (!isGuest)
@@ -73,24 +91,24 @@ class SettingsDrawer extends StatelessWidget {
                     icon: Icons.folder_open_rounded,
                     label: 'My Projects',
                     onTap: () {
-                      Navigator.of(context).pop();
-                      context.push(RouteNames.projects);
+                      Scaffold.of(context).closeEndDrawer();
+                      resolvedRouter?.push(RouteNames.projects);
                     },
                   ),
                 _DrawerTile(
                   icon: Icons.leaderboard_rounded,
                   label: 'View Ranks',
                   onTap: () {
-                    Navigator.of(context).pop();
-                    context.push(RouteNames.globalRanks);
+                    Scaffold.of(context).closeEndDrawer();
+                    resolvedRouter?.push(RouteNames.globalRanks);
                   },
                 ),
                 _DrawerTile(
                   icon: Icons.notifications_outlined,
                   label: 'Notification Settings',
                   onTap: () {
-                    Navigator.of(context).pop();
-                    context.push(RouteNames.notificationSettings);
+                    Scaffold.of(context).closeEndDrawer();
+                    resolvedRouter?.push(RouteNames.notificationSettings);
                   },
                 ),
                 if (!isGuest)
@@ -98,7 +116,7 @@ class SettingsDrawer extends StatelessWidget {
                     icon: Icons.delete_forever_rounded,
                     label: 'Delete Account',
                     color: AppColors.danger,
-                    onTap: () => _handleDeleteAccount(context),
+                    onTap: () => _handleDeleteAccount(context, resolvedRouter),
                   ),
                 const SizedBox(height: 8),
                 const Divider(indent: 16, endIndent: 16),
@@ -110,18 +128,26 @@ class SettingsDrawer extends StatelessWidget {
                   icon: Icons.info_outline_rounded,
                   label: 'About MUST StarTrack',
                   onTap: () {
-                    Navigator.of(context).pop();
-                    context.push(RouteNames.about);
+                    Scaffold.of(context).closeEndDrawer();
+                    resolvedRouter?.push(RouteNames.about);
                   },
                 ),
                 _DrawerTile(
                   icon: Icons.star_border_rounded,
                   label: 'Rate This App',
                   onTap: () {
-                    Navigator.of(context).pop();
-                    Future<void>.delayed(Duration.zero, () {
-                      if (!context.mounted) return;
-                      _showAppFeedbackSheet(context);
+                    // Close drawer first; show feedback sheet on next frame
+                    // using rootNavigator context so the sheet survives drawer
+                    // dismissal.
+                    Scaffold.of(context).closeEndDrawer();
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      final rootCtx = resolvedRouter
+                          ?.routerDelegate
+                          .navigatorKey
+                          .currentContext;
+                      if (rootCtx != null && rootCtx.mounted) {
+                        _showAppFeedbackSheet(rootCtx);
+                      }
                     });
                   },
                 ),
@@ -129,8 +155,8 @@ class SettingsDrawer extends StatelessWidget {
                   icon: Icons.support_agent_rounded,
                   label: 'App Assistant',
                   onTap: () {
-                    Navigator.of(context).pop();
-                    context.push(RouteNames.chatbot);
+                    Scaffold.of(context).closeEndDrawer();
+                    resolvedRouter?.push(RouteNames.chatbot);
                   },
                 ),
                 if (isAdmin)
@@ -138,8 +164,8 @@ class SettingsDrawer extends StatelessWidget {
                     icon: Icons.query_stats_rounded,
                     label: 'Chatbot Accuracy',
                     onTap: () {
-                      Navigator.of(context).pop();
-                      context.push(RouteNames.adminChatbotAnalytics);
+                      Scaffold.of(context).closeEndDrawer();
+                      resolvedRouter?.push(RouteNames.adminChatbotAnalytics);
                     },
                   ),
                 const SizedBox(height: 8),
@@ -152,7 +178,7 @@ class SettingsDrawer extends StatelessWidget {
                   label: 'Log Out',
                   color: isGuest ? null : AppColors.danger,
                   enabled: !isGuest,
-                  onTap: () => _handleLogout(context),
+                  onTap: () => _handleLogout(context, resolvedRouter),
                 ),
                 const SizedBox(height: 16),
               ],
@@ -186,10 +212,16 @@ class SettingsDrawer extends StatelessWidget {
     );
   }
 
-  Future<void> _handleLogout(BuildContext context) async {
-    Navigator.of(context).pop();
+  Future<void> _handleLogout(
+      BuildContext context, GoRouter? resolvedRouter) async {
+    // Use root navigator context for the dialog so it works even after
+    // the drawer is removed from the tree.
+    final rootCtx =
+        resolvedRouter?.routerDelegate.navigatorKey.currentContext ?? context;
+    Scaffold.of(context).closeEndDrawer();
+    if (!rootCtx.mounted) return;
     final confirmed = await showDialog<bool>(
-      context: context,
+      context: rootCtx,
       builder: (ctx) => AlertDialog(
         title: const Text('Log out?'),
         content: const Text('You will be returned to the login screen.'),
@@ -208,25 +240,32 @@ class SettingsDrawer extends StatelessWidget {
     );
     if (confirmed == true) {
       await sl<AuthCubit>().logout();
-      if (!context.mounted) return;
-      context.go(RouteNames.home);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Logged out successfully. You are now viewing in guest mode.',
-            style: GoogleFonts.plusJakartaSans(),
+      resolvedRouter?.go(RouteNames.home);
+      final snackCtx =
+          resolvedRouter?.routerDelegate.navigatorKey.currentContext;
+      if (snackCtx != null && snackCtx.mounted) {
+        ScaffoldMessenger.of(snackCtx).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Logged out successfully. You are now viewing in guest mode.',
+              style: GoogleFonts.plusJakartaSans(),
+            ),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
           ),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+        );
+      }
     }
   }
 
-  Future<void> _handleDeleteAccount(BuildContext context) async {
-    Navigator.of(context).pop();
+  Future<void> _handleDeleteAccount(
+      BuildContext context, GoRouter? resolvedRouter) async {
+    final rootCtx =
+        resolvedRouter?.routerDelegate.navigatorKey.currentContext ?? context;
+    Scaffold.of(context).closeEndDrawer();
+    if (!rootCtx.mounted) return;
     final confirmed = await showDialog<bool>(
-      context: context,
+      context: rootCtx,
       builder: (ctx) => AlertDialog(
         title: const Row(
           children: [
@@ -284,12 +323,14 @@ class SettingsDrawer extends StatelessWidget {
         entityId: user.id,
         metadata: {'requested_at': now.toIso8601String()},
       );
-      // Sign the user out and send them to guest / login
+      // Sign the user out and send them to login
       await sl<AuthCubit>().logout();
-      if (context.mounted) context.go(RouteNames.login);
+      resolvedRouter?.go(RouteNames.login);
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+      final errCtx =
+          resolvedRouter?.routerDelegate.navigatorKey.currentContext;
+      if (errCtx != null && errCtx.mounted) {
+        ScaffoldMessenger.of(errCtx).showSnackBar(
           SnackBar(content: Text('Failed to send request: $e')),
         );
       }

@@ -318,6 +318,7 @@ class PostDao {
     String? filterCategory,
     String? filterType, // 'project' | 'opportunity'
     bool groupsOnly = false,
+    bool savedOnly = false,
     String? filterGroupId,
     String? currentUserId,
     bool includePendingForAdmin = false,
@@ -369,6 +370,9 @@ class PostDao {
     }
     if (groupsOnly && postColumns.contains('group_id')) {
       conditions.add("COALESCE(p.group_id, '') != ''");
+    }
+    if (savedOnly && postColumns.contains('is_saved_by_me')) {
+      conditions.add('COALESCE(p.is_saved_by_me, 0) = 1');
     }
     if (filterGroupId != null &&
         filterGroupId.isNotEmpty &&
@@ -1093,6 +1097,8 @@ class PostDao {
         'external_link': p.externalLinks.isNotEmpty
             ? p.externalLinks.first.values.firstOrNull
             : null,
+        'ownership_answers': jsonEncode(p.ownershipAnswers),
+        'content_validation_answers': jsonEncode(p.contentValidationAnswers),
         'visibility': p.visibility.name,
         'moderation_status': p.moderationStatus.name,
         'status': p.moderationStatus == ModerationStatus.approved
@@ -1100,6 +1106,14 @@ class PostDao {
             : p.moderationStatus.name,
         'trust_score': p.trustScore,
         'suspicion_score': p.trustScore,
+        'ai_review_status': p.aiReviewStatus,
+        'ai_decision': p.aiDecision,
+        'ai_confidence': p.aiConfidence,
+        'ai_scores': jsonEncode(p.aiScores),
+        'ai_findings': jsonEncode(p.aiFindings),
+        'ai_evidence': jsonEncode(p.aiEvidence),
+        'ai_final_take': p.aiFinalTake,
+        'ai_reviewed_at': p.aiReviewedAt?.toIso8601String(),
         'like_count': p.likeCount,
         'dislike_count': p.dislikeCount,
         'comment_count': p.commentCount,
@@ -1153,11 +1167,45 @@ class PostDao {
       }
     }
 
+    Map<String, String> parseStringMap(dynamic v) {
+      if (v == null) return const {};
+      try {
+        final decoded = v is String ? jsonDecode(v) : v;
+        if (decoded is! Map) return const {};
+        return decoded.map((key, value) {
+          return MapEntry(key.toString(), value.toString());
+        });
+      } catch (_) {
+        return const {};
+      }
+    }
+
+    double? parseDouble(dynamic v) {
+      if (v == null) return null;
+      if (v is num) return v.toDouble();
+      if (v is String) return double.tryParse(v);
+      return null;
+    }
+
     int parseInt(dynamic v, {int fallback = 0}) {
       if (v is int) return v;
       if (v is double) return v.toInt();
       if (v is String) return int.tryParse(v) ?? fallback;
       return fallback;
+    }
+
+    Map<String, int> parseScoreMap(dynamic v) {
+      if (v == null) return const {};
+      try {
+        final decoded = v is String ? jsonDecode(v) : v;
+        if (decoded is! Map) return const {};
+        return decoded.map((key, value) {
+          final parsed = parseInt(value);
+          return MapEntry(key.toString(), parsed.clamp(0, 100));
+        });
+      } catch (_) {
+        return const {};
+      }
     }
 
     bool parseBool(dynamic value, {bool fallback = false}) {
@@ -1228,6 +1276,9 @@ class PostDao {
                   {'url': legacyExternalLink}
                 ]
               : [],
+      ownershipAnswers: parseStringMap(row['ownership_answers']),
+      contentValidationAnswers:
+          parseStringMap(row['content_validation_answers']),
       visibility: PostVisibility.values.firstWhere(
         (v) => v.name == row['visibility'],
         orElse: () => PostVisibility.public,
@@ -1238,6 +1289,16 @@ class PostDao {
       ),
       trustScore:
           parseInt(row['trust_score'] ?? row['suspicion_score'], fallback: 100),
+      aiReviewStatus: parseNullableString(row['ai_review_status']),
+      aiDecision: parseNullableString(row['ai_decision']),
+      aiConfidence: parseDouble(row['ai_confidence']),
+      aiScores: parseScoreMap(row['ai_scores']),
+      aiFindings: parseList(row['ai_findings']),
+      aiEvidence: parseList(row['ai_evidence']),
+      aiFinalTake: parseNullableString(row['ai_final_take']),
+      aiReviewedAt: row['ai_reviewed_at'] != null
+          ? DateTime.tryParse(row['ai_reviewed_at'].toString())
+          : null,
       likeCount: [
         parseInt(row['resolved_like_count'] ?? row['like_count']),
         parseInt(row['local_like_count']),
@@ -1261,6 +1322,7 @@ class PostDao {
       isFollowingAuthor: parseBool(row['is_following_author']),
       hasCollaborationRequest: parseBool(row['has_collaboration_request']),
       isViewedByMe: parseBool(row['is_viewed_by_me']),
+      isSavedByMe: parseBool(row['is_saved_by_me']),
       areaOfExpertise: parseNullableString(row['area_of_expertise']),
       maxParticipants: row['max_participants'] != null
           ? parseInt(row['max_participants'])

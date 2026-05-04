@@ -31,6 +31,10 @@ import '../../../data/remote/recommender_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
 import '../../shared/widgets/settings_drawer.dart';
 
+const Color _lecturerCardBlue = AppColors.primary;
+const Color _lecturerCardBlueDeep = AppColors.institutionalBlue;
+const Color _lecturerButtonGreen = AppColors.mustGreen;
+
 // ── Data models ───────────────────────────────────────────────────────────────
 
 class _OppWithRanking {
@@ -136,12 +140,14 @@ class _ShortlistedTalentScreenState extends State<ShortlistedTalentScreen> {
 
     return Scaffold(
       endDrawer: const SettingsDrawer(),
-      backgroundColor:
-          isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
+      backgroundColor: isDark ? AppColors.backgroundDark : const Color(0xFFEAF0FF),
       appBar: AppBar(
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        elevation: 0,
         title: Text(
           'Shortlisted Talent',
-          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+          style: GoogleFonts.sora(fontWeight: FontWeight.w700, color: Colors.white),
         ),
         actions: [
           IconButton(
@@ -260,12 +266,10 @@ class _FilterChip extends StatelessWidget {
         margin: const EdgeInsets.only(right: 8),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? AppColors.primary : AppColors.primary.withValues(alpha: 0.08),
+          color: selected ? _lecturerButtonGreen : AppColors.primary.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: selected
-                ? AppColors.primary
-                : AppColors.primary.withValues(alpha: 0.22),
+            color: selected ? _lecturerButtonGreen : AppColors.primary.withValues(alpha: 0.30),
           ),
         ),
         child: Text(
@@ -393,11 +397,13 @@ class _OppHeader extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.surfaceDark : Colors.white,
-        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-        border: Border.all(
-          color: AppColors.roleLecturer.withValues(alpha: 0.28),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [_lecturerCardBlueDeep, _lecturerCardBlue],
         ),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+        border: Border.all(color: AppColors.primaryDark),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -412,7 +418,7 @@ class _OppHeader extends StatelessWidget {
                 ),
                 child: const Icon(
                   Icons.campaign_rounded,
-                  color: AppColors.roleLecturer,
+                  color: Colors.white,
                   size: 18,
                 ),
               ),
@@ -420,12 +426,10 @@ class _OppHeader extends StatelessWidget {
               Expanded(
                 child: Text(
                   opp.opportunity.title,
-                  style: GoogleFonts.plusJakartaSans(
+                  style: GoogleFonts.sora(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: isDark
-                        ? AppColors.textPrimaryDark
-                        : AppColors.textPrimaryLight,
+                    color: Colors.white,
                   ),
                 ),
               ),
@@ -433,7 +437,7 @@ class _OppHeader extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryTint10,
+                  color: _lecturerButtonGreen,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
@@ -441,7 +445,7 @@ class _OppHeader extends StatelessWidget {
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.primary,
+                    color: Colors.white,
                   ),
                 ),
               ),
@@ -663,7 +667,7 @@ class _ApplicantTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Material(
-        color: isDark ? AppColors.surfaceDark : Colors.white,
+        color: _lecturerCardBlue,
         borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
         child: InkWell(
           onTap: () => context.push(
@@ -674,9 +678,7 @@ class _ApplicantTile extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-              border: Border.all(
-                color: isDark ? AppColors.borderDark : AppColors.borderLight,
-              ),
+              border: Border.all(color: AppColors.primaryDark),
             ),
             child: Row(
               children: [
@@ -705,7 +707,7 @@ class _ApplicantTile extends StatelessWidget {
                                   .toUpperCase(),
                           style: GoogleFonts.plusJakartaSans(
                             fontWeight: FontWeight.w700,
-                            color: AppColors.primary,
+                            color: Colors.white,
                           ),
                         )
                       : null,
@@ -722,9 +724,7 @@ class _ApplicantTile extends StatelessWidget {
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: isDark
-                              ? AppColors.textPrimaryDark
-                              : AppColors.textPrimaryLight,
+                          color: Colors.white,
                         ),
                       ),
                       if (profile?.programName != null || profile?.faculty != null)
@@ -732,7 +732,7 @@ class _ApplicantTile extends StatelessWidget {
                           profile?.programName ?? profile?.faculty ?? '',
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 11,
-                            color: AppColors.textSecondaryLight,
+                            color: Colors.white70,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -745,7 +745,7 @@ class _ApplicantTile extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 1),
                               decoration: BoxDecoration(
-                                color: AppColors.success.withValues(alpha: 0.10),
+                                color: Colors.white.withValues(alpha: 0.14),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Text(
@@ -753,7 +753,7 @@ class _ApplicantTile extends StatelessWidget {
                                 style: GoogleFonts.plusJakartaSans(
                                   fontSize: 9,
                                   fontWeight: FontWeight.w600,
-                                  color: AppColors.success,
+                                  color: Colors.white,
                                 ),
                               ),
                             );
@@ -772,7 +772,7 @@ class _ApplicantTile extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: _tierColor.withValues(alpha: 0.12),
+                        color: _lecturerButtonGreen,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -780,13 +780,12 @@ class _ApplicantTile extends StatelessWidget {
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 11,
                           fontWeight: FontWeight.w800,
-                          color: _tierColor,
+                          color: Colors.white,
                         ),
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Icon(Icons.chevron_right,
-                        size: 16, color: AppColors.textHintLight),
+                    const Icon(Icons.chevron_right, size: 16, color: Colors.white70),
                   ],
                 ),
               ],

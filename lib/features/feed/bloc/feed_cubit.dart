@@ -117,6 +117,7 @@ class FeedFilter extends Equatable {
   final String? type; // 'project' | 'opportunity' | null = all
   final String? recency;
   final bool groupsOnly;
+  final bool savedOnly;
   final bool followingOnly;
   final String? searchedUserId;
   final String? searchedUserName;
@@ -127,6 +128,7 @@ class FeedFilter extends Equatable {
     this.type,
     this.recency,
     this.groupsOnly = false,
+    this.savedOnly = false,
     this.followingOnly = false,
     this.searchedUserId,
     this.searchedUserName,
@@ -138,6 +140,7 @@ class FeedFilter extends Equatable {
       type != null ||
       recency != null ||
       groupsOnly ||
+      savedOnly ||
       followingOnly ||
       searchedUserId != null;
 
@@ -147,6 +150,7 @@ class FeedFilter extends Equatable {
     String? type,
     String? recency,
     bool? groupsOnly,
+    bool? savedOnly,
     bool? followingOnly,
     String? searchedUserId,
     String? searchedUserName,
@@ -155,6 +159,7 @@ class FeedFilter extends Equatable {
     bool clearType = false,
     bool clearRecency = false,
     bool clearGroupsOnly = false,
+    bool clearSavedOnly = false,
     bool clearFollowingOnly = false,
     bool clearSearchedUser = false,
   }) =>
@@ -164,6 +169,7 @@ class FeedFilter extends Equatable {
         type: clearType ? null : type ?? this.type,
         recency: clearRecency ? null : recency ?? this.recency,
         groupsOnly: clearGroupsOnly ? false : groupsOnly ?? this.groupsOnly,
+        savedOnly: clearSavedOnly ? false : savedOnly ?? this.savedOnly,
         followingOnly:
             clearFollowingOnly ? false : followingOnly ?? this.followingOnly,
         searchedUserId:
@@ -180,6 +186,7 @@ class FeedFilter extends Equatable {
         type,
         recency,
         groupsOnly,
+        savedOnly,
         followingOnly,
         searchedUserId,
         searchedUserName,
@@ -296,6 +303,14 @@ class FeedCubit extends Cubit<FeedState> {
     if (details.isNotEmpty) {
       debugPrint('[FeedCubit][$action][$step] $details');
     }
+  }
+
+  void _markRecommendationInteracted({
+    required String userId,
+    required String postId,
+  }) {
+    _recLogDao?.markInteracted(userId: userId, itemId: postId).catchError(
+        (e) => debugPrint('[FeedCubit] rec interaction mark failed: $e'));
   }
 
   // ── Load first page ────────────────────────────────────────────────────────
@@ -663,10 +678,10 @@ class FeedCubit extends Cubit<FeedState> {
   bool _isVideoCandidate(String source) {
     if (isVideoMediaPath(source)) return true;
     final lower = source.toLowerCase();
-    if (RegExp(r'\.(mp4|mov|m4v|3gp|webm|mkv)(\?|$)').hasMatch(lower)) {
-      return true;
-    }
-    return lower.contains('/videos/') || lower.contains('video/upload');
+    // Only explicit video file extensions are a reliable signal.
+    // Cloudinary's /video/upload/ CDN path is used for ALL media types,
+    // so we cannot use it as a discriminator here either.
+    return RegExp(r'\.(mp4|mov|m4v|3gp|webm|mkv)(\?|$)').hasMatch(lower);
   }
 
   Future<_FeedBatchResult> _loadGroupedBatch({
@@ -707,6 +722,7 @@ class FeedCubit extends Cubit<FeedState> {
         filterCategory: filter.category,
         filterType: filter.type,
         groupsOnly: filter.groupsOnly,
+        savedOnly: filter.savedOnly,
         currentUserId: _activeUserId,
         includePendingForAdmin: _canViewPendingModeration,
       );
@@ -799,7 +815,12 @@ class FeedCubit extends Cubit<FeedState> {
 
       final latest = state;
       if (latest is FeedLoaded && latest.filter == filter) {
-        _emitIfOpen(latest.copyWith(posts: reranked));
+        final stablePosts = _stabilizeVideoFeedTransition(
+          filter: filter,
+          previousPosts: latest.posts,
+          nextPosts: reranked,
+        );
+        _emitIfOpen(latest.copyWith(posts: stablePosts));
         _lastFeedUserId = _activeUserId;
         _lastHybridRerankAt = DateTime.now();
       }
@@ -941,27 +962,41 @@ class FeedCubit extends Cubit<FeedState> {
     }
 
     // ── Run ranker ────────────────────────────────────────────────────────────
-    final ranked = useHybrid
-        ? await _recommenderService.rankHybrid(
-            user: user,
-            candidates: candidatePool,
-            skillPatterns: skillPatterns,
-            recentlyViewedCategories: recentlyViewedCategories,
-            recentSearchTerms: recentSearchTerms,
-            lecturerRatingsByPost: postRatingSignals.lecturerRatings,
-            studentRatingsByPost: postRatingSignals.studentRatings,
-            commentSnippetsByPost: commentSnippetsByPost,
-          )
-        : _recommenderService.rankLocally(
-            user: user,
-            candidates: candidatePool,
-            skillPatterns: skillPatterns,
-            recentlyViewedCategories: recentlyViewedCategories,
-            recentSearchTerms: recentSearchTerms,
-            lecturerRatingsByPost: postRatingSignals.lecturerRatings,
-            studentRatingsByPost: postRatingSignals.studentRatings,
-            commentSnippetsByPost: commentSnippetsByPost,
-          );
+    List<RecommendedPost> ranked;
+    HybridRerankDiagnostics? hybridDiagnostics;
+    if (useHybrid) {
+      final hybrid = await _recommenderService.rankHybridWithDiagnostics(
+        user: user,
+        candidates: candidatePool,
+        skillPatterns: skillPatterns,
+        recentlyViewedCategories: recentlyViewedCategories,
+        recentSearchTerms: recentSearchTerms,
+        lecturerRatingsByPost: postRatingSignals.lecturerRatings,
+        studentRatingsByPost: postRatingSignals.studentRatings,
+        commentSnippetsByPost: commentSnippetsByPost,
+        allowProxyFallback: false,
+      );
+      ranked = hybrid.posts;
+      hybridDiagnostics = hybrid.diagnostics;
+      log.writeln(
+        '  OpenAI     : configured=${hybridDiagnostics.openAiConfigured ? 1 : 0}, '
+        'attempted=${hybridDiagnostics.openAiAttempted ? 1 : 0}, '
+        'succeeded=${hybridDiagnostics.openAiSucceeded ? 1 : 0}, '
+        'rows=${hybridDiagnostics.rankingRows}, '
+        'status=${hybridDiagnostics.reason}',
+      );
+    } else {
+      ranked = _recommenderService.rankLocally(
+        user: user,
+        candidates: candidatePool,
+        skillPatterns: skillPatterns,
+        recentlyViewedCategories: recentlyViewedCategories,
+        recentSearchTerms: recentSearchTerms,
+        lecturerRatingsByPost: postRatingSignals.lecturerRatings,
+        studentRatingsByPost: postRatingSignals.studentRatings,
+        commentSnippetsByPost: commentSnippetsByPost,
+      );
+    }
 
     // ── Log ranked results ────────────────────────────────────────────────────
     const maxLogRows = 5;
@@ -1050,7 +1085,13 @@ class FeedCubit extends Cubit<FeedState> {
               itemType: 'post',
               algorithm: algoLabel,
               score: r.score,
-              reasons: r.reasons,
+              reasons: [
+                ...r.reasons,
+                if (hybridDiagnostics != null)
+                  'openai_status:${hybridDiagnostics.reason}',
+                if (hybridDiagnostics != null)
+                  'openai_rows:${hybridDiagnostics.rankingRows}',
+              ],
             )),
       ];
       _recLogDao.insertBatch(entries).catchError(
@@ -1154,23 +1195,74 @@ class FeedCubit extends Cubit<FeedState> {
         previousPosts.where(_isVideoPost).toList(growable: false);
     final hasPreviousVideos = previousVideos.isNotEmpty;
     final hasNextVideos = nextPosts.any(_isVideoPost);
-    if (!hasPreviousVideos || hasNextVideos) {
+    if (!hasPreviousVideos) {
       return nextPosts;
     }
 
-    // Keep currently playable videos visible and append fresh feed data.
-    final merged = <PostModel>[];
-    final seenIds = <String>{};
-    for (final post in previousVideos) {
-      if (seenIds.add(post.id)) {
-        merged.add(post);
+    if (!hasNextVideos) {
+      // Keep currently playable videos visible and append fresh feed data.
+      final merged = <PostModel>[];
+      final seenIds = <String>{};
+      for (final post in previousVideos) {
+        if (seenIds.add(post.id)) {
+          merged.add(post);
+        }
+      }
+      for (final post in nextPosts) {
+        if (seenIds.add(post.id)) {
+          merged.add(post);
+        }
+      }
+      return merged;
+    }
+
+    // Background recommendation refreshes should not reorder the video queue
+    // a viewer is already moving through. Preserve existing video slots and
+    // append newly recommended videos behind them.
+    final nextById = {for (final post in nextPosts) post.id: post};
+    final stableVideos = <PostModel>[];
+    final stableVideoIds = <String>{};
+    for (final previousVideo in previousVideos) {
+      if (stableVideoIds.add(previousVideo.id)) {
+        stableVideos.add(nextById[previousVideo.id] ?? previousVideo);
       }
     }
+    for (final nextPost in nextPosts) {
+      if (_isVideoPost(nextPost) && stableVideoIds.add(nextPost.id)) {
+        stableVideos.add(nextPost);
+      }
+    }
+
+    final merged = <PostModel>[];
+    final seenIds = <String>{};
+    var stableVideoIndex = 0;
+    for (final nextPost in nextPosts) {
+      if (_isVideoPost(nextPost)) {
+        while (stableVideoIndex < stableVideos.length) {
+          final stableVideo = stableVideos[stableVideoIndex++];
+          if (seenIds.add(stableVideo.id)) {
+            merged.add(stableVideo);
+            break;
+          }
+        }
+      } else if (seenIds.add(nextPost.id)) {
+        merged.add(nextPost);
+      }
+    }
+
+    while (stableVideoIndex < stableVideos.length) {
+      final stableVideo = stableVideos[stableVideoIndex++];
+      if (seenIds.add(stableVideo.id)) {
+        merged.add(stableVideo);
+      }
+    }
+
     for (final post in nextPosts) {
       if (seenIds.add(post.id)) {
         merged.add(post);
       }
     }
+
     return merged;
   }
 
@@ -1232,6 +1324,7 @@ class FeedCubit extends Cubit<FeedState> {
           'author_id': post.authorId,
         },
       );
+      _markRecommendationInteracted(userId: currentUserId, postId: post.id);
 
       await _syncQueue.enqueue(
         operation: 'create',
@@ -1365,6 +1458,7 @@ class FeedCubit extends Cubit<FeedState> {
       }
 
       await _postDao.incrementViewCount(postId);
+      _markRecommendationInteracted(userId: currentUserId, postId: postId);
       _traceAction(
         'view',
         'local_persisted',
@@ -1484,6 +1578,7 @@ class FeedCubit extends Cubit<FeedState> {
         postId: postId,
         message: message,
       );
+      _markRecommendationInteracted(userId: currentUserId, postId: postId);
       _traceAction(
         'collaborate',
         'local_persisted',
@@ -1584,6 +1679,7 @@ class FeedCubit extends Cubit<FeedState> {
           'post_title': original.title,
         },
       );
+      _markRecommendationInteracted(userId: currentUserId, postId: postId);
       _traceAction(
         'follow',
         'activity_logged',
@@ -1669,6 +1765,7 @@ class FeedCubit extends Cubit<FeedState> {
             'faculty': previous.faculty,
             'type': previous.type,
             'groupsOnly': previous.groupsOnly,
+            'savedOnly': previous.savedOnly,
             'followingOnly': previous.followingOnly,
             'searchedUserId': previous.searchedUserId,
           },
@@ -1676,6 +1773,7 @@ class FeedCubit extends Cubit<FeedState> {
             'faculty': filter.faculty,
             'type': filter.type,
             'groupsOnly': filter.groupsOnly,
+            'savedOnly': filter.savedOnly,
             'followingOnly': filter.followingOnly,
             'searchedUserId': filter.searchedUserId,
             'searchedUserName': filter.searchedUserName,
@@ -1760,6 +1858,9 @@ class FeedCubit extends Cubit<FeedState> {
           'author_id': original.authorId,
         },
       );
+      if (!wasLiked) {
+        _markRecommendationInteracted(userId: currentUserId, postId: postId);
+      }
 
       // 4. Enqueue for Firestore sync
       final actionAtIso = DateTime.now().toIso8601String();
@@ -1851,6 +1952,9 @@ class FeedCubit extends Cubit<FeedState> {
           'author_id': original.authorId
         },
       );
+      if (!wasSaved) {
+        _markRecommendationInteracted(userId: currentUserId, postId: postId);
+      }
     } catch (e) {
       debugPrint('[FeedCubit] Save toggle failed for post=$postId: $e');
       if (state is FeedLoaded) {
@@ -1899,6 +2003,9 @@ class FeedCubit extends Cubit<FeedState> {
           'author_id': original.authorId
         },
       );
+      if (!wasDisliked) {
+        _markRecommendationInteracted(userId: currentUserId, postId: postId);
+      }
       await _syncQueue.enqueue(
         operation: wasDisliked ? 'delete' : 'create',
         entity: 'dislikes',

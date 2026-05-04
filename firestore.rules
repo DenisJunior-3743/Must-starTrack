@@ -331,7 +331,10 @@ service cloud.firestore {
     // COMMENTS
     match /comments/{commentId} {
 
-      allow read: if isMustUser();
+      // Comments are displayed with public/readable posts and also feed the
+      // leaderboard comment-sentiment pipeline. Any signed-in StarTrack client
+      // may read them; writes remain owner-locked below.
+      allow read: if request.auth != null;
 
       allow create, update: if isMustUser()
         && request.resource.data.author_id == uid();

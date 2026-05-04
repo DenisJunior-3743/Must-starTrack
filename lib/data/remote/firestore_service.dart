@@ -85,7 +85,7 @@ class FirestoreService {
       _db.collection('recommendation_logs');
   CollectionReference<Map<String, dynamic>> get _userRecommendations =>
       _db.collection('user_recommendations');
-    CollectionReference<Map<String, dynamic>> get _comments =>
+  CollectionReference<Map<String, dynamic>> get _comments =>
       _db.collection('comments');
 
   // ── User pre-computed recommendations (from mobile app) ─────────────────────────
@@ -702,6 +702,100 @@ class FirestoreService {
     posts.sort((left, right) => right.createdAt.compareTo(left.createdAt));
     debugPrint('[FirestoreService] returning ${posts.length} hydrated posts');
     return posts;
+  }
+
+  Future<List<PostModel>> getPostsByGroupId(
+    String groupId, {
+    int limit = 80,
+    bool includePendingForAdmin = false,
+  }) async {
+    final safeGroupId = groupId.trim();
+    if (safeGroupId.isEmpty) return const [];
+
+    Query<Map<String, dynamic>> query = _posts
+        .where('group_id', isEqualTo: safeGroupId)
+        .where('is_archived', isEqualTo: false)
+        .orderBy('created_at', descending: true)
+        .limit(limit);
+
+    if (!includePendingForAdmin) {
+      query = query.where('moderation_status', isEqualTo: 'approved');
+    }
+
+    try {
+      final snapshot =
+          await query.get(const GetOptions(source: Source.serverAndCache));
+      return snapshot.docs
+          .map((doc) => PostModel.fromJson({'id': doc.id, ...doc.data()}))
+          .where((post) => !post.isArchived)
+          .toList(growable: false);
+    } on FirebaseException catch (error) {
+      if (error.code == 'failed-precondition') {
+        debugPrint(
+          '[FirestoreService] getPostsByGroupId missing composite index; '
+          'falling back to group-only query for $safeGroupId',
+        );
+        try {
+          if (includePendingForAdmin) {
+            final snapshot = await _posts
+                .where('group_id', isEqualTo: safeGroupId)
+                .where('is_archived', isEqualTo: false)
+                .limit(limit)
+                .get(const GetOptions(source: Source.serverAndCache));
+            final posts = snapshot.docs
+                .map((doc) => PostModel.fromJson({'id': doc.id, ...doc.data()}))
+                .where((post) => !post.isArchived)
+                .toList(growable: false)
+              ..sort((left, right) => right.createdAt.compareTo(left.createdAt));
+            return posts;
+          }
+
+          // Non-admin fallback must keep moderation filtering in-query so
+          // Firestore rules can prove all documents satisfy read conditions.
+          final approvedSnapshot = await _posts
+              .where('group_id', isEqualTo: safeGroupId)
+              .where('is_archived', isEqualTo: false)
+              .where('moderation_status', isEqualTo: 'approved')
+              .limit(limit)
+              .get(const GetOptions(source: Source.serverAndCache));
+
+          final unmoderatedSnapshot = await _posts
+              .where('group_id', isEqualTo: safeGroupId)
+              .where('is_archived', isEqualTo: false)
+              .where('moderation_status', isNull: true)
+              .limit(limit)
+              .get(const GetOptions(source: Source.serverAndCache));
+
+          final merged = <String, PostModel>{
+            for (final doc in approvedSnapshot.docs)
+              doc.id: PostModel.fromJson({'id': doc.id, ...doc.data()}),
+            for (final doc in unmoderatedSnapshot.docs)
+              doc.id: PostModel.fromJson({'id': doc.id, ...doc.data()}),
+          };
+
+          final posts = merged.values
+              .where((post) => !post.isArchived)
+              .toList(growable: false)
+            ..sort((left, right) => right.createdAt.compareTo(left.createdAt));
+          return posts.take(limit).toList(growable: false);
+        } on FirebaseException catch (fallbackError) {
+          if (fallbackError.code == 'permission-denied') {
+            debugPrint(
+              '[FirestoreService] getPostsByGroupId fallback denied by security rules',
+            );
+            return const [];
+          }
+          rethrow;
+        }
+      }
+      if (error.code == 'permission-denied') {
+        debugPrint(
+          '[FirestoreService] getPostsByGroupId denied by security rules',
+        );
+        return const [];
+      }
+      rethrow;
+    }
   }
 
   /// Streams a recent batch of posts from Firestore for real-time dashboards.

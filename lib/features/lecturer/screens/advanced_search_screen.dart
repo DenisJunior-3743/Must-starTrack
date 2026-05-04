@@ -22,6 +22,9 @@ import '../../../data/models/user_model.dart';
 import '../../shared/widgets/settings_drawer.dart';
 import '../bloc/lecturer_cubit.dart';
 
+const _lecturerCardBlue = AppColors.primary;
+const _lecturerButtonGreen = AppColors.mustGreen;
+
 class AdvancedSearchScreen extends StatefulWidget {
   const AdvancedSearchScreen({super.key});
 
@@ -162,12 +165,18 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
 
     return Scaffold(
       endDrawer: const SettingsDrawer(),
-      backgroundColor:
-          isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
+      backgroundColor: isDark ? AppColors.backgroundDark : const Color(0xFFEAF0FF),
       appBar: AppBar(
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        elevation: 0,
         title: Text(
           'Search Students',
-          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+          style: GoogleFonts.plusJakartaSans(
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
+            letterSpacing: 0.2,
+          ),
         ),
         actions: [
           Builder(
@@ -182,25 +191,44 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
       body: Column(
         children: [
           Container(
-            color: isDark ? AppColors.surfaceDark : Colors.white,
+            decoration: BoxDecoration(
+              color: _lecturerCardBlue,
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(20),
+                bottomRight: Radius.circular(20),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.24),
+                  blurRadius: 22,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             child: Column(
               children: [
                 TextField(
                   controller: _queryCtrl,
                   onSubmitted: (_) => _doSearch(),
-                  style: GoogleFonts.plusJakartaSans(fontSize: 14),
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 14,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
                   decoration: InputDecoration(
                     hintText: 'Search by name or skill...',
                     hintStyle: GoogleFonts.plusJakartaSans(
                       fontSize: 14,
-                      color: AppColors.textHintLight,
+                      color: Colors.white70,
                     ),
-                    prefixIcon: const Icon(Icons.search, size: 20),
+                    prefixIcon: const Icon(Icons.search, size: 20, color: Colors.white),
                     suffixIcon: IconButton(
-                      icon: const Icon(Icons.tune, size: 20),
+                      icon: const Icon(Icons.tune, size: 20, color: Colors.white),
                       onPressed: () => _showFilterSheet(context),
                     ),
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.16),
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16,
                       vertical: 14,
@@ -208,11 +236,7 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
                     border: OutlineInputBorder(
                       borderRadius:
                           BorderRadius.circular(AppDimensions.radiusMd),
-                      borderSide: BorderSide(
-                        color: isDark
-                            ? AppColors.borderDark
-                            : AppColors.borderLight,
-                      ),
+                      borderSide: BorderSide.none,
                     ),
                   ),
                 ),
@@ -226,9 +250,15 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
                     children: [
                       if (_selectedFaculty != null)
                         InputChip(
+                          backgroundColor: Colors.white.withValues(alpha: 0.18),
+                          deleteIconColor: Colors.white,
                           label: Text(
                             _selectedFaculty!.name,
-                            style: GoogleFonts.plusJakartaSans(fontSize: 11),
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                           onDeleted: () {
                             setState(() {
@@ -242,9 +272,15 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
                         ),
                       if (_selectedCourse != null)
                         InputChip(
+                          backgroundColor: Colors.white.withValues(alpha: 0.18),
+                          deleteIconColor: Colors.white,
                           label: Text(
                             _selectedCourse!.name,
-                            style: GoogleFonts.plusJakartaSans(fontSize: 11),
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                           onDeleted: () {
                             setState(() => _selectedCourseId = null);
@@ -254,9 +290,15 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
                         ),
                       if (_selectedSkill != null)
                         InputChip(
+                          backgroundColor: Colors.white.withValues(alpha: 0.18),
+                          deleteIconColor: Colors.white,
                           label: Text(
                             _selectedSkill!,
-                            style: GoogleFonts.plusJakartaSans(fontSize: 11),
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                           onDeleted: () {
                             setState(() => _selectedSkill = null);
@@ -275,7 +317,8 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
                     icon: const Icon(Icons.search, size: 18),
                     label: const Text('Search'),
                     style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.primary,
+                      backgroundColor: _lecturerButtonGreen,
+                      foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius:
@@ -337,15 +380,13 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-                        color: isDark ? AppColors.surfaceDark : Colors.white,
+                        color: _lecturerCardBlue,
                         child: Text(
                           _buildResultMeta(sortedResults),
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: isDark
-                                ? AppColors.textSecondaryDark
-                                : AppColors.textSecondaryLight,
+                            color: Colors.white,
                           ),
                         ),
                       ),
@@ -609,7 +650,8 @@ class _AdvancedSearchScreenState extends State<AdvancedSearchScreen> {
                         }
                       },
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.primary,
+                        backgroundColor: _lecturerButtonGreen,
+                        foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       child: const Text('Apply Filters'),
@@ -632,6 +674,7 @@ class _SearchResultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ignore: unused_local_variable
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final profile = user.profile;
     final skills = profile?.skills ?? [];
@@ -639,7 +682,7 @@ class _SearchResultCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Material(
-        color: isDark ? AppColors.surfaceDark : Colors.white,
+        color: _lecturerCardBlue,
         borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
         child: InkWell(
           onTap: () {
@@ -653,7 +696,7 @@ class _SearchResultCard extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
               border: Border.all(
-                color: isDark ? AppColors.borderDark : AppColors.borderLight,
+                color: AppColors.primaryDark,
               ),
             ),
             child: Row(
@@ -672,7 +715,7 @@ class _SearchResultCard extends StatelessWidget {
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
-                            color: AppColors.primary,
+                            color: Colors.white,
                           ),
                         )
                       : null,
@@ -686,10 +729,8 @@ class _SearchResultCard extends StatelessWidget {
                         user.displayName ?? user.email,
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: isDark
-                              ? AppColors.textPrimaryDark
-                              : AppColors.textPrimaryLight,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
                         ),
                       ),
                       if (profile?.faculty != null ||
@@ -698,7 +739,7 @@ class _SearchResultCard extends StatelessWidget {
                           profile?.programName ?? profile?.faculty ?? '',
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 12,
-                            color: AppColors.textSecondaryLight,
+                            color: Colors.white70,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -716,14 +757,14 @@ class _SearchResultCard extends StatelessWidget {
                                     vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: AppColors.primaryTint10,
+                                    color: Colors.white.withValues(alpha: 0.16),
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: Text(
                                     s,
                                     style: GoogleFonts.plusJakartaSans(
                                       fontSize: 10,
-                                      color: AppColors.primary,
+                                      color: Colors.white,
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
@@ -753,7 +794,7 @@ class _SearchResultCard extends StatelessWidget {
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
-                              color: Colors.orange.shade400,
+                              color: Colors.orange.shade100,
                             ),
                           ),
                         ],
@@ -774,7 +815,7 @@ class _SearchResultCard extends StatelessWidget {
                             '${profile.totalPosts}',
                             style: GoogleFonts.plusJakartaSans(
                               fontSize: 11,
-                              color: AppColors.textHintLight,
+                              color: Colors.white70,
                             ),
                           ),
                         ],
@@ -786,7 +827,7 @@ class _SearchResultCard extends StatelessWidget {
                 const Icon(
                   Icons.chevron_right,
                   size: 20,
-                  color: AppColors.textHintLight,
+                  color: Colors.white70,
                 ),
               ],
             ),

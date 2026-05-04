@@ -68,6 +68,158 @@ class _RegisterStep3ScreenState extends State<RegisterStep3Screen> {
     );
   }
 
+  void _showPolicyDialog({required bool isPrivacy}) {
+    final title = isPrivacy ? 'Privacy Policy' : 'Terms of Service';
+    final sections = isPrivacy
+        ? _privacySections
+        : _termsSections;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 560),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 19,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary(context),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Effective date: ${DateTime.now().year}',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      color: AppColors.textSecondary(context),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Divider(height: 1, color: AppColors.border(context)),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: sections
+                            .map(
+                              (section) => Padding(
+                                padding: const EdgeInsets.only(bottom: 14),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      section.$1,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.textPrimary(context),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 5),
+                                    Text(
+                                      section.$2,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 12.5,
+                                        height: 1.45,
+                                        color:
+                                            AppColors.textSecondary(context),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      child: Text(
+                        'Close',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  static const List<(String, String)> _termsSections = [
+    (
+      '1. Platform Scope',
+      'MUST StarTrack supports academic portfolios, collaboration, and opportunity discovery inside the app. Activities, agreements, or disputes outside this system are outside MUST StarTrack operational control.',
+    ),
+    (
+      '2. Project Ownership & Licensing',
+      'You retain ownership of projects and content you upload. By posting, you grant MUST StarTrack a limited, non-exclusive license to store, process, and display your content within platform features such as feeds, profiles, and search.',
+    ),
+    (
+      '3. Integrity & Contextualization',
+      'You must represent contributions truthfully. Do not misattribute authorship, fabricate achievements, or remove essential context that changes meaning. If AI or third-party help was used, disclose it appropriately where required.',
+    ),
+    (
+      '4. Acceptable Use',
+      'Do not upload illegal, harmful, discriminatory, or infringing content. Do not impersonate others, abuse messaging, or attempt to manipulate ranking, reputation, or engagement metrics.',
+    ),
+    (
+      '5. External Services Disclaimer',
+      'Links, files, and interactions that move outside MUST StarTrack are handled by third-party services. Their terms and policies apply, and outcomes outside our system are not our responsibility.',
+    ),
+    (
+      '6. Enforcement & Updates',
+      'We may moderate content, restrict access, or suspend accounts for policy violations. Terms may be updated periodically; continued use indicates acceptance of updates.',
+    ),
+  ];
+
+  static const List<(String, String)> _privacySections = [
+    (
+      '1. Data We Collect',
+      'We collect profile data, authentication details, portfolio content, and interaction signals needed to provide core features such as authentication, messaging, recommendations, and collaboration.',
+    ),
+    (
+      '2. How Data Is Used',
+      'Data is used to run the platform, personalize relevant content, improve reliability, and protect account security. We use only what is necessary for platform function and academic experience quality.',
+    ),
+    (
+      '3. Visibility & Sharing',
+      'Profile and project visibility follows in-app settings and role-based access. We do not treat your private credentials as public content. Authorized administrators may access required operational data under governance rules.',
+    ),
+    (
+      '4. Security & Retention',
+      'We apply technical and organizational safeguards to protect stored data. Retention periods depend on operational, academic, and legal requirements, after which eligible data may be deleted or anonymized.',
+    ),
+    (
+      '5. Your Responsibilities',
+      'Keep your credentials secure, submit accurate information, and report suspected account misuse. Protecting integrity is a shared responsibility between users and the platform.',
+    ),
+    (
+      '6. Third-Party Boundaries',
+      'When you leave MUST StarTrack (external links, cloud tools, third-party sites), their privacy and security rules apply. Events outside our system are not controlled by MUST StarTrack.',
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
     String? sanitizedFrom(String? candidate) {
@@ -106,20 +258,38 @@ class _RegisterStep3ScreenState extends State<RegisterStep3Screen> {
               title: const Text('Security & Authentication'),
               leading: BackButton(onPressed: () => ctx.pop()),
             ),
-            body: Form(
-              key: _formKey,
-              child: Column(
+            body: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFFF8FBFF), Color(0xFFECF3FF)],
+                ),
+              ),
+              child: Stack(
                 children: [
-                  const ProgressStepper(currentStep: 3),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(AppDimensions.spacingMd),
-                      child: Column(
+                  const Positioned(
+                    top: -80,
+                    right: -70,
+                    child: _GlowBlob(size: 220, color: Color(0x332563EB)),
+                  ),
+                  const Positioned(
+                    bottom: -90,
+                    left: -85,
+                    child: _GlowBlob(size: 250, color: Color(0x221152D4)),
+                  ),
+                  Form(
+                    key: _formKey,
+                    child: Column(
+                      children: [
+                        const ProgressStepper(currentStep: 3),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.all(AppDimensions.spacingMd),
+                            child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Step dots (active = 3rd)
-                          const _StepDots(currentStep: 3),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 6),
 
                           Text('Secure Your Account',
                             style: GoogleFonts.plusJakartaSans(
@@ -140,9 +310,28 @@ class _RegisterStep3ScreenState extends State<RegisterStep3Screen> {
                             obscureText: _obscurePassword,
                             prefixIcon: const Icon(Icons.lock_outline_rounded),
                             suffixIcon: IconButton(
-                              icon: Icon(_obscurePassword
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined),
+                              tooltip: _obscurePassword
+                                  ? 'Show password'
+                                  : 'Hide password',
+                              style: IconButton.styleFrom(
+                                backgroundColor: AppColors.primary.withValues(alpha: 0.10),
+                                foregroundColor: AppColors.primary,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                minimumSize: const Size(40, 40),
+                              ),
+                              icon: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 180),
+                                transitionBuilder: (child, animation) =>
+                                    ScaleTransition(scale: animation, child: child),
+                                child: Icon(
+                                  _obscurePassword
+                                      ? Icons.visibility_rounded
+                                      : Icons.visibility_off_rounded,
+                                  key: ValueKey(_obscurePassword),
+                                ),
+                              ),
                               onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                             ),
                             textInputAction: TextInputAction.next,
@@ -165,9 +354,28 @@ class _RegisterStep3ScreenState extends State<RegisterStep3Screen> {
                             obscureText: _obscureConfirm,
                             prefixIcon: const Icon(Icons.lock_outline_rounded),
                             suffixIcon: IconButton(
-                              icon: Icon(_obscureConfirm
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined),
+                              tooltip: _obscureConfirm
+                                  ? 'Show password'
+                                  : 'Hide password',
+                              style: IconButton.styleFrom(
+                                backgroundColor: AppColors.primary.withValues(alpha: 0.10),
+                                foregroundColor: AppColors.primary,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                minimumSize: const Size(40, 40),
+                              ),
+                              icon: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 180),
+                                transitionBuilder: (child, animation) =>
+                                    ScaleTransition(scale: animation, child: child),
+                                child: Icon(
+                                  _obscureConfirm
+                                      ? Icons.visibility_rounded
+                                      : Icons.visibility_off_rounded,
+                                  key: ValueKey(_obscureConfirm),
+                                ),
+                              ),
                               onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
                             ),
                             textInputAction: TextInputAction.done,
@@ -180,6 +388,8 @@ class _RegisterStep3ScreenState extends State<RegisterStep3Screen> {
                           _TermsCheckbox(
                             value: _termsAccepted,
                             onChanged: (v) => setState(() => _termsAccepted = v ?? false),
+                            onOpenTerms: () => _showPolicyDialog(isPrivacy: false),
+                            onOpenPrivacy: () => _showPolicyDialog(isPrivacy: true),
                           ),
 
                           // â”€â”€ Verification notice â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -203,44 +413,48 @@ class _RegisterStep3ScreenState extends State<RegisterStep3Screen> {
                           const SizedBox(height: 28),
 
                           // â”€â”€ Complete button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-                          StButton(
-                            label: AppStrings.completeRegistration,
-                            isLoading: loading,
-                            onPressed: () => _submit(ctx),
-                          ),
-                          const SizedBox(height: AppDimensions.spacingMd),
-
-                          // â”€â”€ Or divider â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-                          const OrDivider(),
-                          const SizedBox(height: AppDimensions.spacingMd),
-
-                          // ── Google signup (greyed out – uni info required) ────────
-                          GestureDetector(
-                            onTap: () {
-                              ScaffoldMessenger.of(ctx).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'Google sign-up is not available. Please complete the form above so your university details can be captured.',
-                                    style: GoogleFonts.plusJakartaSans(fontSize: 13),
-                                  ),
-                                  backgroundColor: AppColors.warning,
-                                  behavior: SnackBarBehavior.floating,
-                                  duration: const Duration(seconds: 4),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: ElevatedButton(
+                              onPressed: loading ? null : () => _submit(ctx),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF2E7D32),
+                                foregroundColor: Colors.white,
+                                disabledBackgroundColor:
+                                    const Color(0xFF2E7D32)
+                                        .withValues(alpha: 0.45),
+                                disabledForegroundColor:
+                                    Colors.white.withValues(alpha: 0.75),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(
+                                      AppDimensions.radiusMd),
                                 ),
-                              );
-                            },
-                            child: const Opacity(
-                              opacity: 0.4,
-                              child: GoogleSignInButton(
-                                label: 'Sign up with Google',
-                                isLoading: false,
-                                onPressed: null,
                               ),
+                              child: loading
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : Text(
+                                      AppStrings.completeRegistration,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
                             ),
                           ),
                           const SizedBox(height: 40),
                         ],
                       ),
+                    ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -253,29 +467,29 @@ class _RegisterStep3ScreenState extends State<RegisterStep3Screen> {
   }
 }
 
-class _StepDots extends StatelessWidget {
-  final int currentStep;
-  const _StepDots({required this.currentStep});
+class _GlowBlob extends StatelessWidget {
+  final double size;
+  final Color color;
+
+  const _GlowBlob({required this.size, required this.color});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(3, (i) {
-        final isActive = i + 1 == currentStep;
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Container(
-            width: isActive ? 32 : 8, height: 8,
-            decoration: BoxDecoration(
-              color: (i + 1 <= currentStep)
-                  ? AppColors.primary
-                  : AppColors.primary.withValues(alpha: 0.20),
-              borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: color,
+              blurRadius: 80,
+              spreadRadius: 25,
             ),
-          ),
-        );
-      }),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -283,8 +497,15 @@ class _StepDots extends StatelessWidget {
 class _TermsCheckbox extends StatelessWidget {
   final bool value;
   final ValueChanged<bool?> onChanged;
+  final VoidCallback onOpenTerms;
+  final VoidCallback onOpenPrivacy;
 
-  const _TermsCheckbox({required this.value, required this.onChanged});
+  const _TermsCheckbox({
+    required this.value,
+    required this.onChanged,
+    required this.onOpenTerms,
+    required this.onOpenPrivacy,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -309,18 +530,24 @@ class _TermsCheckbox extends StatelessWidget {
                   TextSpan(
                     text: 'Terms of Service',
                     style: const TextStyle(
-                      color: AppColors.primary, fontWeight: FontWeight.w600),
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                      decoration: TextDecoration.underline,
+                      decorationColor: AppColors.primary,
+                    ),
                     recognizer: TapGestureRecognizer()
-                      ..onTap = () async {
-                        // launch terms URL
-                      },
+                      ..onTap = onOpenTerms,
                   ),
                   const TextSpan(text: ' and '),
                   TextSpan(
                     text: 'Privacy Policy',
                     style: const TextStyle(
-                      color: AppColors.primary, fontWeight: FontWeight.w600),
-                    recognizer: TapGestureRecognizer()..onTap = () {},
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                      decoration: TextDecoration.underline,
+                      decorationColor: AppColors.primary,
+                    ),
+                    recognizer: TapGestureRecognizer()..onTap = onOpenPrivacy,
                   ),
                 ],
               ),

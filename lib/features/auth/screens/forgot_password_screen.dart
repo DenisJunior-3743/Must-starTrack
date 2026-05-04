@@ -69,19 +69,42 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         },
         builder: (ctx, state) {
           final loading = state is AuthLoading;
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
           return Scaffold(
             appBar: AppBar(
               title: const Text(AppStrings.forgotPassword),
               leading: BackButton(onPressed: () => ctx.pop()),
             ),
-            body: SingleChildScrollView(
-              padding: const EdgeInsets.all(AppDimensions.spacingMd),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 24),
+            body: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: isDark
+                      ? const [Color(0xFF0B1222), Color(0xFF111D36)]
+                      : const [Color(0xFFF8FBFF), Color(0xFFECF3FF)],
+                ),
+              ),
+              child: Stack(
+                children: [
+                  const Positioned(
+                    top: -80,
+                    right: -70,
+                    child: _GlowBlob(size: 220, color: Color(0x332563EB)),
+                  ),
+                  const Positioned(
+                    bottom: -90,
+                    left: -85,
+                    child: _GlowBlob(size: 250, color: Color(0x221152D4)),
+                  ),
+                  SingleChildScrollView(
+                    padding: const EdgeInsets.all(AppDimensions.spacingMd),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 24),
 
                     // Icon
                     Center(
@@ -98,10 +121,18 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
                     Text(AppStrings.resetPassword,
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 24, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.3,
+                        color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                      )),
                     const SizedBox(height: 8),
                     Text('Enter your username and set a new password. We will update local storage and sync remotely.',
-                      style: GoogleFonts.plusJakartaSans(fontSize: 14, color: AppColors.textSecondaryLight, height: 1.5)),
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 14,
+                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                        height: 1.5,
+                      )),
                     const SizedBox(height: 12),
                     Container(
                       width: double.infinity,
@@ -157,7 +188,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    StTextField(
+                          StTextField(
                       label: AppStrings.password,
                       hint: 'Enter your new password',
                       controller: _newPasswordCtrl,
@@ -165,10 +196,26 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       obscureText: _obscureNewPassword,
                       prefixIcon: const Icon(Icons.lock_outline_rounded),
                       suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscureNewPassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined,
+                        tooltip:
+                            _obscureNewPassword ? 'Show password' : 'Hide password',
+                        style: IconButton.styleFrom(
+                          backgroundColor: AppColors.primary.withValues(alpha: 0.10),
+                          foregroundColor: AppColors.primary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          minimumSize: const Size(40, 40),
+                        ),
+                        icon: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 180),
+                          transitionBuilder: (child, animation) =>
+                              ScaleTransition(scale: animation, child: child),
+                          child: Icon(
+                            _obscureNewPassword
+                                ? Icons.visibility_rounded
+                                : Icons.visibility_off_rounded,
+                            key: ValueKey(_obscureNewPassword),
+                          ),
                         ),
                         onPressed: () => setState(
                           () => _obscureNewPassword = !_obscureNewPassword,
@@ -179,7 +226,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    StTextField(
+                          StTextField(
                       label: AppStrings.confirmPassword,
                       hint: 'Confirm your new password',
                       controller: _confirmPasswordCtrl,
@@ -187,10 +234,27 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       obscureText: _obscureConfirmPassword,
                       prefixIcon: const Icon(Icons.lock_reset_outlined),
                       suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscureConfirmPassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined,
+                        tooltip: _obscureConfirmPassword
+                            ? 'Show password'
+                            : 'Hide password',
+                        style: IconButton.styleFrom(
+                          backgroundColor: AppColors.primary.withValues(alpha: 0.10),
+                          foregroundColor: AppColors.primary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          minimumSize: const Size(40, 40),
+                        ),
+                        icon: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 180),
+                          transitionBuilder: (child, animation) =>
+                              ScaleTransition(scale: animation, child: child),
+                          child: Icon(
+                            _obscureConfirmPassword
+                                ? Icons.visibility_rounded
+                                : Icons.visibility_off_rounded,
+                            key: ValueKey(_obscureConfirmPassword),
+                          ),
                         ),
                         onPressed: () => setState(
                           () => _obscureConfirmPassword =
@@ -238,21 +302,52 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    Center(
-                      child: TextButton(
-                        onPressed: () => ctx.pop(),
-                        child: Text('Back to Login',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 13, fontWeight: FontWeight.w600,
-                            color: AppColors.primary)),
+                          Center(
+                            child: TextButton(
+                              onPressed: () => ctx.pop(),
+                              child: Text('Back to Login',
+                                  style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.primary)),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _GlowBlob extends StatelessWidget {
+  final double size;
+  final Color color;
+
+  const _GlowBlob({required this.size, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: color,
+              blurRadius: 80,
+              spreadRadius: 25,
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -297,6 +297,43 @@ class DatabaseHelper {
   Future<void> _onOpen(Database db) async {
     await _ensureCoreIndexes(db);
     await _ensureGroupSchema(db);
+    await _ensurePostOfflineSaveSchema(db);
+    await _ensureAiReviewSchema(db);
+  }
+
+  Future<void> _ensureAiReviewSchema(Database db) async {
+    await _ensureColumn(
+        db, DatabaseSchema.tablePosts, 'ai_review_status', 'TEXT');
+    await _ensureColumn(db, DatabaseSchema.tablePosts, 'ai_decision', 'TEXT');
+    await _ensureColumn(db, DatabaseSchema.tablePosts, 'ai_confidence', 'REAL');
+    await _ensureColumn(
+        db, DatabaseSchema.tablePosts, 'ai_scores', "TEXT DEFAULT '{}'");
+    await _ensureColumn(db, DatabaseSchema.tablePosts, 'ownership_answers',
+        "TEXT DEFAULT '{}'");
+    await _ensureColumn(db, DatabaseSchema.tablePosts,
+        'content_validation_answers', "TEXT DEFAULT '{}'");
+    await _ensureColumn(
+        db, DatabaseSchema.tablePosts, 'ai_findings', "TEXT DEFAULT '[]'");
+    await _ensureColumn(
+        db, DatabaseSchema.tablePosts, 'ai_evidence', "TEXT DEFAULT '[]'");
+    await _ensureColumn(db, DatabaseSchema.tablePosts, 'ai_final_take', 'TEXT');
+    await _ensureColumn(
+        db, DatabaseSchema.tablePosts, 'ai_reviewed_at', 'TEXT');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_posts_ai_review ON ${DatabaseSchema.tablePosts}(ai_review_status)',
+    );
+  }
+
+  Future<void> _ensurePostOfflineSaveSchema(Database db) async {
+    await _ensureColumn(
+      db,
+      DatabaseSchema.tablePosts,
+      'is_saved_by_me',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_posts_saved ON ${DatabaseSchema.tablePosts}(is_saved_by_me)',
+    );
   }
 
   Future<void> _ensureCoreIndexes(Database db) async {

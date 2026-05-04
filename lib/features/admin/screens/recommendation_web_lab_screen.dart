@@ -16,7 +16,14 @@ import '../../../data/remote/recommender_service.dart';
 import '../../../data/remote/skill_pattern_service.dart';
 import '../widgets/js_visualization_panel.dart';
 
-enum _LabCategory { feed, personalized, general }
+enum _LabCategory { feed, personalized, global }
+enum _PersonalizedTab { opportunities, collaborators }
+
+class _RankedStudentItem {
+  const _RankedStudentItem({required this.user, required this.globalScore});
+  final UserModel user;
+  final double globalScore;
+}
 
 class RecommendationWebLabScreen extends StatefulWidget {
   const RecommendationWebLabScreen({super.key});
@@ -32,14 +39,16 @@ class _RecommendationWebLabScreenState extends State<RecommendationWebLabScreen>
   bool _loading = true;
   String? _error;
   _LabCategory _category = _LabCategory.feed;
+  _PersonalizedTab _personalizedTab = _PersonalizedTab.opportunities;
 
   List<UserModel> _students = const <UserModel>[];
   List<PostModel> _posts = const <PostModel>[];
   String? _selectedStudentId;
 
-  List<RecommendedPost> _feedResults = const <RecommendedPost>[];
-  List<RecommendedPost> _personalizedResults = const <RecommendedPost>[];
-  List<RecommendedPost> _generalResults = const <RecommendedPost>[];
+  List<FeedVideoQueueItem> _feedVideoQueue = const <FeedVideoQueueItem>[];
+  List<RecommendedPost> _personalizedOpportunities = const <RecommendedPost>[];
+  List<RecommendedUser> _personalizedCollaborators = const <RecommendedUser>[];
+  List<_RankedStudentItem> _globalStudentRanks = const <_RankedStudentItem>[];
   SkillPatternResult _skillPatterns = SkillPatternResult.empty();
 
   _KMeansTrace? _kMeansTrace;
@@ -65,8 +74,7 @@ class _RecommendationWebLabScreenState extends State<RecommendationWebLabScreen>
 
       final users = await firestore.getAllUsersFromRemote(limit: 500);
       final students = users
-          .where((u) =>
-              u.role.name == 'student' && u.isActive && u.profile != null)
+          .where((u) => u.role.name == 'student' && u.isActive && u.profile != null)
           .toList(growable: false);
 
       if (students.isEmpty) {
@@ -74,26 +82,23 @@ class _RecommendationWebLabScreenState extends State<RecommendationWebLabScreen>
       }
 
       final impactMap = <String, double>{
-        for (final u in students)
-          u.id: _impactScoreForProfile(u.profile!),
+        for (final u in students) u.id: _impactScoreForProfile(u.profile!),
       };
 
-      final sampled = [...students]
-        ..sort((a, b) {
+      final sampled = [...students]..sort((a, b) {
           final ai = impactMap[a.id] ?? 0;
           final bi = impactMap[b.id] ?? 0;
           return bi.compareTo(ai);
         });
 
       final sampledStudents = sampled.take(_studentSampleSize).toList(growable: false);
-      final selected = _selectedStudentId != null &&
-              sampledStudents.any((u) => u.id == _selectedStudentId)
+      final selected = _selectedStudentId != null && sampledStudents.any((u) => u.id == _selectedStudentId)
           ? _selectedStudentId!
           : sampledStudents.first.id;
 
       final posts = await firestore.getRecentPosts(limit: 160);
       if (posts.isEmpty) {
-        throw StateError('No posts were found in Firestore for recommendation analysis.');
+        throw StateError('No posts were found.');
       }
 
       final selectedStudent = sampledStudents.firstWhere((u) => u.id == selected);
@@ -103,47 +108,51 @@ class _RecommendationWebLabScreenState extends State<RecommendationWebLabScreen>
         mode: 'personalized',
       );
 
-      final feed = recommender.rankLocally(
+      final feedQueue = recommender.buildFeedVideoQueue(
         user: selectedStudent,
         candidates: posts,
+      );
+
+      final opportunities = await recommender.rankHybrid(
+        user: selectedStudent,
+        candidates: posts.where((p) => p.type == 'opportunity').toList(),
         skillPatterns: skillPatterns,
       );
 
-      final personalized = await recommender.rankHybrid(
-        user: selectedStudent,
-        candidates: posts,
-        skillPatterns: skillPatterns,
+      final collaborators = recommender.rankCollaborators(
+        currentUser: selectedStudent,
+        candidates: sampledStudents,
       );
 
-      final general = _buildGeneralRecommendation(
-        recommender: recommender,
-        sampledStudents: sampledStudents,
-        posts: posts,
-        skillPatterns: skillPatterns,
-      );
+      final globalRanks = sampledStudents.map((u) {
+        return _RankedStudentItem(
+          user: u,
+          globalScore: recommender.computeGlobalStudentScore(u),
+        );
+      }).toList(growable: false)
+        ..sort((a, b) => b.globalScore.compareTo(a.globalScore));
 
       final kMeansTrace = _buildKMeansTrace(sampledStudents);
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       setState(() {
         _students = sampledStudents;
         _posts = posts;
         _selectedStudentId = selected;
         _globalImpactByStudentId = impactMap;
-        _feedResults = feed.take(20).toList(growable: false);
-        _personalizedResults = personalized.take(20).toList(growable: false);
-        _generalResults = general.take(20).toList(growable: false);
+
+        _feedVideoQueue = feedQueue;
+        _personalizedOpportunities = opportunities;
+        _personalizedCollaborators = collaborators;
+        _globalStudentRanks = globalRanks;
+        
         _skillPatterns = skillPatterns;
         _kMeansTrace = kMeansTrace;
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       setState(() {
         _error = '$e';
         _loading = false;
@@ -151,49 +160,6 @@ class _RecommendationWebLabScreenState extends State<RecommendationWebLabScreen>
     }
   }
 
-  List<RecommendedPost> _buildGeneralRecommendation({
-    required RecommenderService recommender,
-    required List<UserModel> sampledStudents,
-    required List<PostModel> posts,
-    SkillPatternResult? skillPatterns,
-  }) {
-    final scoreAggregate = <String, _ScoreAggregate>{};
-
-    for (final student in sampledStudents) {
-      final ranked = recommender.rankLocally(
-        user: student,
-        candidates: posts,
-        skillPatterns: skillPatterns,
-      );
-      for (final item in ranked) {
-        final aggregate = scoreAggregate.putIfAbsent(
-          item.post.id,
-          () => _ScoreAggregate(post: item.post),
-        );
-        aggregate.total += item.score;
-        aggregate.count += 1;
-      }
-    }
-
-    final general = scoreAggregate.values
-        .where((row) => row.count > 0)
-        .map(
-          (row) => RecommendedPost(
-            post: row.post,
-            score: (row.total / row.count).clamp(0.0, 1.0),
-            reasons: const ['cohort_average'],
-            scoreBreakdown: {
-              'cohort_avg_score': (row.total / row.count).clamp(0.0, 1.0),
-              'cohort_support_ratio':
-                  (row.count / sampledStudents.length).clamp(0.0, 1.0),
-            },
-          ),
-        )
-        .toList(growable: false)
-      ..sort((a, b) => b.score.compareTo(a.score));
-
-    return general;
-  }
 
   _KMeansTrace _buildKMeansTrace(List<UserModel> students) {
     final points = students
@@ -337,38 +303,39 @@ class _RecommendationWebLabScreenState extends State<RecommendationWebLabScreen>
         mode: _category == _LabCategory.personalized ? 'personalized' : 'feed',
       );
 
-      final feed = recommender.rankLocally(
+      final feedQueue = recommender.buildFeedVideoQueue(
         user: selected,
         candidates: _posts,
-        skillPatterns: skillPatterns,
       );
-      final personalized = await recommender.rankHybrid(
+
+      final opportunities = await recommender.rankHybrid(
         user: selected,
-        candidates: _posts,
+        candidates: _posts.where((p) => p.type == 'opportunity').toList(),
         skillPatterns: skillPatterns,
       );
 
-      if (!mounted) {
-        return;
-      }
+      final collaborators = recommender.rankCollaborators(
+        currentUser: selected,
+        candidates: _students,
+      );
+
+      if (!mounted) return;
 
       setState(() {
-        _feedResults = feed.take(20).toList(growable: false);
-        _personalizedResults = personalized.take(20).toList(growable: false);
+        _feedVideoQueue = feedQueue;
+        _personalizedOpportunities = opportunities;
+        _personalizedCollaborators = collaborators;
         _skillPatterns = skillPatterns;
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       setState(() {
         _error = '$e';
         _loading = false;
       });
     }
   }
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -406,6 +373,8 @@ class _RecommendationWebLabScreenState extends State<RecommendationWebLabScreen>
                       _aiPanel(textPrimary, textSecondary),
                       const SizedBox(height: 12),
                       _resultsPanel(textPrimary, textSecondary),
+                      const SizedBox(height: 12),
+                      _masterComparisonPanel(textPrimary, textSecondary),
                     ],
                   ),
                 ),
@@ -486,9 +455,20 @@ class _RecommendationWebLabScreenState extends State<RecommendationWebLabScreen>
             children: [
               _categoryChip(_LabCategory.feed, 'Feed'),
               _categoryChip(_LabCategory.personalized, 'Personalized'),
-              _categoryChip(_LabCategory.general, 'General'),
+              _categoryChip(_LabCategory.global, 'Global'),
             ],
           ),
+          if (_category == _LabCategory.personalized) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _personalizedTabChip(_PersonalizedTab.opportunities, 'Opportunities'),
+                _personalizedTabChip(_PersonalizedTab.collaborators, 'Collaborators'),
+              ],
+            ),
+          ],
           const SizedBox(height: 10),
           DropdownButtonFormField<String>(
             initialValue: _selectedStudentId,
@@ -511,10 +491,33 @@ class _RecommendationWebLabScreenState extends State<RecommendationWebLabScreen>
                   ),
                 )
                 .toList(growable: false),
-            onChanged: _category == _LabCategory.general ? null : _onStudentChanged,
+            onChanged:
+                _category == _LabCategory.global ? null : _onStudentChanged,
           ),
         ],
       ),
+    );
+  }
+
+  Widget _personalizedTabChip(_PersonalizedTab value, String label) {
+    final selected = _personalizedTab == value;
+    return ChoiceChip(
+      selected: selected,
+      label: Text(
+        label,
+        style: GoogleFonts.plusJakartaSans(
+          fontWeight: FontWeight.w700,
+          fontSize: 11,
+          color: selected ? Colors.white : null,
+        ),
+      ),
+      onSelected: (bool sel) {
+        if (sel) {
+          setState(() => _personalizedTab = value);
+        }
+      },
+      selectedColor: AppColors.info,
+      visualDensity: VisualDensity.compact,
     );
   }
 
@@ -623,17 +626,48 @@ class _RecommendationWebLabScreenState extends State<RecommendationWebLabScreen>
             }).toList(growable: false),
           ),
           const SizedBox(height: 10),
-          JsVisualizationPanel(
-            chartId: 'kmeans-${_selectedStudentId ?? 'none'}-${_students.length}',
-            title: 'Cluster Distribution (JavaScript Chart.js)',
-            labels: const ['Cluster 0', 'Cluster 1', 'Cluster 2'],
-            values: [
-              (finalCounts[0] ?? 0).toDouble(),
-              (finalCounts[1] ?? 0).toDouble(),
-              (finalCounts[2] ?? 0).toDouble(),
-            ],
-            color: AppColors.primary,
-            height: 240,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isCompact = constraints.maxWidth < 600;
+              final histogram = JsVisualizationPanel(
+                chartId:
+                    'kmeans-${_selectedStudentId ?? 'none'}-${_students.length}',
+                title: 'Cluster distribution (histogram)',
+                labels: const ['Cluster 0', 'Cluster 1', 'Cluster 2'],
+                values: [
+                  (finalCounts[0] ?? 0).toDouble(),
+                  (finalCounts[1] ?? 0).toDouble(),
+                  (finalCounts[2] ?? 0).toDouble(),
+                ],
+                color: AppColors.primary,
+                height: 240,
+              );
+              final centroids = trace.iterations.isNotEmpty
+                  ? trace.iterations.last.centroids
+                  : const <_FeatureVector>[];
+              final scatter = _LabClusterScatterPlot(
+                points: trace.points,
+                assignments: trace.finalAssignments,
+                centroids: centroids,
+              );
+              if (isCompact) {
+                return Column(
+                  children: [
+                    histogram,
+                    const SizedBox(height: 12),
+                    scatter,
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: histogram),
+                  const SizedBox(width: 12),
+                  Expanded(child: scatter),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -803,94 +837,105 @@ class _RecommendationWebLabScreenState extends State<RecommendationWebLabScreen>
   }
 
   Widget _localMathPanel(Color textPrimary, Color textSecondary) {
-    final results = _activeResults;
-    final localTop = results.take(10).toList(growable: false);
-    const weights = {
-      'content_similarity': 0.30,
-      'behavioral_relevance': 0.18,
-      'cluster_affinity': 0.08,
-      'quality_score': 0.18,
-      'freshness': 0.13,
-      'diversity': 0.07,
-      'trust_adjusted': 0.06,
-    };
+    if (_category == _LabCategory.global) {
+       return const SizedBox.shrink(); 
+    }
+
+    List<dynamic> items = [];
+    String title = '';
+    Map<String, double> weights = {};
+
+    if (_category == _LabCategory.feed) {
+      items = _feedVideoQueue.take(10).toList(growable: false);
+      title = 'Feed Local Calculation';
+      weights = {
+        'skill_signal': 0.28,
+        'faculty_signal': 0.15,
+        'program_signal': 0.10,
+        'category_signal': 0.20,
+        'search_signal': 0.17,
+        'engagement_signal': 0.05,
+        'freshness_signal': 0.05,
+      };
+    } else if (_personalizedTab == _PersonalizedTab.opportunities) {
+      items = _personalizedOpportunities.take(10).toList(growable: false);
+      title = 'Opportunities Local Math';
+      weights = {
+        'content_similarity': 0.30,
+        'behavioral_relevance': 0.18,
+        'cluster_affinity': 0.08,
+        'quality_score': 0.18,
+        'freshness': 0.13,
+        'diversity': 0.07,
+        'trust_adjusted': 0.06,
+      };
+    } else {
+      items = _personalizedCollaborators.take(10).toList(growable: false);
+      title = 'Collaborator Matching Math';
+      weights = {
+        'content_similarity': 0.34,
+        'behavioral_relevance': 0.20,
+        'quality_score': 0.18,
+        'freshness': 0.10,
+        'diversity': 0.10,
+        'trust_adjusted': 0.08,
+      };
+    }
+
+    if (items.isEmpty) return const SizedBox.shrink();
 
     return _panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Step 2: Local Algorithm (Parameter + Calculation Trace)',
-            style: GoogleFonts.plusJakartaSans(
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-              color: textPrimary,
-            ),
+            'Step 2: $title (Calculation Trace)',
+            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14, color: textPrimary),
           ),
           const SizedBox(height: 6),
-          Text(
-            'Formula: score = Σ(weight_i × component_i) + advert_adjustment',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 12,
-              color: textSecondary,
-            ),
-          ),
-          const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: weights.entries
-                .map((e) => _MetricPill(label: e.key, value: e.value.toStringAsFixed(2)))
-                .toList(growable: false),
-          ),
-          const SizedBox(height: 10),
-          JsVisualizationPanel(
-            chartId: 'local-${_category.name}-${_selectedStudentId ?? 'none'}',
-            title: 'Top Local Scores (JavaScript Chart.js)',
-            labels: localTop
-                .map((item) => item.post.title)
-                .toList(growable: false),
-            values: localTop
-                .map((item) => item.score)
-                .toList(growable: false),
-            color: const Color(0xFF1B8A4B),
-            height: 250,
+            children: weights.entries.map((e) => _MetricPill(label: e.key, value: e.value.toStringAsFixed(2))).toList(growable: false),
           ),
           const SizedBox(height: 10),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: DataTable(
-              columns: const [
-                DataColumn(label: Text('Post')),
-                DataColumn(label: Text('Content')),
-                DataColumn(label: Text('Behavior')),
-                DataColumn(label: Text('Cluster')),
-                DataColumn(label: Text('Quality')),
-                DataColumn(label: Text('Freshness')),
-                DataColumn(label: Text('Final')),
+              columns: [
+                const DataColumn(label: Text('Item')),
+                ...weights.keys.take(5).map((k) => DataColumn(label: Text(k.split('_').first))),
+                const DataColumn(label: Text('Final')),
               ],
-              rows: results.take(8).map((item) {
-                final b = item.scoreBreakdown;
+              rows: items.take(8).map((item) {
+                Map<String, double> b;
+                String name;
+                double finalScore;
+
+                if (item is FeedVideoQueueItem) {
+                  b = item.signalBreakdown;
+                  name = item.post.title;
+                  finalScore = item.eligibilityScore;
+                } else if (item is RecommendedPost) {
+                  b = item.scoreBreakdown;
+                  name = item.post.title;
+                  finalScore = item.score;
+                } else if (item is RecommendedUser) {
+                  b = item.scoreBreakdown;
+                  name = _displayName(item.user);
+                  finalScore = item.score;
+                } else {
+                  return const DataRow(cells: []);
+                }
+
                 return DataRow(
                   cells: [
                     DataCell(SizedBox(
-                      width: 180,
-                      child: Text(
-                        item.post.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.plusJakartaSans(fontSize: 11),
-                      ),
+                      width: 150,
+                      child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.plusJakartaSans(fontSize: 11)),
                     )),
-                    DataCell(Text(_d(b['content_similarity']))),
-                    DataCell(Text(_d(b['behavioral_relevance']))),
-                    DataCell(Text(_d(b['cluster_affinity']))),
-                    DataCell(Text(_d(b['quality_score']))),
-                    DataCell(Text(_d(b['freshness']))),
-                    DataCell(Text(
-                      _d(item.score),
-                      style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
-                    )),
+                    ...weights.keys.take(5).map((k) => DataCell(Text(_d(b[k])))),
+                    DataCell(Text(_d(finalScore), style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700))),
                   ],
                 );
               }).toList(growable: false),
@@ -902,95 +947,42 @@ class _RecommendationWebLabScreenState extends State<RecommendationWebLabScreen>
   }
 
   Widget _aiPanel(Color textPrimary, Color textSecondary) {
-    final results = _activeResults;
-    final aiRows = results
-        .where((r) => r.scoreBreakdown.containsKey('openai_score'))
-        .take(8)
-        .toList(growable: false);
+    if (_category != _LabCategory.personalized || _personalizedTab != _PersonalizedTab.opportunities) {
+      return const SizedBox.shrink();
+    }
+
+    final aiRows = _personalizedOpportunities.where((r) => r.scoreBreakdown.containsKey('openai_score')).take(8).toList(growable: false);
 
     return _panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Step 3: AI Stage (OpenAI Rerank)',
-            style: GoogleFonts.plusJakartaSans(
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-              color: textPrimary,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Blending logic in app: blended = 0.65 × local_score + 0.35 × openai_score',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 12,
-              color: textSecondary,
-            ),
-          ),
+          Text('Step 3: AI Stage (OpenAI Rerank)', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14, color: textPrimary)),
           const SizedBox(height: 8),
           if (!_aiConfigured)
-            Text(
-              'OpenAI is not configured in this environment. Local ranking is active.',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 12,
-                color: AppColors.warningText,
-              ),
-            )
+            Text('OpenAI is not configured. Local ranking is active.', style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.warningText))
           else if (aiRows.isEmpty)
-            Text(
-              'No OpenAI rerank rows in this category. Switch to Personalized to inspect AI blending.',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 12,
-                color: textSecondary,
-              ),
-            )
+            Text('No OpenAI rerank rows were produced.', style: GoogleFonts.plusJakartaSans(fontSize: 12, color: textSecondary))
           else
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                JsVisualizationPanel(
-                  chartId: 'ai-${_category.name}-${_selectedStudentId ?? 'none'}',
-                  title: 'AI Blended Scores (JavaScript Chart.js)',
-                  labels: aiRows
-                      .map((item) => item.post.title)
-                      .toList(growable: false),
-                  values: aiRows
-                      .map((item) => item.score)
-                      .toList(growable: false),
-                  color: const Color(0xFF7C3AED),
-                  height: 250,
-                ),
-                const SizedBox(height: 10),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: DataTable(
-                    columns: const [
-                      DataColumn(label: Text('Post')),
-                      DataColumn(label: Text('Local')),
-                      DataColumn(label: Text('OpenAI')),
-                      DataColumn(label: Text('Blended')),
-                    ],
-                    rows: aiRows.map((item) {
-                      final b = item.scoreBreakdown;
-                      return DataRow(cells: [
-                        DataCell(SizedBox(
-                          width: 180,
-                          child: Text(
-                            item.post.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.plusJakartaSans(fontSize: 11),
-                          ),
-                        )),
-                        DataCell(Text(_d(b['local_score'] ?? item.score))),
-                        DataCell(Text(_d(b['openai_score']))),
-                        DataCell(Text(_d(item.score))),
-                      ]);
-                    }).toList(growable: false),
-                  ),
-                ),
-              ],
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('Post')),
+                  DataColumn(label: Text('Local')),
+                  DataColumn(label: Text('OpenAI')),
+                  DataColumn(label: Text('Blended')),
+                ],
+                rows: aiRows.map((item) {
+                  final b = item.scoreBreakdown;
+                  return DataRow(cells: [
+                    DataCell(SizedBox(width: 180, child: Text(item.post.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(Text(_d(b['local_score'] ?? item.score))),
+                    DataCell(Text(_d(b['openai_score']))),
+                    DataCell(Text(_d(item.score))),
+                  ]);
+                }).toList(growable: false),
+              ),
             ),
         ],
       ),
@@ -998,99 +990,293 @@ class _RecommendationWebLabScreenState extends State<RecommendationWebLabScreen>
   }
 
   Widget _resultsPanel(Color textPrimary, Color textSecondary) {
-    final results = _activeResults;
+    return const SizedBox.shrink(); // Using Master Comparison Panel
+  }
 
+  Widget _masterComparisonPanel(Color textPrimary, Color textSecondary) {
+    switch (_category) {
+      case _LabCategory.feed:
+        return _buildFeedComparisonTable(textPrimary, textSecondary);
+      case _LabCategory.personalized:
+        if (_personalizedTab == _PersonalizedTab.opportunities) {
+          return _buildOpportunitiesComparisonTable(textPrimary, textSecondary);
+        } else {
+          return _buildCollaboratorsComparisonTable(textPrimary, textSecondary);
+        }
+      case _LabCategory.global:
+        return _buildGlobalComparisonTable(textPrimary, textSecondary);
+    }
+  }
+
+  Widget _buildFeedComparisonTable(Color textPrimary, Color textSecondary) {
+    if (_posts.isEmpty) return const SizedBox.shrink();
     return _panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Step 4: Result List + Mapping',
-            style: GoogleFonts.plusJakartaSans(
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-              color: textPrimary,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Sorted output exactly as the app does: ranked list with per-item score breakdown and reason mapping.',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 12,
-              color: textSecondary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          ...results.take(20).toList(growable: false).asMap().entries.map((entry) {
-            final rank = entry.key + 1;
-            final item = entry.value;
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                color: AppColors.primary.withValues(alpha: 0.05),
-                border: Border.all(color: AppColors.primary.withValues(alpha: 0.16)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          Text('Feed Tabulation (Before & After)', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14, color: textPrimary)),
+          const SizedBox(height: 16),
+          _buildTableWrapper(
+            headers: const ['DB Rank', 'Video Title', 'Feed Rank', 'Eligibility'],
+            itemCount: _posts.length,
+            builder: (context, index) {
+              final post = _posts[index];
+              final originalRank = index + 1;
+              final qIndex = _feedVideoQueue.indexWhere((r) => r.post.id == post.id);
+              return Row(
                 children: [
-                  Row(
-                    children: [
-                      Text(
-                        '#$rank',
+                  SizedBox(width: 60, child: Text(originalRank.toString(), style: GoogleFonts.plusJakartaSans(fontSize: 12, color: textSecondary))),
+                  Expanded(flex: 3, child: Text(post.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.plusJakartaSans(fontSize: 12, color: textPrimary))),
+                  Expanded(child: _rankBadge(qIndex >= 0 ? (qIndex + 1).toString() : '-', originalRank, qIndex >= 0 ? qIndex + 1 : null)),
+                  Expanded(child: Text(qIndex >= 0 ? _d(_feedVideoQueue[qIndex].eligibilityScore) : '-', textAlign: TextAlign.center, style: GoogleFonts.plusJakartaSans(fontSize: 12))),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOpportunitiesComparisonTable(Color textPrimary, Color textSecondary) {
+    final opportunities = _posts.where((p) => p.type == 'opportunity').toList(growable: false);
+    if (opportunities.isEmpty) return const SizedBox.shrink();
+    return _panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Personalized Opportunities Tabulation', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14, color: textPrimary)),
+          const SizedBox(height: 16),
+          _buildTableWrapper(
+            headers: const ['DB Rank', 'Opportunity Title', 'Personalized Rank', 'Score'],
+            itemCount: opportunities.length,
+            builder: (context, index) {
+              final post = opportunities[index];
+              final originalRank = index + 1;
+              final qIndex = _personalizedOpportunities.indexWhere((r) => r.post.id == post.id);
+              return Row(
+                children: [
+                  SizedBox(width: 60, child: Text(originalRank.toString(), style: GoogleFonts.plusJakartaSans(fontSize: 12, color: textSecondary))),
+                  Expanded(flex: 3, child: Text(post.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.plusJakartaSans(fontSize: 12, color: textPrimary))),
+                  Expanded(child: _rankBadge(qIndex >= 0 ? (qIndex + 1).toString() : '-', originalRank, qIndex >= 0 ? qIndex + 1 : null)),
+                  Expanded(child: Text(qIndex >= 0 ? _d(_personalizedOpportunities[qIndex].score) : '-', textAlign: TextAlign.center, style: GoogleFonts.plusJakartaSans(fontSize: 12))),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCollaboratorsComparisonTable(Color textPrimary, Color textSecondary) {
+    if (_students.isEmpty) return const SizedBox.shrink();
+    return _panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Personalized Collaborators Tabulation', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14, color: textPrimary)),
+          const SizedBox(height: 16),
+          _buildTableWrapper(
+            headers: const ['DB Rank', 'Collaborator Name', 'Recommended Rank', 'Score'],
+            itemCount: _students.length,
+            builder: (context, index) {
+              final student = _students[index];
+              final originalRank = index + 1;
+              final qIndex = _personalizedCollaborators.indexWhere((r) => r.user.id == student.id);
+              return Row(
+                children: [
+                  SizedBox(width: 60, child: Text(originalRank.toString(), style: GoogleFonts.plusJakartaSans(fontSize: 12, color: textSecondary))),
+                  Expanded(flex: 3, child: Text(_displayName(student), maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.plusJakartaSans(fontSize: 12, color: textPrimary))),
+                  Expanded(child: _rankBadge(qIndex >= 0 ? (qIndex + 1).toString() : '-', originalRank, qIndex >= 0 ? qIndex + 1 : null)),
+                  Expanded(child: Text(qIndex >= 0 ? _d(_personalizedCollaborators[qIndex].score) : '-', textAlign: TextAlign.center, style: GoogleFonts.plusJakartaSans(fontSize: 12))),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGlobalComparisonTable(Color textPrimary, Color textSecondary) {
+    if (_students.isEmpty) return const SizedBox.shrink();
+    return _panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Global Students Tabulation', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 14, color: textPrimary)),
+          const SizedBox(height: 16),
+          _buildTableWrapper(
+            headers: const ['DB Rank', 'Student Name', 'Global Rank', 'Global Score'],
+            itemCount: _students.length,
+            builder: (context, index) {
+              final student = _students[index];
+              final originalRank = index + 1;
+              final qIndex = _globalStudentRanks.indexWhere((r) => r.user.id == student.id);
+              return Row(
+                children: [
+                  SizedBox(width: 60, child: Text(originalRank.toString(), style: GoogleFonts.plusJakartaSans(fontSize: 12, color: textSecondary))),
+                  Expanded(flex: 3, child: Text(_displayName(student), maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.plusJakartaSans(fontSize: 12, color: textPrimary))),
+                  Expanded(child: _rankBadge(qIndex >= 0 ? (qIndex + 1).toString() : '-', originalRank, qIndex >= 0 ? qIndex + 1 : null)),
+                  Expanded(child: Text(qIndex >= 0 ? _d(_globalStudentRanks[qIndex].globalScore) : '-', textAlign: TextAlign.center, style: GoogleFonts.plusJakartaSans(fontSize: 12))),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTableWrapper({
+    required List<String> headers,
+    required int itemCount,
+    required Widget Function(BuildContext, int) builder,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      height: 430,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isDark
+              ? [AppColors.surfaceDark, const Color(0xFF121B2F)]
+              : const [Color(0xFFFFFFFF), Color(0xFFF7FAFF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(
+          color: isDark ? AppColors.borderDark : const Color(0xFFD9E4FB),
+        ),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0D1B8F).withValues(alpha: 0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.08),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(11)),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 60,
+                      child: Text(
+                        headers[0],
                         style: GoogleFonts.plusJakartaSans(
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.primary,
-                        ),
+                            fontWeight: FontWeight.w800, fontSize: 11),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          item.post.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.plusJakartaSans(
-                            fontWeight: FontWeight.w700,
-                            color: textPrimary,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        _d(item.score),
-                        style: GoogleFonts.plusJakartaSans(
-                          fontWeight: FontWeight.w700,
-                          color: textPrimary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Reasons: ${item.reasons.join(', ')}',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 11,
-                      color: textSecondary,
                     ),
-                  ),
-                  if (item.scoreBreakdown.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      item.scoreBreakdown.entries
-                          .map((e) => '${e.key}=${_d(e.value)}')
-                          .join(' | '),
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 11,
-                        color: textSecondary,
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        headers[1],
+                        style: GoogleFonts.plusJakartaSans(
+                            fontWeight: FontWeight.w800, fontSize: 11),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        headers[2],
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.plusJakartaSans(
+                            fontWeight: FontWeight.w800, fontSize: 11),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        headers[3],
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.plusJakartaSans(
+                            fontWeight: FontWeight.w800, fontSize: 11),
                       ),
                     ),
                   ],
-                ],
-              ),
-            );
-          }),
+                ),
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Smart view: before/after rank movement with compact score trace',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 10,
+                      color: isDark
+                          ? AppColors.textSecondaryDark
+                          : AppColors.textSecondaryLight,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: itemCount == 0
+                ? Center(
+                    child: Text(
+                      'No rows available for this view.',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        color: isDark
+                            ? AppColors.textSecondaryDark
+                            : AppColors.textSecondaryLight,
+                      ),
+                    ),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    itemCount: itemCount,
+                    separatorBuilder: (context, index) => const SizedBox(height: 4),
+                    itemBuilder: (context, index) {
+                      final stripe = index.isEven
+                          ? AppColors.primary.withValues(alpha: 0.035)
+                          : Colors.transparent;
+                      return Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: stripe,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: stripe == Colors.transparent
+                                ? Colors.transparent
+                                : AppColors.primary.withValues(alpha: 0.12),
+                          ),
+                        ),
+                        child: builder(context, index),
+                      );
+                    },
+                  ),
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _rankBadge(String rankText, int originalRank, int? currentRank) {
+    if (currentRank == null) return Text(rankText, textAlign: TextAlign.center, style: GoogleFonts.plusJakartaSans(fontSize: 12));
+    final diff = originalRank - currentRank;
+    final icon = diff > 0 ? Icons.arrow_upward_rounded : diff < 0 ? Icons.arrow_downward_rounded : Icons.remove_rounded;
+    final color = diff > 0 ? AppColors.success : diff < 0 ? AppColors.danger : Colors.grey;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(rankText, style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700)),
+        const SizedBox(width: 4),
+        Icon(icon, size: 12, color: color),
+      ],
     );
   }
 
@@ -1098,53 +1284,43 @@ class _RecommendationWebLabScreenState extends State<RecommendationWebLabScreen>
     final selected = _category == value;
     return ChoiceChip(
       selected: selected,
-      label: Text(
-        label,
-        style: GoogleFonts.plusJakartaSans(
-          fontWeight: FontWeight.w700,
-          fontSize: 12,
-          color: selected ? Colors.white : null,
-        ),
-      ),
+      label: Text(label, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 12, color: selected ? Colors.white : null)),
       onSelected: (_) => setState(() => _category = value),
       selectedColor: AppColors.primary,
     );
   }
 
   Widget _panel({required Widget child}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Theme.of(context).brightness == Brightness.dark
-            ? AppColors.surfaceDark
-            : Colors.white,
+        gradient: LinearGradient(
+          colors: isDark
+              ? [AppColors.surfaceDark, const Color(0xFF121B2F)]
+              : const [Color(0xFFFFFFFF), Color(0xFFF8FBFF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
         border: Border.all(
-          color: Theme.of(context).brightness == Brightness.dark
-              ? AppColors.borderDark
-              : AppColors.borderLight,
+          color: isDark ? AppColors.borderDark : const Color(0xFFD9E4FB),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0D1B8F).withValues(alpha: 0.05),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: child,
     );
   }
 
-  List<RecommendedPost> get _activeResults {
-    switch (_category) {
-      case _LabCategory.feed:
-        return _feedResults;
-      case _LabCategory.personalized:
-        return _personalizedResults;
-      case _LabCategory.general:
-        return _generalResults;
-    }
-  }
-
   String _displayName(UserModel user) {
     final name = (user.displayName ?? '').trim();
-    if (name.isNotEmpty) {
-      return name;
-    }
+    if (name.isNotEmpty) return name;
     return user.email;
   }
 
@@ -1218,14 +1394,6 @@ class _MetricPill extends StatelessWidget {
   }
 }
 
-class _ScoreAggregate {
-  _ScoreAggregate({required this.post});
-
-  final PostModel post;
-  double total = 0;
-  int count = 0;
-}
-
 class _KMeansTrace {
   const _KMeansTrace({
     required this.points,
@@ -1275,4 +1443,198 @@ class _FeatureVector {
           math.pow(completeness - other.completeness, 2),
     );
   }
+}
+
+// ── K-means scatter plot ───────────────────────────────────────────────────
+
+class _LabClusterScatterPlot extends StatelessWidget {
+  const _LabClusterScatterPlot({
+    required this.points,
+    required this.assignments,
+    required this.centroids,
+  });
+
+  final List<_StudentPoint> points;
+  final Map<String, int> assignments;
+  final List<_FeatureVector> centroids;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 240,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+        color: Colors.white,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'Cluster spread (skills vs activity)',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimaryLight,
+                ),
+              ),
+              const Spacer(),
+              _legendDot(const Color(0xFF1F6FEB), 'C0'),
+              const SizedBox(width: 8),
+              _legendDot(const Color(0xFF0F9D58), 'C1'),
+              const SizedBox(width: 8),
+              _legendDot(const Color(0xFFE67E22), 'C2'),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Expanded(
+            child: CustomPaint(
+              painter: _LabClusterScatterPainter(
+                points: points,
+                assignments: assignments,
+                centroids: centroids,
+              ),
+              child: const SizedBox.expand(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _legendDot(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 3),
+        Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 10,
+            color: AppColors.textSecondaryLight,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LabClusterScatterPainter extends CustomPainter {
+  const _LabClusterScatterPainter({
+    required this.points,
+    required this.assignments,
+    required this.centroids,
+  });
+
+  final List<_StudentPoint> points;
+  final Map<String, int> assignments;
+  final List<_FeatureVector> centroids;
+
+  static const _clusterColors = <Color>[
+    Color(0xFF1F6FEB),
+    Color(0xFF0F9D58),
+    Color(0xFFE67E22),
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final chart = Rect.fromLTWH(30, 8, size.width - 42, size.height - 30);
+
+    // Axes
+    final axisPaint = Paint()
+      ..color = const Color(0xFF9AA4B2)
+      ..strokeWidth = 1;
+    canvas.drawLine(chart.bottomLeft, chart.bottomRight, axisPaint);
+    canvas.drawLine(chart.bottomLeft, chart.topLeft, axisPaint);
+
+    // Grid lines
+    final gridPaint = Paint()
+      ..color = const Color(0x1A0F172A)
+      ..strokeWidth = 1;
+    for (var i = 1; i <= 4; i++) {
+      final y = chart.bottom - chart.height * (i / 5);
+      canvas.drawLine(Offset(chart.left, y), Offset(chart.right, y), gridPaint);
+    }
+
+    // Data points
+    for (final point in points) {
+      final cluster = assignments[point.user.id] ?? 0;
+      final color =
+          _clusterColors[cluster.clamp(0, _clusterColors.length - 1)];
+      final x =
+          chart.left + point.vector.skillsDensity.clamp(0.0, 1.0) * chart.width;
+      final y = chart.bottom -
+          point.vector.activityDensity.clamp(0.0, 1.0) * chart.height;
+
+      canvas.drawCircle(Offset(x, y), 3.5, Paint()..color = color);
+      canvas.drawCircle(
+        Offset(x, y),
+        5.5,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1
+          ..color = color.withValues(alpha: 0.35),
+      );
+    }
+
+    // Centroid markers (×)
+    for (var i = 0; i < centroids.length; i++) {
+      final c = centroids[i];
+      final color = _clusterColors[i.clamp(0, _clusterColors.length - 1)];
+      final cx = chart.left + c.skillsDensity.clamp(0.0, 1.0) * chart.width;
+      final cy =
+          chart.bottom - c.activityDensity.clamp(0.0, 1.0) * chart.height;
+
+      final crossPaint = Paint()
+        ..color = color
+        ..strokeWidth = 2.5
+        ..strokeCap = StrokeCap.round;
+      const r = 6.0;
+      canvas.drawLine(
+          Offset(cx - r, cy - r), Offset(cx + r, cy + r), crossPaint);
+      canvas.drawLine(
+          Offset(cx + r, cy - r), Offset(cx - r, cy + r), crossPaint);
+      canvas.drawCircle(
+        Offset(cx, cy),
+        9,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5
+          ..color = color.withValues(alpha: 0.55),
+      );
+    }
+
+    // Axis labels
+    final labelStyle = GoogleFonts.plusJakartaSans(
+      fontSize: 10,
+      fontWeight: FontWeight.w600,
+      color: const Color(0xFF5B6676),
+    );
+    final xPainter = TextPainter(
+      text: TextSpan(text: 'Skills density →', style: labelStyle),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    xPainter.paint(
+        canvas, Offset(chart.right - xPainter.width, chart.bottom + 6));
+
+    final yPainter = TextPainter(
+      text: TextSpan(text: 'Activity ↑', style: labelStyle),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    yPainter.paint(canvas, Offset(2, chart.top));
+  }
+
+  @override
+  bool shouldRepaint(covariant _LabClusterScatterPainter old) =>
+      old.points != points ||
+      old.assignments != assignments ||
+      old.centroids != centroids;
 }

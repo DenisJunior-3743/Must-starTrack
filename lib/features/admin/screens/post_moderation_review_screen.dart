@@ -28,7 +28,8 @@ class PostModerationReviewScreen extends StatefulWidget {
       _PostModerationReviewScreenState();
 }
 
-class _PostModerationReviewScreenState extends State<PostModerationReviewScreen> {
+class _PostModerationReviewScreenState
+    extends State<PostModerationReviewScreen> {
   final _postDao = sl<PostDao>();
   final _syncQueueDao = sl<SyncQueueDao>();
   final _syncService = sl<SyncService>();
@@ -108,6 +109,217 @@ class _PostModerationReviewScreenState extends State<PostModerationReviewScreen>
     );
   }
 
+  Color _aiDecisionColor(String? decision) {
+    switch (decision) {
+      case 'approve':
+        return AppColors.success;
+      case 'reject':
+        return AppColors.danger;
+      case 'needs_human':
+        return AppColors.warning;
+      default:
+        return AppColors.textSecondaryLight;
+    }
+  }
+
+  String _aiDecisionLabel(String? decision) {
+    switch (decision) {
+      case 'approve':
+        return 'AI suggests approval';
+      case 'reject':
+        return 'AI suggests rejection';
+      case 'needs_human':
+        return 'AI needs human review';
+      default:
+        return 'AI review not available';
+    }
+  }
+
+  Widget _buildAiReviewCard(PostModel post) {
+    final color = _aiDecisionColor(post.aiDecision);
+    final confidence = ((post.aiConfidence ?? 0) * 100).round();
+    final scores = post.aiScores.entries.toList(growable: false);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+        color: color.withValues(alpha: 0.06),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.auto_awesome_rounded, color: color),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _aiDecisionLabel(post.aiDecision),
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              _metaChip('$confidence% confidence', color),
+            ],
+          ),
+          if ((post.aiFinalTake ?? '').trim().isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              post.aiFinalTake!.trim(),
+              style: GoogleFonts.plusJakartaSans(fontSize: 13, height: 1.45),
+            ),
+          ],
+          if (scores.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            ...scores.map((entry) {
+              final label = entry.key.replaceAll('_', ' ');
+              final value = entry.value.clamp(0, 100);
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 148,
+                      child: Text(
+                        label,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(99),
+                        child: LinearProgressIndicator(
+                          value: value / 100,
+                          minHeight: 8,
+                          color: color,
+                          backgroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 34,
+                      child: Text(
+                        '$value',
+                        textAlign: TextAlign.end,
+                        style: GoogleFonts.plusJakartaSans(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+          if (post.aiFindings.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'AI Findings',
+              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 6),
+            ...post.aiFindings.map(
+              (finding) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '- $finding',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 12),
+                ),
+              ),
+            ),
+          ],
+          if (post.aiEvidence.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Evidence Checked',
+              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 6),
+            ...post.aiEvidence.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '- $item',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 12),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildValidationAnswersCard(PostModel post) {
+    Widget section(String title, Map<String, String> answers) {
+      if (answers.isEmpty) return const SizedBox.shrink();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          ...answers.entries.map(
+            (entry) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    entry.key,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textSecondaryLight,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    entry.value,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (post.ownershipAnswers.isEmpty &&
+        post.contentValidationAnswers.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          section('Project Ownership Answers', post.ownershipAnswers),
+          if (post.ownershipAnswers.isNotEmpty &&
+              post.contentValidationAnswers.isNotEmpty)
+            const SizedBox(height: 8),
+          section('Content Validation Answers', post.contentValidationAnswers),
+        ],
+      ),
+    );
+  }
+
   Future<void> _openExternalUrl(String rawUrl) async {
     final uri = Uri.tryParse(rawUrl);
     if (uri == null) return;
@@ -153,7 +365,8 @@ class _PostModerationReviewScreenState extends State<PostModerationReviewScreen>
                   right: 10,
                   bottom: 10,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.6),
                       borderRadius: BorderRadius.circular(999),
@@ -248,11 +461,17 @@ class _PostModerationReviewScreenState extends State<PostModerationReviewScreen>
             spacing: 8,
             runSpacing: 8,
             children: [
-              _metaChip('By ${post.authorName ?? post.authorId}', AppColors.primary),
+              _metaChip(
+                  'By ${post.authorName ?? post.authorId}', AppColors.primary),
               _metaChip(post.type.toUpperCase(), AppColors.warning),
-              _metaChip(post.moderationStatus.name.toUpperCase(), AppColors.textSecondaryLight),
+              _metaChip(post.moderationStatus.name.toUpperCase(),
+                  AppColors.textSecondaryLight),
             ],
           ),
+          const SizedBox(height: 14),
+          _buildAiReviewCard(post),
+          const SizedBox(height: 14),
+          _buildValidationAnswersCard(post),
           const SizedBox(height: 14),
           if ((post.description ?? '').trim().isNotEmpty)
             Text(
@@ -346,7 +565,8 @@ class _PostModerationReviewScreenState extends State<PostModerationReviewScreen>
               },
             ),
           ],
-          if (post.youtubeUrl != null && post.youtubeUrl!.trim().isNotEmpty) ...[
+          if (post.youtubeUrl != null &&
+              post.youtubeUrl!.trim().isNotEmpty) ...[
             const SizedBox(height: 14),
             Text(
               'YouTube',

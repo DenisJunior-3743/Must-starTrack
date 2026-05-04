@@ -233,10 +233,52 @@ class UserDao {
       offset: page * pageSize,
     );
 
-    return Future.wait(rows.map((row) async {
-      final profile = await getProfileByUserId(row['id'] as String);
-      return UserModel.fromMap(row, profile: profile);
-    }));
+    final profilesByUserId = await _getProfilesByUserIds(
+      db,
+      rows.map((row) => row['id'] as String).toList(growable: false),
+    );
+
+    return rows
+        .map(
+          (row) => UserModel.fromMap(
+            row,
+            profile: profilesByUserId[row['id'] as String],
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<Map<String, ProfileModel>> _getProfilesByUserIds(
+    Database db,
+    List<String> userIds,
+  ) async {
+    final cleanedIds = userIds
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (cleanedIds.isEmpty) return const <String, ProfileModel>{};
+
+    const chunkSize = 900;
+    final profilesByUserId = <String, ProfileModel>{};
+    for (var index = 0; index < cleanedIds.length; index += chunkSize) {
+      final chunk = cleanedIds.sublist(
+        index,
+        (index + chunkSize).clamp(0, cleanedIds.length),
+      );
+      final placeholders = List.filled(chunk.length, '?').join(',');
+      final rows = await db.query(
+        DatabaseSchema.tableProfiles,
+        where: 'user_id IN ($placeholders)',
+        whereArgs: chunk,
+      );
+      for (final row in rows) {
+        final userId = row['user_id'] as String?;
+        if (userId == null || userId.isEmpty) continue;
+        profilesByUserId[userId] = ProfileModel.fromMap(row);
+      }
+    }
+    return profilesByUserId;
   }
 
   /// Returns count of all users (for admin stats).

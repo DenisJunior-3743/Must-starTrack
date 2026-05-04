@@ -1,4 +1,4 @@
-﻿// lib/features/profile/bloc/profile_cubit.dart
+// lib/features/profile/bloc/profile_cubit.dart
 //
 // MUST StarTrack â€” Profile Cubit (Phase 4)
 //
@@ -21,11 +21,13 @@
 //   On mutation it writes directly to Firestore immediately (profile changes
 //   are user-critical), and also persists locally so offline reads work.
 
+import 'dart:async';
+import 'dart:io';
+
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
-import 'dart:io';
 
 import '../../../data/local/dao/post_dao.dart';
 import '../../../data/local/dao/sync_queue_dao.dart';
@@ -160,7 +162,8 @@ class ProfileCubit extends Cubit<ProfileState> {
       }
       final isOwn = uid == currentUid;
 
-      // Read user + posts concurrently
+      // Read user + posts concurrently. Local data gives the screen a fast
+      // first paint; a remote freshness check below reconciles admin edits.
       final results = await Future.wait([
         _userDao.getUserById(uid),
         _postDao.getPostsByAuthor(uid, pageSize: 30),
@@ -231,8 +234,63 @@ class ProfileCubit extends Cubit<ProfileState> {
         followingCount: followingCount,
         collabCount: collabCount,
       ));
+
+      unawaited(_refreshLoadedUserFromRemote(
+        uid: uid,
+        localUser: user,
+        posts: posts,
+        isOwn: isOwn,
+        isFollowing: isFollowing,
+        followerCount: followerCount,
+        followingCount: followingCount,
+        collabCount: collabCount,
+      ));
     } catch (e) {
       emit(ProfileError('Failed to load profile: $e'));
+    }
+  }
+
+  Future<void> _refreshLoadedUserFromRemote({
+    required String uid,
+    required UserModel localUser,
+    required List<PostModel> posts,
+    required bool isOwn,
+    required bool isFollowing,
+    required int followerCount,
+    required int followingCount,
+    required int collabCount,
+  }) async {
+    try {
+      final remoteUser = await _firestore.getUser(uid);
+      if (remoteUser == null || isClosed) return;
+
+      final remoteIsNewer = remoteUser.updatedAt.isAfter(localUser.updatedAt) ||
+          (remoteUser.profile?.updatedAt.isAfter(
+                localUser.profile?.updatedAt ??
+                    DateTime.fromMillisecondsSinceEpoch(0),
+              ) ??
+              false);
+      if (!remoteIsNewer) return;
+
+      await _userDao.insertUser(remoteUser);
+      if (isOwn) {
+        _authCubit.updateCurrentUser(remoteUser);
+      }
+
+      final latest = state;
+      if (latest is! ProfileLoaded || latest.user.id != uid) return;
+
+      emit(latest.copyWith(
+        user: remoteUser,
+        posts: posts,
+        isOwnProfile: isOwn,
+        isFollowing: isFollowing,
+        followerCount: followerCount,
+        followingCount: followingCount,
+        collabCount: collabCount,
+      ));
+    } catch (e) {
+      debugPrint('[ProfileCubit] remote profile refresh skipped: $e');
     }
   }
 
@@ -288,6 +346,7 @@ class ProfileCubit extends Cubit<ProfileState> {
     String? bio,
     String? faculty,
     String? programme,
+    String? department,
     int? yearOfStudy,
     List<String>? skills,
     Map<String, String>? portfolioLinks,
@@ -336,6 +395,7 @@ class ProfileCubit extends Cubit<ProfileState> {
         bio: bio,
         faculty: faculty,
         programName: programme,
+        department: department,
         yearOfStudy: yearOfStudy,
         skills: skills,
         portfolioLinks: portfolioLinks,

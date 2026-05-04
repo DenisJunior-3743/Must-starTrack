@@ -98,6 +98,12 @@ class _LecturerRegisterScreenState extends State<LecturerRegisterScreen> {
   List<String> get _currentDepts =>
       _faculty != null ? (_departments[_faculty] ?? []) : [];
 
+    List<String> get _departmentOptions => _currentDepts
+      .map(_formatDepartmentLabel)
+      .where((value) => value.isNotEmpty)
+      .toSet()
+      .toList(growable: false);
+
   @override
   void dispose() {
     _nameCtrl.dispose();
@@ -113,11 +119,26 @@ class _LecturerRegisterScreenState extends State<LecturerRegisterScreen> {
         'displayName': _nameCtrl.text.trim(),
         'email': _emailCtrl.text.trim(),
         'faculty': _faculty,
-        'department': _department,
+        'department': _formatDepartmentLabel(_department ?? ''),
         'password': _passwordCtrl.text,
         'role': 'lecturer',
       },
     );
+  }
+
+  String _formatDepartmentLabel(String input) {
+    final value = input.trim();
+    if (value.isEmpty) return '';
+
+    final lower = value.toLowerCase();
+    if (lower.startsWith('department of ')) {
+      return value;
+    }
+    if (lower.startsWith('bachelor of ')) {
+      final core = value.substring('Bachelor of '.length).trim();
+      return core.isEmpty ? 'Department' : 'Department of $core';
+    }
+    return 'Department of $value';
   }
 
   @override
@@ -158,165 +179,269 @@ class _LecturerRegisterScreenState extends State<LecturerRegisterScreen> {
               title: const Text('Staff Registration'),
               leading: BackButton(onPressed: () => ctx.pop()),
             ),
-            body: _loadingFaculties
-                ? const Center(child: CircularProgressIndicator())
-                : SingleChildScrollView(
-              padding: const EdgeInsets.all(AppDimensions.spacingMd),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 8),
-
-                    // Branding header
-                    Text('Join MUST StarTrack',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 32, fontWeight: FontWeight.w700, letterSpacing: -0.5)),
-                    const SizedBox(height: 8),
-                    Text('Create your lecturer or staff account to manage academic tracks and student progress.',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 14, color: AppColors.textSecondaryLight, height: 1.5)),
-                    const SizedBox(height: 32),
-
-                    // Full Name
-                    StTextField(
-                      label: AppStrings.fullName,
-                      hint: 'e.g. Dr. John Doe',
-                      controller: _nameCtrl,
-                      prefixIcon: const Icon(Icons.person_outline_rounded),
-                      textInputAction: TextInputAction.next,
-                      validator: (v) => MustValidators.validateRequired(v, 'Full Name'),
-                    ),
-                    const SizedBox(height: AppDimensions.spacingMd),
-
-                    // Staff email
-                    StTextField(
-                      label: 'Staff Email',
-                      hint: 'username@staff.must.ac.ug',
-                      controller: _emailCtrl,
-                      keyboardType: TextInputType.emailAddress,
-                      prefixIcon: const Icon(Icons.mail_outline_rounded),
-                      helperText:
-                          'Allowed domains: @must.ac.ug, @staff.must.ac.ug, @std.must.ac.ug',
-                      textInputAction: TextInputAction.next,
-                      validator: MustValidators.validateStaffEmail,
-                    ),
-                    const SizedBox(height: AppDimensions.spacingMd),
-
-                    // Faculty dropdown
-                    StDropdown<String>(
-                      label: AppStrings.faculty,
-                      value: _faculty,
-                      hint: 'Select Faculty',
-                      items: _faculties.map((f) =>
-                        DropdownMenuItem(value: f, child: Text(f, overflow: TextOverflow.ellipsis))).toList(),
-                      onChanged: (v) => setState(() { _faculty = v; _department = null; }),
-                      validator: (v) => v == null ? 'Select your faculty.' : null,
-                    ),
-                    const SizedBox(height: AppDimensions.spacingMd),
-
-                    // Department dropdown (conditional)
-                    if (_currentDepts.isNotEmpty) ...[
-                      StDropdown<String>(
-                        label: AppStrings.department,
-                        value: _department,
-                        hint: 'Select Department',
-                        items: _currentDepts.map((d) =>
-                          DropdownMenuItem(value: d, child: Text(d))).toList(),
-                        onChanged: (v) => setState(() => _department = v),
-                      ),
-                      const SizedBox(height: AppDimensions.spacingMd),
-                    ],
-
-                    // Password
-                    StTextField(
-                      label: AppStrings.password,
-                      hint: 'Create a strong password',
-                      controller: _passwordCtrl,
-                      obscureText: _obscurePassword,
-                      prefixIcon: const Icon(Icons.lock_outline_rounded),
-                      suffixIcon: IconButton(
-                        icon: Icon(_obscurePassword
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined),
-                        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                      ),
-                      textInputAction: TextInputAction.done,
-                      onChanged: (_) => setState(() {}),
-                      validator: MustValidators.validatePassword,
-                    ),
-
-                    // Strength bar
-                    ValueListenableBuilder(
-                      valueListenable: _passwordCtrl,
-                      builder: (_, v, __) => PasswordStrengthBar(password: v.text),
-                    ),
-                    const SizedBox(height: 32),
-
-                    // Submit
-                    StButton(
-                      label: 'Create Staff Account',
-                      isLoading: loading,
-                      trailingIcon: Icons.person_add_rounded,
-                      onPressed: () => _submit(ctx),
-                    ),
-                    const SizedBox(height: AppDimensions.spacingMd),
-
-                    // Login link
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(AppStrings.haveAccount,
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 13, color: AppColors.textSecondaryLight)),
-                        TextButton(
-                          onPressed: () => ctx.go(RouteNames.login),
-                          child: Text('Back to Login',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 13, fontWeight: FontWeight.w700,
-                              color: AppColors.primary)),
-                        ),
-                      ],
-                    ),
-
-                    // Footer branding
-                    const SizedBox(height: 24),
-                    Center(
-                      child: Opacity(
-                        opacity: 0.4,
-                        child: Column(
-                          children: [
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
+            body: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFFF8FBFF), Color(0xFFECF3FF)],
+                ),
+              ),
+              child: Stack(
+                children: [
+                  const Positioned(
+                    top: -80,
+                    right: -70,
+                    child: _GlowBlob(size: 220, color: Color(0x332563EB)),
+                  ),
+                  const Positioned(
+                    bottom: -90,
+                    left: -85,
+                    child: _GlowBlob(size: 250, color: Color(0x221152D4)),
+                  ),
+                  _loadingFaculties
+                      ? const Center(child: CircularProgressIndicator())
+                      : SingleChildScrollView(
+                          padding: const EdgeInsets.all(AppDimensions.spacingMd),
+                          child: Form(
+                            key: _formKey,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Container(
-                                  width: 32, height: 32,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primary,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Icon(Icons.star_rounded, color: Colors.white, size: 20),
+                                const SizedBox(height: 8),
+
+                                // Branding header
+                                Text('Join MUST StarTrack',
+                                    style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 32,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: -0.5)),
+                                const SizedBox(height: 8),
+                                Text(
+                                    'Create your lecturer or staff account to manage academic tracks and student progress.',
+                                    style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 14,
+                                        color: AppColors.textSecondaryLight,
+                                        height: 1.5)),
+                                const SizedBox(height: 32),
+
+                                // Full Name
+                                StTextField(
+                                  label: AppStrings.fullName,
+                                  hint: 'e.g. Dr. John Doe',
+                                  controller: _nameCtrl,
+                                  prefixIcon:
+                                      const Icon(Icons.person_outline_rounded),
+                                  textInputAction: TextInputAction.next,
+                                  validator: (v) =>
+                                      MustValidators.validateRequired(v, 'Full Name'),
                                 ),
-                                const SizedBox(width: 8),
-                                Text(AppStrings.appFullName,
-                                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+                                const SizedBox(height: AppDimensions.spacingMd),
+
+                                // Staff email
+                                StTextField(
+                                  label: 'Staff Email',
+                                  hint: 'username@staff.must.ac.ug',
+                                  controller: _emailCtrl,
+                                  keyboardType: TextInputType.emailAddress,
+                                  prefixIcon: const Icon(Icons.mail_outline_rounded),
+                                  helperText:
+                                      'Allowed domains: @must.ac.ug and @staff.must.ac.ug',
+                                  textInputAction: TextInputAction.next,
+                                  validator: MustValidators.validateStaffEmail,
+                                ),
+                                const SizedBox(height: AppDimensions.spacingMd),
+
+                                // Faculty dropdown
+                                StDropdown<String>(
+                                  label: AppStrings.faculty,
+                                  value: _faculty,
+                                  hint: 'Select Faculty',
+                                  items: _faculties
+                                      .map((f) => DropdownMenuItem(
+                                          value: f,
+                                          child: Text(f,
+                                              overflow: TextOverflow.ellipsis)))
+                                      .toList(),
+                                  onChanged: (v) => setState(() {
+                                    _faculty = v;
+                                    _department = null;
+                                  }),
+                                  validator: (v) =>
+                                      v == null ? 'Select your faculty.' : null,
+                                ),
+                                const SizedBox(height: AppDimensions.spacingMd),
+
+                                // Department dropdown (conditional)
+                                if (_currentDepts.isNotEmpty) ...[
+                                  StDropdown<String>(
+                                    label: AppStrings.department,
+                                  value: _department,
+                                    hint: 'Select Department',
+                                  items: _departmentOptions
+                                    .map((d) => DropdownMenuItem(
+                                      value: d, child: Text(d)))
+                                        .toList(),
+                                    onChanged: (v) =>
+                                        setState(() => _department = v),
+                                  ),
+                                  const SizedBox(height: AppDimensions.spacingMd),
+                                ],
+
+                                // Password
+                                StTextField(
+                                  label: AppStrings.password,
+                                  hint: 'Create a strong password',
+                                  controller: _passwordCtrl,
+                                  obscureText: _obscurePassword,
+                                  prefixIcon:
+                                      const Icon(Icons.lock_outline_rounded),
+                                  suffixIcon: IconButton(
+                                    tooltip: _obscurePassword
+                                        ? 'Show password'
+                                        : 'Hide password',
+                                    style: IconButton.styleFrom(
+                                      backgroundColor:
+                                          AppColors.primary.withValues(alpha: 0.10),
+                                      foregroundColor: AppColors.primary,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      minimumSize: const Size(40, 40),
+                                    ),
+                                    icon: AnimatedSwitcher(
+                                      duration: const Duration(milliseconds: 180),
+                                      transitionBuilder: (child, animation) =>
+                                          ScaleTransition(scale: animation, child: child),
+                                      child: Icon(
+                                        _obscurePassword
+                                            ? Icons.visibility_rounded
+                                            : Icons.visibility_off_rounded,
+                                        key: ValueKey(_obscurePassword),
+                                      ),
+                                    ),
+                                    onPressed: () =>
+                                        setState(() => _obscurePassword = !_obscurePassword),
+                                  ),
+                                  textInputAction: TextInputAction.done,
+                                  onChanged: (_) => setState(() {}),
+                                  validator: MustValidators.validatePassword,
+                                ),
+
+                                // Strength bar
+                                ValueListenableBuilder(
+                                  valueListenable: _passwordCtrl,
+                                  builder: (_, v, __) =>
+                                      PasswordStrengthBar(password: v.text),
+                                ),
+                                const SizedBox(height: 32),
+
+                                // Submit
+                                StButton(
+                                  label: 'Create Staff Account',
+                                  isLoading: loading,
+                                  trailingIcon: Icons.person_add_rounded,
+                                  onPressed: () => _submit(ctx),
+                                ),
+                                const SizedBox(height: AppDimensions.spacingMd),
+
+                                // Login link
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(AppStrings.haveAccount,
+                                        style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 13,
+                                            color: AppColors.textSecondaryLight)),
+                                    TextButton(
+                                      onPressed: () => ctx.go(RouteNames.login),
+                                      child: Text('Back to Login',
+                                          style: GoogleFonts.plusJakartaSans(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w700,
+                                              color: AppColors.primary)),
+                                    ),
+                                  ],
+                                ),
+
+                                // Footer branding
+                                const SizedBox(height: 24),
+                                Center(
+                                  child: Opacity(
+                                    opacity: 0.4,
+                                    child: Column(
+                                      children: [
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Container(
+                                              width: 32,
+                                              height: 32,
+                                              decoration: BoxDecoration(
+                                                color: AppColors.primary,
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child: const Icon(Icons.star_rounded,
+                                                  color: Colors.white,
+                                                  size: 20),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(AppStrings.appFullName,
+                                                style: GoogleFonts
+                                                    .plusJakartaSans(
+                                                        fontWeight:
+                                                            FontWeight.w700)),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(AppStrings.university,
+                                            style:
+                                                GoogleFonts.plusJakartaSans(
+                                                    fontSize: 11,
+                                                    color: AppColors
+                                                        .textSecondaryLight)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 32),
                               ],
                             ),
-                            const SizedBox(height: 4),
-                            Text(AppStrings.university,
-                              style: GoogleFonts.plusJakartaSans(fontSize: 11, color: AppColors.textSecondaryLight)),
-                          ],
+                          ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                  ],
-                ),
+                ],
               ),
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _GlowBlob extends StatelessWidget {
+  final double size;
+  final Color color;
+
+  const _GlowBlob({required this.size, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: color,
+              blurRadius: 80,
+              spreadRadius: 25,
+            ),
+          ],
+        ),
       ),
     );
   }

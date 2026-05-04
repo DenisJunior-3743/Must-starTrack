@@ -1,25 +1,33 @@
+Automated AI Run Guide
 
-####Running browser locally with AI rerank
+Use these short commands from the project root.
 
-taskkill /PID 13764 /F
+Web:
+.\scripts\Run-StarTrackAI.ps1 web
 
-netstat -ano | findstr :8787
+Android:
+.\scripts\Run-StarTrackAI.ps1 android
 
-cd D:\start_track\must_startrack\functions
-$env:OPENAI_API_KEY = (Get-Content "..\Open API.txt" -Raw).Trim()
-node .\local-proxy.js
+What is automatic:
+- local proxy starts in the background
+- Open API.txt is loaded by the proxy
+- Flutter receives one proxy base URL only
+- Android gets adb reverse, so network/IP changes do not matter
 
+AI coverage:
+- recommendations: openAiRerank
+- skill patterns: openAiSkillPatterns
+- chatbot: openAiChatbot
+- project approval: openAiProjectValidation
 
-cd D:\start_track\must_startrack
-flutter run -d chrome --dart-define=OPENAI_PROXY_URL=http://127.0.0.1:8787/openAiRerank --dart-define=FIREBASE_PROJECT_ID=star-track-4ba2b
+Stop proxy:
+.\scripts\Run-StarTrackAI.ps1 stop
 
+Release APK with Cloud AI:
+.\scripts\Run-StarTrackAI.ps1 release
 
+Deploy Cloud AI functions:
+.\scripts\Run-StarTrackAI.ps1 deploy-cloud
 
-
-
-
-
-
-Password: Admin@StarTrack2026!
-
-ogH9gDs4
+Password:
+Admin@StarTrack2026!

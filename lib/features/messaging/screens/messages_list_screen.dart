@@ -33,7 +33,7 @@ import '../../auth/bloc/auth_cubit.dart';
 import '../../shared/widgets/guest_auth_required_view.dart';
 import '../bloc/message_cubit.dart';
 
-enum _InboxFilter { all, requests, chats }
+enum _InboxFilter { requests, chats }
 
 class MessagesListScreen extends StatefulWidget {
   const MessagesListScreen({super.key});
@@ -44,7 +44,7 @@ class MessagesListScreen extends StatefulWidget {
 
 class _MessagesListScreenState extends State<MessagesListScreen> {
   final _searchCtrl = TextEditingController();
-  _InboxFilter _filter = _InboxFilter.all;
+  _InboxFilter _filter = _InboxFilter.chats;
 
   @override
   void initState() {
@@ -66,6 +66,7 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isGuest = sl<AuthCubit>().currentUser == null;
 
     if (isGuest) {
@@ -87,130 +88,237 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
     }
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Text('Inbox',
-            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+        backgroundColor: isDark
+            ? const Color(0xFF0B1222).withValues(alpha: 0.92)
+            : const Color(0xFFF8FBFF).withValues(alpha: 0.92),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        title: Text(
+          'Inbox',
+          style: GoogleFonts.plusJakartaSans(
+            fontWeight: FontWeight.w800,
+            fontSize: 20,
+            letterSpacing: -0.2,
+            color: isDark
+                ? AppColors.textPrimaryDark
+                : AppColors.textPrimaryLight,
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.edit_rounded),
-            onPressed: () {},
+            onPressed: () => context.push(RouteNames.peers),
             tooltip: 'New message',
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Search bar
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: TextField(
-              controller: _searchCtrl,
-              onChanged: (v) {
-                if (v.trim().isEmpty) {
-                  context.read<MessageCubit>().loadConversations();
-                } else {
-                  context.read<MessageCubit>().searchConversations(v.trim());
-                }
-              },
-              decoration: InputDecoration(
-                hintText: 'Search conversations',
-                hintStyle: GoogleFonts.plusJakartaSans(fontSize: 13),
-                prefixIcon: const Icon(Icons.search_rounded),
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
-              ),
-            ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: isDark
+                ? const [Color(0xFF0B1222), Color(0xFF111D36)]
+                : const [Color(0xFFF8FBFF), Color(0xFFECF3FF)],
           ),
-
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _InboxFilter.values.map((filter) {
-                return ChoiceChip(
-                  label: Text(_labelForFilter(filter)),
-                  selected: _filter == filter,
-                  onSelected: (_) => setState(() => _filter = filter),
-                );
-              }).toList(),
+        ),
+        child: Stack(
+          children: [
+            const Positioned(
+              top: -84,
+              right: -70,
+              child: _GlowBlob(size: 220, color: Color(0x332563EB)),
             ),
-          ),
-
-          // Conversation list
-          Expanded(
-            child: BlocBuilder<MessageCubit, MessageState>(
-              builder: (context, state) {
-                if (state is ConversationsLoading) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (state is MessageError) {
-                  return Center(
-                      child: Text(state.message,
-                          style: GoogleFonts.plusJakartaSans(
-                              color: AppColors.danger)));
-                }
-                final convos = state is ConversationsLoaded
-                    ? state.conversations
-                    : <ConversationSummary>[];
-                final requests = state is ConversationsLoaded
-                    ? state.requests
-                    : <CollaborationInboxItem>[];
-
-                final visibleRequests = _filter == _InboxFilter.chats
-                    ? const <CollaborationInboxItem>[]
-                    : requests;
-                final visibleConvos = _filter == _InboxFilter.requests
-                    ? const <ConversationSummary>[]
-                    : convos;
-
-                if (visibleRequests.isEmpty && visibleConvos.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.inbox_outlined,
-                            size: 56, color: AppColors.primary),
-                        const SizedBox(height: 12),
-                        Text('Inbox is empty.',
-                            style: GoogleFonts.plusJakartaSans(
-                                color: AppColors.textSecondaryLight)),
-                      ],
+            const Positioned(
+              bottom: -90,
+              left: -85,
+              child: _GlowBlob(size: 260, color: Color(0x221152D4)),
+            ),
+            Column(
+              children: [
+                SizedBox(
+                  height:
+                      MediaQuery.of(context).padding.top + kToolbarHeight + 6,
+                ),
+                // Search bar
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: TextField(
+                    controller: _searchCtrl,
+                    onChanged: (v) {
+                      if (v.trim().isEmpty) {
+                        context.read<MessageCubit>().loadConversations();
+                      } else {
+                        context
+                            .read<MessageCubit>()
+                            .searchConversations(v.trim());
+                      }
+                    },
+                    decoration: InputDecoration(
+                      hintText: 'Search conversations',
+                      hintStyle: GoogleFonts.plusJakartaSans(fontSize: 13),
+                      prefixIcon: const Icon(Icons.search_rounded),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
                     ),
-                  );
-                }
-                return ListView(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  children: [
-                    if (visibleRequests.isNotEmpty) ...[
-                      const _InboxSectionHeader(
-                        icon: Icons.handshake_outlined,
-                        title: 'Collaboration Requests',
-                        subtitle:
-                            'Requests, responses, and project follow-ups.',
-                      ),
-                      ...visibleRequests.map(
-                        (request) => _RequestTile(
-                          request: request,
-                          onOpenPost: (request.postId?.isEmpty ?? true)
-                              ? null
-                              : () async {
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: BlocBuilder<MessageCubit, MessageState>(
+                    buildWhen: (prev, next) =>
+                        prev is ConversationsLoaded != next is ConversationsLoaded ||
+                        (prev is ConversationsLoaded &&
+                            next is ConversationsLoaded &&
+                            (prev.conversations != next.conversations ||
+                                prev.requests != next.requests)),
+                    builder: (context, state) {
+                      int chatCount = 0;
+                      int requestCount = 0;
+                      if (state is ConversationsLoaded) {
+                        chatCount = state.conversations
+                            .where((c) => c.unreadCount > 0)
+                            .length;
+                        requestCount = state.requests
+                            .where((r) =>
+                                r.isIncoming && r.receiverViewedAt == null)
+                            .length;
+                      }
+                      return _InboxSegmentedControl(
+                        value: _filter,
+                        onChanged: (value) =>
+                            setState(() => _filter = value),
+                        chatCount: chatCount,
+                        requestCount: requestCount,
+                      );
+                    },
+                  ),
+                ),
+
+                // Conversation list
+                Expanded(
+                  child: BlocBuilder<MessageCubit, MessageState>(
+                    builder: (context, state) {
+                      if (state is ConversationsLoading) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (state is MessageError) {
+                        return Center(
+                            child: Text(state.message,
+                                style: GoogleFonts.plusJakartaSans(
+                                    color: AppColors.danger)));
+                      }
+                      final convos = state is ConversationsLoaded
+                          ? state.conversations
+                          : <ConversationSummary>[];
+                      final requests = state is ConversationsLoaded
+                          ? state.requests
+                          : <CollaborationInboxItem>[];
+
+                      final visibleRequests = _filter == _InboxFilter.chats
+                          ? const <CollaborationInboxItem>[]
+                          : requests;
+                      final visibleConvos = _filter == _InboxFilter.requests
+                          ? const <ConversationSummary>[]
+                          : convos;
+
+                      if (visibleRequests.isEmpty && visibleConvos.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.inbox_outlined,
+                                  size: 56, color: AppColors.primary),
+                              const SizedBox(height: 12),
+                              Text('Inbox is empty.',
+                                  style: GoogleFonts.plusJakartaSans(
+                                      color: AppColors.textSecondaryLight)),
+                            ],
+                          ),
+                        );
+                      }
+                      return ListView(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        children: [
+                          if (visibleRequests.isNotEmpty) ...[
+                            const _InboxSectionHeader(
+                              icon: Icons.handshake_outlined,
+                              title: 'Requests',
+                              subtitle: 'Collaboration and project follow-ups',
+                            ),
+                            ...visibleRequests.map(
+                              (request) => _RequestTile(
+                                request: request,
+                                onOpenPost: (request.postId?.isEmpty ?? true)
+                                    ? null
+                                    : () async {
+                                        await context
+                                            .read<MessageCubit>()
+                                            .markCollaborationRequestViewed(
+                                              request.id,
+                                            );
+                                        if (!context.mounted) return;
+                                        await context
+                                            .push('/project/${request.postId}');
+                                      },
+                                onMessage: request.counterpartId.isEmpty
+                                    ? null
+                                    : () async {
+                                        await context
+                                            .read<MessageCubit>()
+                                            .markCollaborationRequestViewed(
+                                              request.id,
+                                            );
+                                        if (!context.mounted) return;
+                                        final currentUserId =
+                                            sl<AuthCubit>().currentUser?.id;
+                                        if (currentUserId != null &&
+                                            currentUserId.isNotEmpty) {
+                                          unawaited(sl<ActivityLogDao>()
+                                              .logAction(
+                                            userId: currentUserId,
+                                            action: 'start_chat',
+                                            entityType: 'conversation',
+                                            entityId: request.counterpartId,
+                                          ));
+                                        }
+                                        await context.push(
+                                          '/chat/${request.counterpartId}',
+                                          extra: {
+                                            'peerName': request.counterpartName,
+                                            'peerPhotoUrl':
+                                                request.counterpartPhotoUrl,
+                                            'isPeerLecturer': false,
+                                          },
+                                        );
+                                        if (!context.mounted) return;
+                                        context
+                                            .read<MessageCubit>()
+                                            .refreshConversations(
+                                              syncRemoteFirst: false,
+                                            );
+                                      },
+                              ),
+                            ),
+                          ],
+                          if (visibleConvos.isNotEmpty) ...[
+                            const _InboxSectionHeader(
+                              icon: Icons.chat_bubble_outline_rounded,
+                              title: 'Chats',
+                              subtitle: 'Direct conversations',
+                            ),
+                            ...visibleConvos.map(
+                              (convo) => _ConversationTile(
+                                convo: convo,
+                                onDelete: () => context
+                                    .read<MessageCubit>()
+                                    .deleteConversation(convo.id),
+                                onTap: () async {
                                   await context
                                       .read<MessageCubit>()
-                                      .markCollaborationRequestViewed(
-                                        request.id,
-                                      );
-                                  if (!context.mounted) return;
-                                  await context
-                                      .push('/project/${request.postId}');
-                                },
-                          onMessage: request.counterpartId.isEmpty
-                              ? null
-                              : () async {
-                                  await context
-                                      .read<MessageCubit>()
-                                      .markCollaborationRequestViewed(
-                                        request.id,
-                                      );
+                                      .markConversationVisited(convo.id);
                                   if (!context.mounted) return;
                                   final currentUserId =
                                       sl<AuthCubit>().currentUser?.id;
@@ -220,16 +328,15 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                                       userId: currentUserId,
                                       action: 'start_chat',
                                       entityType: 'conversation',
-                                      entityId: request.counterpartId,
+                                      entityId: convo.peerId,
                                     ));
                                   }
                                   await context.push(
-                                    '/chat/${request.counterpartId}',
+                                    '/chat/${convo.peerId}',
                                     extra: {
-                                      'peerName': request.counterpartName,
-                                      'peerPhotoUrl':
-                                          request.counterpartPhotoUrl,
-                                      'isPeerLecturer': false,
+                                      'peerName': convo.peerName,
+                                      'peerPhotoUrl': convo.peerPhotoUrl,
+                                      'isPeerLecturer': convo.isPeerLecturer,
                                     },
                                   );
                                   if (!context.mounted) return;
@@ -239,73 +346,147 @@ class _MessagesListScreenState extends State<MessagesListScreen> {
                                         syncRemoteFirst: false,
                                       );
                                 },
-                        ),
-                      ),
-                    ],
-                    if (visibleConvos.isNotEmpty) ...[
-                      const _InboxSectionHeader(
-                        icon: Icons.chat_bubble_outline_rounded,
-                        title: 'Chats',
-                        subtitle:
-                            'Direct conversations and follow-up messages.',
-                      ),
-                      ...visibleConvos.map(
-                        (convo) => _ConversationTile(
-                          convo: convo,
-                          onDelete: () => context
-                              .read<MessageCubit>()
-                              .deleteConversation(convo.id),
-                          onTap: () async {
-                            await context
-                                .read<MessageCubit>()
-                                .markConversationVisited(convo.id);
-                            if (!context.mounted) return;
-                            final currentUserId =
-                                sl<AuthCubit>().currentUser?.id;
-                            if (currentUserId != null &&
-                                currentUserId.isNotEmpty) {
-                              unawaited(sl<ActivityLogDao>().logAction(
-                                userId: currentUserId,
-                                action: 'start_chat',
-                                entityType: 'conversation',
-                                entityId: convo.peerId,
-                              ));
-                            }
-                            await context.push(
-                              '/chat/${convo.peerId}',
-                              extra: {
-                                'peerName': convo.peerName,
-                                'peerPhotoUrl': convo.peerPhotoUrl,
-                                'isPeerLecturer': convo.isPeerLecturer,
-                              },
-                            );
-                            if (!context.mounted) return;
-                            context.read<MessageCubit>().refreshConversations(
-                                  syncRemoteFirst: false,
-                                );
-                          },
-                        ),
-                      ),
-                    ],
-                  ],
-                );
-              },
+                              ),
+                            ),
+                          ],
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ignore: unused_element
+  String _labelForFilter(_InboxFilter filter) {
+    switch (filter) {
+      case _InboxFilter.requests:
+        return 'Requests';
+      case _InboxFilter.chats:
+        return 'Chats';
+    }
+  }
+}
+
+class _InboxSegmentedControl extends StatelessWidget {
+  final _InboxFilter value;
+  final ValueChanged<_InboxFilter> onChanged;
+  final int chatCount;
+  final int requestCount;
+
+  const _InboxSegmentedControl({
+    required this.value,
+    required this.onChanged,
+    this.chatCount = 0,
+    this.requestCount = 0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.surface(context),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+        border: Border.all(color: AppColors.border(context)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _InboxSegmentButton(
+              label: 'Chats',
+              selected: value == _InboxFilter.chats,
+              count: chatCount,
+              onTap: () => onChanged(_InboxFilter.chats),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: _InboxSegmentButton(
+              label: 'Requests',
+              selected: value == _InboxFilter.requests,
+              count: requestCount,
+              onTap: () => onChanged(_InboxFilter.requests),
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  String _labelForFilter(_InboxFilter filter) {
-    switch (filter) {
-      case _InboxFilter.all:
-        return 'All';
-      case _InboxFilter.requests:
-        return 'Requests';
-      case _InboxFilter.chats:
-        return 'Chats';
-    }
+class _InboxSegmentButton extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final int count;
+
+  const _InboxSegmentButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.count = 0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final labelColor =
+        selected ? Colors.white : AppColors.textSecondary(context);
+    return InkWell(
+      borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF10B981) : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: labelColor,
+              ),
+            ),
+            if (count > 0) ...
+              [
+                const SizedBox(width: 5),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? Colors.white.withValues(alpha: 0.28)
+                        : const Color(0xFF10B981),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: Text(
+                    count > 99 ? '99+' : '$count',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: selected ? Colors.white : Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -334,7 +515,7 @@ class _InboxSectionHeader extends StatelessWidget {
               Text(
                 title,
                 style: GoogleFonts.plusJakartaSans(
-                    fontSize: 15, fontWeight: FontWeight.w700),
+                    fontSize: 16, fontWeight: FontWeight.w800),
               ),
             ],
           ),
@@ -342,7 +523,7 @@ class _InboxSectionHeader extends StatelessWidget {
           Text(
             subtitle,
             style: GoogleFonts.plusJakartaSans(
-                fontSize: 12, color: AppColors.textSecondaryLight),
+                fontSize: 11.5, color: AppColors.textSecondaryLight),
           ),
         ],
       ),
@@ -552,7 +733,7 @@ class _RequestTile extends StatelessWidget {
                     Text(
                       request.counterpartName,
                       style: GoogleFonts.plusJakartaSans(
-                          fontSize: 14, fontWeight: FontWeight.w700),
+                          fontSize: 15, fontWeight: FontWeight.w800),
                     ),
                     Text(
                       request.isIncoming
@@ -586,9 +767,22 @@ class _RequestTile extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
+            'PROJECT',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textSecondaryLight,
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
             request.postTitle,
             style: GoogleFonts.plusJakartaSans(
-                fontSize: 14, fontWeight: FontWeight.w600),
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary(context),
+            ),
           ),
           if (request.message.isNotEmpty) ...[
             const SizedBox(height: 6),
@@ -607,21 +801,19 @@ class _RequestTile extends StatelessWidget {
           ],
           const SizedBox(height: 12),
           Row(
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onOpenPost,
-                  icon: const Icon(Icons.open_in_new_rounded),
-                  label: const Text('Open Post'),
-                ),
+              _ActionIconButton(
+                icon: Icons.open_in_new_rounded,
+                tooltip: 'Open post',
+                onTap: onOpenPost,
               ),
               const SizedBox(width: 8),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: onMessage,
-                  icon: const Icon(Icons.chat_bubble_outline_rounded),
-                  label: const Text('Message'),
-                ),
+              _ActionIconButton(
+                icon: Icons.chat_bubble_outline_rounded,
+                tooltip: 'Message',
+                onTap: onMessage,
+                filled: true,
               ),
             ],
           ),
@@ -635,6 +827,72 @@ class _RequestTile extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ActionIconButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+  final bool filled;
+
+  const _ActionIconButton({
+    required this.icon,
+    required this.tooltip,
+    this.onTap,
+    this.filled = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const green = Color(0xFF10B981);
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: filled ? green : Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: filled ? BorderSide.none : const BorderSide(color: green),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: SizedBox(
+            width: 38,
+            height: 38,
+            child: Icon(
+              icon,
+              size: 18,
+              color: filled ? Colors.white : green,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GlowBlob extends StatelessWidget {
+  final double size;
+  final Color color;
+
+  const _GlowBlob({required this.size, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            colors: [color, color.withValues(alpha: 0)],
+            radius: 0.9,
+          ),
+        ),
       ),
     );
   }

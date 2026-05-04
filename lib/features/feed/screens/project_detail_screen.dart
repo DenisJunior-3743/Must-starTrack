@@ -1,4 +1,4 @@
-// lib/features/feed/screens/project_detail_screen.dart
+﻿// lib/features/feed/screens/project_detail_screen.dart
 //
 // MUST StarTrack â€” Project Detail Screen (Phase 3)
 //
@@ -35,6 +35,7 @@ import '../../../core/di/injection_container.dart';
 import '../../../data/local/dao/activity_log_dao.dart';
 import '../../../data/local/dao/comment_dao.dart';
 import '../../../data/local/dao/post_dao.dart';
+import '../../../data/local/dao/recommendation_log_dao.dart';
 import '../../../data/local/dao/sync_queue_dao.dart';
 import '../../../data/local/database_helper.dart';
 import '../../../data/local/schema/database_schema.dart';
@@ -43,6 +44,31 @@ import '../../../data/remote/firestore_service.dart';
 import '../../../data/remote/sync_service.dart';
 import '../../../features/auth/bloc/auth_cubit.dart';
 import '../../shared/hci_components/post_card.dart';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Glow blob helper
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _GlowBlob extends StatelessWidget {
+  const _GlowBlob({required this.color});
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: 220,
+        height: 220,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(color: color, blurRadius: 80, spreadRadius: 24),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class ProjectDetailScreen extends StatefulWidget {
   final String postId;
@@ -652,6 +678,12 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         entityId: post.id,
         metadata: {'post_title': post.title},
       );
+      if (isNowJoined) {
+        unawaited(sl<RecommendationLogDao>().markInteracted(
+          userId: uid,
+          itemId: post.id,
+        ));
+      }
 
       final joinId = _uuid.v4();
       await _syncQueue.enqueue(
@@ -705,28 +737,74 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgTop = isDark ? const Color(0xFF061845) : const Color(0xFFF8FBFF);
+    final bgBottom =
+        isDark ? const Color(0xFF030D27) : const Color(0xFFECF3FF);
+    final fgPrimary = isDark ? Colors.white : const Color(0xFF0F172A);
+    final pillBg = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.white.withValues(alpha: 0.80);
+    final pillBorder = isDark
+        ? Colors.white.withValues(alpha: 0.12)
+        : const Color(0xFFE2E8F0);
+
+    final gradient = BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [bgTop, bgBottom],
+      ),
+    );
+
     if (_loading) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Stack(
+          children: [
+            Positioned.fill(child: DecoratedBox(decoration: gradient)),
+            const Center(child: CircularProgressIndicator()),
+          ],
         ),
       );
     }
 
     if (_error != null || _post == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Project')),
-        body: Center(child: Text(_error ?? 'Not found.')),
+        backgroundColor: Colors.transparent,
+        body: Stack(
+          children: [
+            Positioned.fill(child: DecoratedBox(decoration: gradient)),
+            Center(
+              child: Text(
+                _error ?? 'Not found.',
+                style: GoogleFonts.plusJakartaSans(color: fgPrimary),
+              ),
+            ),
+          ],
+        ),
       );
     }
 
     final post = _post!;
 
     return Scaffold(
+      backgroundColor: Colors.transparent,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
+        backgroundColor: pillBg,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        iconTheme: IconThemeData(color: fgPrimary),
         title: Text(
           'Project Showcase',
-          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+          style: GoogleFonts.plusJakartaSans(
+              fontWeight: FontWeight.w700, color: fgPrimary),
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: pillBorder),
         ),
         actions: [
           IconButton(
@@ -741,10 +819,21 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           ),
         ],
       ),
-      body: ListView(
-        controller: _scrollCtrl,
-        padding: const EdgeInsets.only(bottom: 100),
+      body: Stack(
         children: [
+          Positioned.fill(child: DecoratedBox(decoration: gradient)),
+          const Positioned(
+              top: -60,
+              right: -50,
+              child: _GlowBlob(color: Color(0x332563EB))),
+          const Positioned(
+              bottom: 200,
+              left: -80,
+              child: _GlowBlob(color: Color(0x221152D4))),
+          ListView(
+            controller: _scrollCtrl,
+            padding: const EdgeInsets.only(bottom: 100),
+            children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
             child: Row(
@@ -812,6 +901,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
             onCancelReply: () => setState(() => _replyingTo = null),
           ),
           const SizedBox(height: 100),
+            ],
+          ),
         ],
       ),
 
@@ -1586,9 +1677,7 @@ bool _isExternalWebVideo(String url) {
       lower.contains('vimeo.com');
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Author snippet
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
 
 class _AuthorSnippet extends StatelessWidget {
   final PostModel post;
@@ -1765,7 +1854,7 @@ class _CommentsSection extends StatelessWidget {
                   maxLines: 4,
                   decoration: InputDecoration(
                     hintText: replyingTo != null
-                        ? 'Write a replyâ€¦'
+                        ? 'Write a reply'
                         : 'Write a comment',
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -2297,13 +2386,21 @@ class _StickyBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isOpportunity = post.type == 'opportunity';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final pillBg = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.white.withValues(alpha: 0.80);
+    final pillBorder = isDark
+        ? Colors.white.withValues(alpha: 0.12)
+        : const Color(0xFFE2E8F0);
+    final iconButtonBg = AppColors.mustGreen.withValues(alpha: 0.12);
     return SafeArea(
       top: false,
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
         decoration: BoxDecoration(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          border: const Border(top: BorderSide(color: AppColors.borderLight)),
+          color: pillBg,
+          border: Border(top: BorderSide(color: pillBorder)),
         ),
         child: SizedBox(
           width: double.infinity,
@@ -2311,6 +2408,11 @@ class _StickyBar extends StatelessWidget {
             children: [
               IconButton(
                 onPressed: onLike,
+                style: IconButton.styleFrom(
+                  backgroundColor: iconButtonBg,
+                  minimumSize: const Size(36, 36),
+                  padding: EdgeInsets.zero,
+                ),
                 icon: Icon(
                   post.isLikedByMe
                       ? Icons.favorite_rounded
@@ -2326,6 +2428,11 @@ class _StickyBar extends StatelessWidget {
               const SizedBox(width: 8),
               IconButton(
                 onPressed: onDislike,
+                style: IconButton.styleFrom(
+                  backgroundColor: iconButtonBg,
+                  minimumSize: const Size(36, 36),
+                  padding: EdgeInsets.zero,
+                ),
                 icon: Icon(
                   post.isDislikedByMe
                       ? Icons.thumb_down_rounded
@@ -2338,6 +2445,11 @@ class _StickyBar extends StatelessWidget {
               const SizedBox(width: 12),
               IconButton(
                 onPressed: onShare,
+                style: IconButton.styleFrom(
+                  backgroundColor: iconButtonBg,
+                  minimumSize: const Size(36, 36),
+                  padding: EdgeInsets.zero,
+                ),
                 icon: const Icon(Icons.share_outlined),
                 tooltip: 'Share',
               ),
@@ -2364,13 +2476,13 @@ class _StickyBar extends StatelessWidget {
                           label:
                               Text(hasJoined ? 'Joined' : 'Join Opportunity'),
                           style: ElevatedButton.styleFrom(
-                            minimumSize: const Size(0, 48),
+                            minimumSize: const Size(0, 42),
                             backgroundColor: hasJoined
-                                ? AppColors.success
-                                : AppColors.primary,
+                              ? AppColors.mustGreenDark
+                              : AppColors.mustGreen,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 12),
+                              horizontal: 12, vertical: 10),
                           ),
                         ),
                 ),
@@ -2390,9 +2502,11 @@ class _StickyBar extends StatelessWidget {
                     label:
                         Text(canCollaborate ? 'Collaborate' : 'Your Project'),
                     style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(0, 48),
+                      minimumSize: const Size(0, 42),
+                      backgroundColor: AppColors.mustGreen,
+                      foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
+                          horizontal: 12, vertical: 10),
                     ),
                   ),
                 ),

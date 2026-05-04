@@ -65,6 +65,7 @@ import '../../features/discover/screens/guest_discover_screen.dart';
 
 // ── Peers screen ──────────────────────────────────────────────────────────────
 import '../../features/peers/screens/peers_screen.dart';
+import '../../features/groups/screens/group_detail_screen.dart';
 
 // ── Profile screens ───────────────────────────────────────────────────────────
 import '../../features/profile/screens/profile_screen.dart';
@@ -99,6 +100,7 @@ import '../../features/lecturer/screens/lecturer_dashboard_screen.dart';
 import '../../features/lecturer/screens/opportunity_applicants_screen.dart';
 import '../../features/lecturer/screens/lecturer_ranking_screen.dart';
 import '../../features/lecturer/screens/advanced_search_screen.dart';
+import '../../features/lecturer/screens/faculty_leaderboards_screen.dart';
 import '../../features/lecturer/bloc/lecturer_cubit.dart';
 // ── Shell ─────────────────────────────────────────────────────────────────────
 import '../../features/shared/widgets/main_shell.dart';
@@ -213,6 +215,7 @@ class AppRouter {
           Routes.lecturerDashboard,
           Routes.lecturerRanking,
           Routes.lecturerSearch,
+          Routes.lecturerLeaderboard,
         ];
         final isLecturerRoute = lecturerOnly.any(
           (r) => location.startsWith(r.split(':').first),
@@ -395,6 +398,11 @@ class AppRouter {
                 child: const AdvancedSearchScreen(),
               ),
             ),
+            GoRoute(
+              path: Routes.lecturerLeaderboard,
+              name: RouteNames.lecturerLeaderboardName,
+              builder: (_, __) => const FacultyLeaderboardsScreen(),
+            ),
           ],
         ),
 
@@ -403,6 +411,12 @@ class AppRouter {
           path: Routes.postDetail,
           builder: (_, state) => ProjectDetailScreen(
             postId: state.pathParameters['postId'] ?? '',
+          ),
+        ),
+        GoRoute(
+          path: Routes.groupDetail,
+          builder: (_, state) => GroupDetailScreen(
+            groupId: state.pathParameters['groupId'] ?? '',
           ),
         ),
         // ── Author portfolio (read-only user + all their projects) ────────────
@@ -525,7 +539,7 @@ class AppRouter {
         GoRoute(
           path: Routes.adminDashboard,
           builder: (_, __) => BlocProvider(
-            create: (_) => sl<AdminCubit>()..loadDashboard(),
+            create: (_) => sl<AdminCubit>(),
             child: const AdminDashboardScreen(),
           ),
         ),

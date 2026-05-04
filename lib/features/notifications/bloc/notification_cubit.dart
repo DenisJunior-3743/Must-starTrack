@@ -23,9 +23,13 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'dart:async';
+import 'dart:convert';
 
+import '../../../data/local/dao/group_dao.dart';
+import '../../../data/local/dao/group_member_dao.dart';
 import '../../../data/local/dao/notification_dao.dart';
 import '../../../data/local/dao/sync_queue_dao.dart';
+import '../../../data/local/dao/user_dao.dart';
 import '../../../data/remote/sync_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
 
@@ -60,11 +64,12 @@ class NotificationsLoaded extends NotificationState {
     List<NotificationModel>? notifications,
     int? unreadCount,
     String? activeFilter,
-  }) => NotificationsLoaded(
-    notifications: notifications ?? this.notifications,
-    unreadCount: unreadCount ?? this.unreadCount,
-    activeFilter: activeFilter ?? this.activeFilter,
-  );
+  }) =>
+      NotificationsLoaded(
+        notifications: notifications ?? this.notifications,
+        unreadCount: unreadCount ?? this.unreadCount,
+        activeFilter: activeFilter ?? this.activeFilter,
+      );
 
   @override
   List<Object?> get props => [notifications, unreadCount, activeFilter];
@@ -83,8 +88,11 @@ class NotificationError extends NotificationState {
 class NotificationCubit extends Cubit<NotificationState> {
   final NotificationDao _dao;
   final AuthCubit _authCubit;
+  final GroupDao _groupDao;
+  final GroupMemberDao _groupMemberDao;
   final SyncQueueDao _syncQueueDao;
   final SyncService _syncService;
+  final UserDao _userDao;
   late final StreamSubscription _authSub;
   late final StreamSubscription _daoSub;
 
@@ -93,13 +101,18 @@ class NotificationCubit extends Cubit<NotificationState> {
   NotificationCubit({
     required NotificationDao dao,
     required AuthCubit authCubit,
+    required GroupDao groupDao,
+    required GroupMemberDao groupMemberDao,
     required SyncQueueDao syncQueueDao,
     required SyncService syncService,
-  })
-      : _dao = dao,
+    required UserDao userDao,
+  })  : _dao = dao,
         _authCubit = authCubit,
+        _groupDao = groupDao,
+        _groupMemberDao = groupMemberDao,
         _syncQueueDao = syncQueueDao,
         _syncService = syncService,
+        _userDao = userDao,
         super(const NotificationInitial()) {
     _authSub = _authCubit.stream.listen((state) {
       if (state is AuthAuthenticated) {
@@ -135,8 +148,12 @@ class NotificationCubit extends Cubit<NotificationState> {
         _dao.getUnreadCount(uid),
       ]);
 
+      final raw = results[0] as List<NotificationModel>;
+      // Enrich sender photos that are missing but have a senderId
+      final enriched = await _enrichSenderPhotos(raw);
+
       emit(NotificationsLoaded(
-        notifications: results[0] as List<NotificationModel>,
+        notifications: enriched,
         unreadCount: results[1] as int,
         activeFilter: type,
       ));
@@ -162,16 +179,25 @@ class NotificationCubit extends Cubit<NotificationState> {
     }
 
     // Optimistic update
-    final updated = current.notifications.map((n) =>
-      n.id == notificationId
-          ? NotificationModel(
-              id: n.id, userId: n.userId, type: n.type,
-              senderId: n.senderId, senderName: n.senderName,
-              senderPhotoUrl: n.senderPhotoUrl, body: n.body,
-              detail: n.detail, entityId: n.entityId,
-              createdAt: n.createdAt, isRead: true, extra: n.extra)
-          : n,
-    ).toList();
+    final updated = current.notifications
+        .map(
+          (n) => n.id == notificationId
+              ? NotificationModel(
+                  id: n.id,
+                  userId: n.userId,
+                  type: n.type,
+                  senderId: n.senderId,
+                  senderName: n.senderName,
+                  senderPhotoUrl: n.senderPhotoUrl,
+                  body: n.body,
+                  detail: n.detail,
+                  entityId: n.entityId,
+                  createdAt: n.createdAt,
+                  isRead: true,
+                  extra: n.extra)
+              : n,
+        )
+        .toList();
 
     final newUnread = (current.unreadCount - 1).clamp(0, 9999);
     emit(current.copyWith(notifications: updated, unreadCount: newUnread));
@@ -196,13 +222,22 @@ class NotificationCubit extends Cubit<NotificationState> {
       return;
     }
 
-    final updated = current.notifications.map((n) => NotificationModel(
-      id: n.id, userId: n.userId, type: n.type,
-      senderId: n.senderId, senderName: n.senderName,
-      senderPhotoUrl: n.senderPhotoUrl, body: n.body,
-      detail: n.detail, entityId: n.entityId,
-      createdAt: n.createdAt, isRead: true, extra: n.extra,
-    )).toList();
+    final updated = current.notifications
+        .map((n) => NotificationModel(
+              id: n.id,
+              userId: n.userId,
+              type: n.type,
+              senderId: n.senderId,
+              senderName: n.senderName,
+              senderPhotoUrl: n.senderPhotoUrl,
+              body: n.body,
+              detail: n.detail,
+              entityId: n.entityId,
+              createdAt: n.createdAt,
+              isRead: true,
+              extra: n.extra,
+            ))
+        .toList();
 
     emit(current.copyWith(notifications: updated, unreadCount: 0));
     final uid = _currentUserId;
@@ -241,7 +276,9 @@ class NotificationCubit extends Cubit<NotificationState> {
         'extra_json': '{"accepted":$accepted}',
       },
     );
-    if (collabRequestId != null && currentUserId != null && currentUserId.isNotEmpty) {
+    if (collabRequestId != null &&
+        currentUserId != null &&
+        currentUserId.isNotEmpty) {
       await _syncQueueDao.enqueue(
         operation: 'update',
         entity: 'collab_requests',
@@ -264,18 +301,95 @@ class NotificationCubit extends Cubit<NotificationState> {
     }
   }
 
+  Future<void> respondToGroupInvite({
+    required String notificationId,
+    required bool accepted,
+  }) async {
+    final currentUserId = _currentUserId;
+    if (currentUserId == null || currentUserId.isEmpty) return;
+
+    final current = state;
+    if (current is! NotificationsLoaded) return;
+
+    NotificationModel? target;
+    for (final notif in current.notifications) {
+      if (notif.id == notificationId) {
+        target = notif;
+        break;
+      }
+    }
+    final groupId = target?.entityId;
+    if (groupId == null || groupId.isEmpty) return;
+
+    await _groupMemberDao.updateMembershipStatus(
+      groupId: groupId,
+      userId: currentUserId,
+      status: accepted ? 'active' : 'declined',
+      joinedAt: accepted ? DateTime.now() : null,
+    );
+
+    final updatedMembership = await _groupMemberDao.getMembership(
+      groupId: groupId,
+      userId: currentUserId,
+    );
+    if (updatedMembership != null) {
+      await _syncQueueDao.enqueue(
+        operation: 'update',
+        entity: 'group_members',
+        entityId: updatedMembership.id,
+        payload: updatedMembership.toMap(),
+      );
+    }
+
+    final count = await _groupMemberDao.countActiveMembers(groupId);
+    final group = await _groupDao.getGroupById(groupId);
+    if (group != null) {
+      final refreshed = group.copyWith(
+        memberCount: count,
+        updatedAt: DateTime.now(),
+      );
+      await _groupDao.upsertGroup(refreshed);
+      await _syncQueueDao.enqueue(
+        operation: 'update',
+        entity: 'groups',
+        entityId: refreshed.id,
+        payload: refreshed.toMap(),
+      );
+    }
+
+    await _dao.setResponseState(
+      notificationId: notificationId,
+      accepted: accepted,
+    );
+    await _enqueueNotificationUpdate(
+      notificationId: notificationId,
+      payload: {
+        'is_read': true,
+        'extra_json': jsonEncode({'accepted': accepted}),
+      },
+      triggerSync: false,
+    );
+    await _syncService.processPendingSync();
+    if (accepted) {
+      await _syncService.refreshGroupWorkspace(
+        groupId: groupId,
+        currentUid: currentUserId,
+      );
+    }
+    await loadNotifications(type: current.activeFilter);
+  }
+
   // ── Delete notification ───────────────────────────────────────────────────
 
   Future<void> deleteNotification(String notificationId) async {
     final current = state;
     if (current is! NotificationsLoaded) return;
 
-    final wasUnread = current.notifications
-        .any((n) => n.id == notificationId && !n.isRead);
+    final wasUnread =
+        current.notifications.any((n) => n.id == notificationId && !n.isRead);
 
-    final updated = current.notifications
-        .where((n) => n.id != notificationId)
-        .toList();
+    final updated =
+        current.notifications.where((n) => n.id != notificationId).toList();
 
     emit(current.copyWith(
       notifications: updated,
@@ -293,6 +407,56 @@ class NotificationCubit extends Cubit<NotificationState> {
     final uid = _currentUserId;
     if (uid == null || uid.isEmpty) return 0;
     return _dao.getUnreadCount(uid);
+  }
+
+  // ── Enrich sender photos ──────────────────────────────────────────────────
+
+  /// Fills in missing senderPhotoUrl (and senderName) for notifications that
+  /// have a senderId but no photo URL stored. Uses the local UserDao cache.
+  Future<List<NotificationModel>> _enrichSenderPhotos(
+      List<NotificationModel> notifs) async {
+    // Collect distinct senderIds that are missing a photo
+    final missingIds = notifs
+        .where((n) =>
+            n.senderId != null &&
+            n.senderId!.isNotEmpty &&
+            (n.senderPhotoUrl == null || n.senderPhotoUrl!.isEmpty))
+        .map((n) => n.senderId!)
+        .toSet();
+
+    if (missingIds.isEmpty) return notifs;
+
+    // Look them all up in parallel
+    final userMap = <String, ({String? name, String? photo})>{};
+    await Future.wait(missingIds.map((id) async {
+      final user = await _userDao.getUserById(id);
+      if (user != null) {
+        userMap[id] = (name: user.displayName, photo: user.photoUrl);
+      }
+    }));
+
+    if (userMap.isEmpty) return notifs;
+
+    return notifs.map((n) {
+      if (n.senderId == null || !userMap.containsKey(n.senderId)) return n;
+      final info = userMap[n.senderId!]!;
+      return NotificationModel(
+        id: n.id,
+        userId: n.userId,
+        type: n.type,
+        senderId: n.senderId,
+        senderName: n.senderName ?? info.name,
+        senderPhotoUrl: (n.senderPhotoUrl?.isNotEmpty == true)
+            ? n.senderPhotoUrl
+            : info.photo,
+        body: n.body,
+        detail: n.detail,
+        entityId: n.entityId,
+        createdAt: n.createdAt,
+        isRead: n.isRead,
+        extra: n.extra,
+      );
+    }).toList();
   }
 
   Future<void> _enqueueNotificationUpdate({

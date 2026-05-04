@@ -1,6 +1,6 @@
 ﻿// lib/features/auth/screens/register_step1_screen.dart
 //
-// MUST StarTrack â€” Registration Step 1: Biographical Data
+// MUST StarTrack ” Registration Step 1: Biographical Data
 //
 // Collects: full name, gender, phone, short bio, skills.
 // Data is stored in memory and passed to Step 2 via GoRouter extra.
@@ -76,7 +76,27 @@ class _RegisterStep1ScreenState extends State<RegisterStep1Screen> {
             title: const Text(AppStrings.onboardingTitle),
             leading: BackButton(onPressed: () => ctx.pop()),
           ),
-          body: Form(
+          body: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFFF8FBFF), Color(0xFFECF3FF)],
+              ),
+            ),
+            child: Stack(
+              children: [
+                const Positioned(
+                  top: -80,
+                  right: -70,
+                  child: _GlowBlob(size: 220, color: Color(0x332563EB)),
+                ),
+                const Positioned(
+                  bottom: -90,
+                  left: -85,
+                  child: _GlowBlob(size: 250, color: Color(0x221152D4)),
+                ),
+                Form(
             key: _formKey,
             child: Column(
               children: [
@@ -102,7 +122,7 @@ class _RegisterStep1ScreenState extends State<RegisterStep1Screen> {
                             fontSize: 14, color: AppColors.textSecondaryLight)),
                         const SizedBox(height: 24),
 
-                        // â”€â”€ Full Name â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                        // 
                         StTextField(
                           label: AppStrings.fullName,
                           hint: 'Enter your legal full name',
@@ -113,7 +133,7 @@ class _RegisterStep1ScreenState extends State<RegisterStep1Screen> {
                         ),
                         const SizedBox(height: AppDimensions.spacingMd),
 
-                        // â”€â”€ Gender + Phone side-by-side â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                        // 
                         Row(
                           children: [
                             Expanded(
@@ -152,7 +172,7 @@ class _RegisterStep1ScreenState extends State<RegisterStep1Screen> {
                         ),
                         const SizedBox(height: AppDimensions.spacingMd),
 
-                        // â”€â”€ Short Bio â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                        // 
                         StTextField(
                           label: AppStrings.biography,
                           hint: 'Tell us about yourself, your interests and goals...',
@@ -162,7 +182,6 @@ class _RegisterStep1ScreenState extends State<RegisterStep1Screen> {
                         ),
                         const SizedBox(height: AppDimensions.spacingMd),
 
-                        // â”€â”€ Skills tag input â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                         SkillChipInput(
                           initialSkills: _skills,
                           onChanged: (s) => setState(() => _skills = s),
@@ -183,9 +202,11 @@ class _RegisterStep1ScreenState extends State<RegisterStep1Screen> {
                 ),
               ],
             ),
+                ),
+              ],
+            ),
           ),
 
-          // â”€â”€ Sticky footer CTA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           bottomNavigationBar: _StickyFooter(
             onNext: () => _next(ctx),
             showBack: false,
@@ -196,9 +217,32 @@ class _RegisterStep1ScreenState extends State<RegisterStep1Screen> {
   }
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Sticky footer â€” reused across all 3 steps
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+class _GlowBlob extends StatelessWidget {
+  final double size;
+  final Color color;
+
+  const _GlowBlob({required this.size, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: color,
+              blurRadius: 80,
+              spreadRadius: 25,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _StickyFooter extends StatelessWidget {
   final VoidCallback onNext;
@@ -235,6 +279,7 @@ class _StickyFooter extends StatelessWidget {
                 child: StOutlinedButton(
                   label: AppStrings.previousStep,
                   leadingIcon: Icons.arrow_back_rounded,
+                  buttonHeight: 48,
                   onPressed: onBack,
                 ),
               ),
@@ -242,11 +287,40 @@ class _StickyFooter extends StatelessWidget {
             ],
             Expanded(
               flex: 2,
-              child: StButton(
-                label: nextLabel,
-                trailingIcon: Icons.arrow_forward_rounded,
-                isLoading: isLoading,
-                onPressed: onNext,
+              child: SizedBox(
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: isLoading ? null : onNext,
+                  iconAlignment: IconAlignment.end,
+                  icon: isLoading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.arrow_forward_rounded, size: 18),
+                  label: Text(
+                    nextLabel,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2E7D32),
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor:
+                        const Color(0xFF2E7D32).withValues(alpha: 0.45),
+                    disabledForegroundColor: Colors.white.withValues(alpha: 0.75),
+                    shape: RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(AppDimensions.radiusMd),
+                    ),
+                  ),
+                ),
               ),
             ),
           ],

@@ -28,8 +28,8 @@ import '../../remote/firestore_service.dart';
 // ── Entry model (lightweight — not full Equatable model) ─────────────────────
 
 class RecommendationLogEntry {
-  final String userId;   // viewer / ranked-for user
-  final String itemId;   // post id or applicant user id
+  final String userId; // viewer / ranked-for user
+  final String itemId; // post id or applicant user id
   final String itemType; // 'post' | 'user'
   final String algorithm; // 'local' | 'hybrid' | 'applicant' | 'collaborator'
   final double score;
@@ -150,12 +150,36 @@ class RecommendationLogDao {
     required String itemId,
   }) async {
     final db = await _db.database;
+    final rows = await db.query(
+      DatabaseSchema.tableRecommendationLogs,
+      columns: ['id', 'user_id', 'item_id', 'item_type', 'algorithm', 'score'],
+      where: 'user_id = ? AND item_id = ? AND was_interacted = 0',
+      whereArgs: [userId, itemId],
+    );
     await db.update(
       DatabaseSchema.tableRecommendationLogs,
       {'was_interacted': 1},
       where: 'user_id = ? AND item_id = ?',
       whereArgs: [userId, itemId],
     );
+
+    if (_syncQueue != null) {
+      for (final row in rows) {
+        final id = row['id']?.toString() ?? '';
+        if (id.isEmpty) continue;
+        await _syncQueue.enqueue(
+          operation: 'update',
+          entity: 'recommendation_logs',
+          entityId: id,
+          payload: {
+            ...row,
+            'id': id,
+            'was_interacted': 1,
+            'interacted_at': DateTime.now().toIso8601String(),
+          },
+        );
+      }
+    }
   }
 
   // ── Read: admin analytics ─────────────────────────────────────────────────

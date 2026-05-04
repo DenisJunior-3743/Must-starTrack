@@ -10,6 +10,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_names.dart';
+import '../../../core/theme/theme_cubit.dart';
 import '../../../data/local/dao/activity_log_dao.dart';
 import '../../../data/local/dao/group_dao.dart';
 import '../../../data/local/dao/notification_dao.dart';
@@ -24,8 +25,8 @@ import '../../../data/remote/sync_service.dart';
 import '../../../data/local/dao/recommendation_log_dao.dart';
 import '../../../core/constants/app_enums.dart';
 import '../../auth/bloc/auth_cubit.dart';
-import '../bloc/course_management_cubit.dart';
-import '../bloc/faculty_management_cubit.dart';
+import '../bloc/course_management_cubit.dart' hide unawaited;
+import '../bloc/faculty_management_cubit.dart' hide unawaited;
 import 'course_management_screen.dart';
 import 'faculty_management_screen.dart';
 import 'resource_monitoring_screen.dart';
@@ -46,7 +47,8 @@ String _titleCaseWords(String value) {
       .toList(growable: false);
   if (parts.isEmpty) return '';
   return parts
-      .map((part) => '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}')
+      .map((part) =>
+          '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}')
       .join(' ');
 }
 
@@ -139,6 +141,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   bool _isSidebarVisible = true;
   StreamSubscription<List<UserModel>>? _usersSub;
   StreamSubscription<void>? _notifCountSub;
+  bool _remoteRefreshInFlight = false;
 
   int _selectedTab = 0;
   bool _loading = true;
@@ -161,6 +164,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   List<UserModel> _allUsers = const [];
   List<UserModel> _filteredUsers = const [];
   String _userSearchQuery = '';
+  final Map<String, Future<UserModel>> _userProfileHydrationFutures = {};
   final List<_FlaggedItem> _items = [];
 
   @override
@@ -169,6 +173,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     _facultyManagementCubit = FacultyManagementCubit();
     _courseManagementCubit = CourseManagementCubit();
     _reloadDashboard();
+    unawaited(_refreshRemoteThenReload());
     _subscribeToUsersStream();
     _subscribeToNotificationCount();
   }
@@ -195,48 +200,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   /// manual refresh needed.
   void _subscribeToUsersStream() {
     _usersSub = _firestoreService.watchAllUsers(limit: 500).listen(
-      (remoteUsers) async {
-        debugPrint(
-            '[AdminDashboard][UserSync] stream event: '
+      (remoteUsers) {
+        debugPrint('[AdminDashboard][UserSync] stream event: '
             'remoteUsers=${remoteUsers.length}');
-        for (final user in remoteUsers) {
-          debugPrint(
-              '[AdminDashboard][UserSync]   stream uid=${user.id} '
-              'email=${user.email} role=${user.role.name}');
+        if (mounted) {
+          setState(() {
+            _allUsers = remoteUsers;
+            _totalUsers = remoteUsers.length;
+            _applyUserFilter(_userSearchQuery);
+          });
         }
-
-        // Upsert every user into local SQLite so FK dependencies are satisfied.
-        var upserted = 0;
-        var failed = 0;
-        for (final user in remoteUsers) {
-          try {
-            await _userDao.insertUser(user);
-            upserted++;
-          } catch (error) {
-            failed++;
-            debugPrint(
-                '[AdminDashboard][UserSync] ⚠ stream upsert failed '
-                'uid=${user.id} email=${user.email}: $error');
-          }
-        }
-
-        final localCount = await _userDao.getUserCount();
-        debugPrint(
-            '[AdminDashboard][UserSync] after stream upsert: '
-            'remote=${remoteUsers.length} local=$localCount '
-            'upserted=$upserted failed=$failed');
-        if (localCount < remoteUsers.length) {
-          debugPrint(
-              '[AdminDashboard][UserSync] ⚠ CONSISTENCY GAP: '
-              '${remoteUsers.length - localCount} user(s) missing from local DB.');
-        }
-
-        if (!mounted) return;
-        setState(() {
-          _allUsers = remoteUsers;
-          _totalUsers = remoteUsers.length;
-          _filterUsers(_userSearchQuery);
-        });
+        unawaited(_upsertRemoteUsersInBackground(remoteUsers));
       },
       onError: (Object error) {
         debugPrint('[AdminDashboard] users stream error: $error');
@@ -251,7 +225,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           setState(() {
             _allUsers = localUsers;
             _totalUsers = localCount;
-            _filterUsers(_userSearchQuery);
+            _applyUserFilter(_userSearchQuery);
           });
         });
       },
@@ -267,72 +241,148 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     super.dispose();
   }
 
-  List<_FlaggedItem> get _selected => _items.where((i) => i.isSelected).toList();
+  List<_FlaggedItem> get _selected =>
+      _items.where((i) => i.isSelected).toList();
 
-  Future<void> _reloadDashboard() async {
-    setState(() => _loading = true);
+  Future<void> _refreshRemoteThenReload() async {
+    if (_remoteRefreshInFlight) return;
+    _remoteRefreshInFlight = true;
     try {
-      // Ensure dashboard decisions use fresh remote data, not stale local cache.
       await _syncService.processPendingSync();
       await _syncService.syncRemoteToLocal(
         postLimit: 250,
         forceIncludePendingForAdmin: true,
+        suppressNotificationAlerts: true,
       );
+      if (mounted) {
+        await _reloadDashboard(showBlockingLoader: false);
+      }
+    } catch (error) {
+      debugPrint('[AdminDashboard] background remote refresh failed: $error');
+    } finally {
+      _remoteRefreshInFlight = false;
+    }
+  }
 
-      // ── User-count diagnostics ───────────────────────────────────────
-      final localCountAfterSync = await _userDao.getUserCount();
-      final allUsers = await _userDao.getAllUsers(pageSize: 500);
+  Future<void> _upsertRemoteUsersInBackground(
+      List<UserModel> remoteUsers) async {
+    var failed = 0;
+    for (final user in remoteUsers) {
+      try {
+        await _userDao.insertUser(user);
+      } catch (_) {
+        failed++;
+      }
+    }
+    if (failed > 0) {
       debugPrint(
-          '[AdminDashboard][UserSync] _reloadDashboard: '
-          'getUserCount()=$localCountAfterSync '
-          'getAllUsers(pageSize:500).length=${allUsers.length}');
+        '[AdminDashboard][UserSync] background upsert failed for $failed user(s)',
+      );
+    }
+  }
+
+  Future<void> _openAdminNotifications() async {
+    final uid = sl<AuthCubit>().currentUser?.id;
+    if (uid != null && uid.isNotEmpty) {
+      final unread = (await _notifDao.getNotifications(userId: uid))
+          .where((notification) => !notification.isRead)
+          .toList(growable: false);
+      if (unread.isNotEmpty) {
+        await _notifDao.markAllRead(uid);
+        for (final notification in unread) {
+          await _syncQueueDao.enqueue(
+            operation: 'update',
+            entity: 'notifications',
+            entityId: notification.id,
+            payload: {
+              'notification_id': notification.id,
+              'is_read': true,
+            },
+          );
+        }
+        unawaited(_syncService.processPendingSync());
+        if (mounted) {
+          setState(() => _unreadNotifCount = 0);
+        }
+      }
+    }
+    if (!mounted) return;
+    context.push(RouteNames.adminNotifications);
+  }
+
+  Future<void> _reloadDashboard({bool showBlockingLoader = true}) async {
+    if (showBlockingLoader) {
+      setState(() => _loading = true);
+    }
+    try {
+      final results = await Future.wait<dynamic>([
+        _userDao.getUserCount(),
+        _userDao.getAllUsers(pageSize: 500),
+        _postDao.getPostStats(),
+        _postDao.getPendingModerationPosts(limit: 250),
+        _activityLogDao.getReportedPostSummaries(limit: 80),
+        _syncQueueDao.getPendingCount(),
+        _syncQueueDao.getDeadLetterCount(),
+        _activityLogDao.getActionCountForDays(action: 'report_post', days: 7),
+        _activityLogDao.getActiveUserCountSince(days: 7),
+        _activityLogDao.getAdvertAnalyticsSummary(days: 30),
+      ]);
+
+      final localCountAfterSync = results[0] as int;
+      final allUsers = results[1] as List<UserModel>;
+      debugPrint(
+        '[AdminDashboard][UserSync] _reloadDashboard: getUserCount()=$localCountAfterSync getAllUsers(pageSize:500).length=${allUsers.length}',
+      );
       if (localCountAfterSync != allUsers.length) {
         debugPrint(
-            '[AdminDashboard][UserSync] ⚠ pageSize cap hit or query mismatch: '
-            'count=$localCountAfterSync but list=${allUsers.length}');
-      }
-      for (final user in allUsers) {
-        debugPrint(
-            '[AdminDashboard][UserSync]   local uid=${user.id} '
-            'email=${user.email} role=${user.role.name}');
-      }
-
-      final postStats = await _postDao.getPostStats();
-      final pendingPosts = await _postDao.getPendingModerationPosts(limit: 250);
-      final flaggedRows = await _activityLogDao.getReportedPostSummaries(limit: 80);
-      final syncPending = await _syncQueueDao.getPendingCount();
-      final syncDeadLetters = await _syncQueueDao.getDeadLetterCount();
-      final weeklyReports = await _activityLogDao.getActionCountForDays(action: 'report_post', days: 7);
-      final weeklyActiveUsers = await _activityLogDao.getActiveUserCountSince(days: 7);
-      final advertAnalytics = await _activityLogDao.getAdvertAnalyticsSummary(days: 30);
-
-      final flaggedItems = flaggedRows.map((row) {
-        final risk = switch (row['risk']) {
-          'high' => _Risk.high,
-          'medium' => _Risk.medium,
-          _ => _Risk.low,
-        };
-        final reason = (row['topReason']?.toString().toLowerCase() ?? 'other');
-        final violation = reason.contains('inappropriate')
-            ? _Violation.inappropriate
-            : reason.contains('suspicious') || reason.contains('fake')
-                ? _Violation.suspicious
-                : reason.contains('spam')
-                    ? _Violation.spam
-                    : _Violation.other;
-        return _FlaggedItem(
-          postId: row['postId']?.toString() ?? '',
-          authorId: row['authorId']?.toString() ?? '',
-          title: row['postTitle']?.toString() ?? 'Untitled post',
-          reportedBy: row['latestReporterId']?.toString() ?? 'unknown',
-          reportsCount: row['reportsCount'] as int? ?? 0,
-          risk: risk,
-          violation: violation,
-          isArchived: row['isArchived'] as bool? ?? false,
+          '[AdminDashboard][UserSync] pageSize cap hit or query mismatch: count=$localCountAfterSync but list=${allUsers.length}',
         );
-      }).where((item) => item.postId.isNotEmpty).toList();
+      }
 
-      final reportedUsers = flaggedItems.map((item) => item.authorId).where((id) => id.isNotEmpty).toSet().length;
+      final postStats = results[2] as Map<String, int>;
+      final pendingPosts = results[3] as List<PostModel>;
+      final flaggedRows = results[4] as List<Map<String, dynamic>>;
+      final syncPending = results[5] as int;
+      final syncDeadLetters = results[6] as int;
+      final weeklyReports = results[7] as int;
+      final weeklyActiveUsers = results[8] as int;
+      final advertAnalytics = results[9] as Map<String, dynamic>;
+
+      final flaggedItems = flaggedRows
+          .map((row) {
+            final risk = switch (row['risk']) {
+              'high' => _Risk.high,
+              'medium' => _Risk.medium,
+              _ => _Risk.low,
+            };
+            final reason =
+                (row['topReason']?.toString().toLowerCase() ?? 'other');
+            final violation = reason.contains('inappropriate')
+                ? _Violation.inappropriate
+                : reason.contains('suspicious') || reason.contains('fake')
+                    ? _Violation.suspicious
+                    : reason.contains('spam')
+                        ? _Violation.spam
+                        : _Violation.other;
+            return _FlaggedItem(
+              postId: row['postId']?.toString() ?? '',
+              authorId: row['authorId']?.toString() ?? '',
+              title: row['postTitle']?.toString() ?? 'Untitled post',
+              reportedBy: row['latestReporterId']?.toString() ?? 'unknown',
+              reportsCount: row['reportsCount'] as int? ?? 0,
+              risk: risk,
+              violation: violation,
+              isArchived: row['isArchived'] as bool? ?? false,
+            );
+          })
+          .where((item) => item.postId.isNotEmpty)
+          .toList();
+
+      final reportedUsers = flaggedItems
+          .map((item) => item.authorId)
+          .where((id) => id.isNotEmpty)
+          .toSet()
+          .length;
 
       if (!mounted) return;
       setState(() {
@@ -346,7 +396,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         _totalPosts = postStats['total'] ?? 0;
         _totalUsers = allUsers.length;
         _allUsers = allUsers;
-        _filterUsers(_userSearchQuery);
+        _applyUserFilter(_userSearchQuery);
         _syncPending = syncPending;
         _syncDeadLetters = syncDeadLetters;
         _weeklyReports = weeklyReports;
@@ -358,7 +408,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         _advertTopFaculty = advertAnalytics['topFaculty'] as String?;
       });
     } finally {
-      if (mounted) {
+      if (mounted && showBlockingLoader) {
         setState(() => _loading = false);
       }
     }
@@ -399,25 +449,49 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   void _filterUsers(String query) {
     setState(() {
-      _userSearchQuery = query.toLowerCase();
-      if (_userSearchQuery.isEmpty) {
-        _filteredUsers = _allUsers;
-      } else {
-        _filteredUsers = _allUsers
-            .where((user) {
-              final displayName = _bestUserLabel(
-                displayName: user.displayName,
-                email: user.email,
-                userId: user.id,
-              ).toLowerCase();
-              final email = user.email.toLowerCase();
-              return displayName.contains(_userSearchQuery) ||
-                  email.contains(_userSearchQuery) ||
-                  user.id.toLowerCase().contains(_userSearchQuery);
-            })
-            .toList();
-      }
+      _applyUserFilter(query);
     });
+  }
+
+  void _applyUserFilter(String query) {
+    _userSearchQuery = query.toLowerCase();
+    if (_userSearchQuery.isEmpty) {
+      _filteredUsers = _allUsers;
+      return;
+    }
+
+    _filteredUsers = _allUsers.where((user) {
+      final displayName = _bestUserLabel(
+        displayName: user.displayName,
+        email: user.email,
+        userId: user.id,
+      ).toLowerCase();
+      final email = user.email.toLowerCase();
+      return displayName.contains(_userSearchQuery) ||
+          email.contains(_userSearchQuery) ||
+          user.id.toLowerCase().contains(_userSearchQuery);
+    }).toList();
+  }
+
+  Future<UserModel> _hydrateUserProfile(UserModel user) {
+    final cached = _userProfileHydrationFutures[user.id];
+    if (cached != null) {
+      return cached;
+    }
+
+    if (user.profile != null) {
+      final done = Future<UserModel>.value(user);
+      _userProfileHydrationFutures[user.id] = done;
+      return done;
+    }
+
+    final future = _userDao.getProfileByUserId(user.id).then((profile) {
+      if (profile == null) return user;
+      return user.copyWith(profile: profile);
+    });
+
+    _userProfileHydrationFutures[user.id] = future;
+    return future;
   }
 
   Future<void> _approveSelected() async {
@@ -434,10 +508,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           operation: 'update',
           entity: 'posts',
           entityId: updated.id,
-          payload: updated.copyWith(
-            moderationStatus: ModerationStatus.approved,
-            updatedAt: DateTime.now(),
-          ).toMap(),
+          payload: updated
+              .copyWith(
+                moderationStatus: ModerationStatus.approved,
+                updatedAt: DateTime.now(),
+              )
+              .toMap(),
         );
       }
     }
@@ -463,10 +539,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           operation: 'update',
           entity: 'posts',
           entityId: updated.id,
-          payload: updated.copyWith(
-            moderationStatus: ModerationStatus.rejected,
-            updatedAt: DateTime.now(),
-          ).toMap(),
+          payload: updated
+              .copyWith(
+                moderationStatus: ModerationStatus.rejected,
+                updatedAt: DateTime.now(),
+              )
+              .toMap(),
         );
       }
     }
@@ -489,10 +567,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         operation: 'update',
         entity: 'posts',
         entityId: updated.id,
-        payload: updated.copyWith(
-          moderationStatus: ModerationStatus.approved,
-          updatedAt: DateTime.now(),
-        ).toMap(),
+        payload: updated
+            .copyWith(
+              moderationStatus: ModerationStatus.approved,
+              updatedAt: DateTime.now(),
+            )
+            .toMap(),
       );
     }
     await _syncService.processPendingSync();
@@ -510,10 +590,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         operation: 'update',
         entity: 'posts',
         entityId: updated.id,
-        payload: updated.copyWith(
-          moderationStatus: ModerationStatus.rejected,
-          updatedAt: DateTime.now(),
-        ).toMap(),
+        payload: updated
+            .copyWith(
+              moderationStatus: ModerationStatus.rejected,
+              updatedAt: DateTime.now(),
+            )
+            .toMap(),
       );
     }
     await _syncService.processPendingSync();
@@ -528,10 +610,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         operation: 'update',
         entity: 'posts',
         entityId: updated.id,
-        payload: updated.copyWith(
-          isArchived: true,
-          updatedAt: DateTime.now(),
-        ).toMap(),
+        payload: updated
+            .copyWith(
+              isArchived: true,
+              updatedAt: DateTime.now(),
+            )
+            .toMap(),
       );
     }
     await _syncService.processPendingSync();
@@ -592,12 +676,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   void _setSelectedTab(int index) {
-    final isWide = MediaQuery.of(context).size.width >= 980;
     setState(() {
       _selectedTab = index;
-      if (isWide) {
-        _isSidebarVisible = false;
-      }
     });
     final scaffold = Scaffold.maybeOf(context);
     if (scaffold?.isDrawerOpen ?? false) {
@@ -606,6 +686,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Widget _buildSidebar() {
+    final surface = AppColors.adaptive(
+      context,
+      light: Colors.white,
+      dark: const Color(0xFF111827),
+    );
+    final selectedBg = AppColors.adaptive(
+      context,
+      light: AppColors.primaryTint10,
+      dark: AppColors.primary.withValues(alpha: 0.22),
+    );
+    final sectionText = AppColors.textSecondary(context);
+    final normalText = AppColors.textPrimary(context);
+
     Widget navTile({
       required int tab,
       required IconData icon,
@@ -615,16 +708,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       final selected = _selectedTab == tab;
       return ListTile(
         dense: true,
+        tileColor: selected ? selectedBg : Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
         ),
-        leading: Icon(icon, size: 20, color: selected ? AppColors.primary : null),
+        leading:
+            Icon(icon, size: 20, color: selected ? AppColors.primary : null),
         title: Text(
           title,
           style: GoogleFonts.plusJakartaSans(
             fontSize: 13,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-            color: selected ? AppColors.primary : null,
+            color: selected ? AppColors.primary : normalText,
           ),
         ),
         trailing: count != null
@@ -633,7 +728,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 decoration: BoxDecoration(
                   color: selected
                       ? AppColors.primary.withValues(alpha: 0.14)
-                      : AppColors.surfaceLight,
+                      : AppColors.adaptive(
+                          context,
+                          light: AppColors.backgroundLight,
+                          dark: AppColors.surfaceDark2,
+                        ),
                   borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
                 ),
                 child: Text(
@@ -641,7 +740,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    color: selected ? AppColors.primary : AppColors.textSecondaryLight,
+                    color: selected
+                        ? AppColors.primary
+                        : AppColors.textSecondary(context),
                   ),
                 ),
               )
@@ -653,7 +754,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     }
 
     return Material(
-      color: Theme.of(context).cardColor,
+      color: surface,
       child: SafeArea(
         bottom: false,
         child: ListView(
@@ -671,6 +772,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
+                        color: normalText,
                       ),
                     ),
                   ),
@@ -680,15 +782,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ExpansionTile(
               tilePadding: const EdgeInsets.symmetric(horizontal: 4),
               childrenPadding: const EdgeInsets.only(left: 8),
+              iconColor: sectionText,
+              collapsedIconColor: sectionText,
               leading: const Icon(Icons.gavel_rounded),
               title: Text(
                 'Moderation',
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
+                  color: sectionText,
                 ),
               ),
-              initiallyExpanded: _selectedTab == 0 || _selectedTab == 1,
+              initiallyExpanded:
+                  _selectedTab == 0 || _selectedTab == 1 || _selectedTab == 16,
               children: [
                 navTile(
                   tab: 0,
@@ -702,17 +808,28 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   title: 'Review Queue',
                   count: _pendingReviews,
                 ),
+                navTile(
+                  tab: 16,
+                  icon: Icons.auto_awesome_rounded,
+                  title: 'AI Project Review',
+                  count: _pendingQueue
+                      .where((post) => (post.aiReviewStatus ?? '').isNotEmpty)
+                      .length,
+                ),
               ],
             ),
             ExpansionTile(
               tilePadding: const EdgeInsets.symmetric(horizontal: 4),
               childrenPadding: const EdgeInsets.only(left: 8),
+              iconColor: sectionText,
+              collapsedIconColor: sectionText,
               leading: const Icon(Icons.groups_rounded),
               title: Text(
                 'Users & Academics',
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
+                  color: sectionText,
                 ),
               ),
               initiallyExpanded:
@@ -739,16 +856,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ExpansionTile(
               tilePadding: const EdgeInsets.symmetric(horizontal: 4),
               childrenPadding: const EdgeInsets.only(left: 8),
+              iconColor: sectionText,
+              collapsedIconColor: sectionText,
               leading: const Icon(Icons.insights_rounded),
               title: Text(
                 'Insights',
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
+                  color: sectionText,
                 ),
               ),
-              initiallyExpanded:
-                  _selectedTab == 5 ||
+              initiallyExpanded: _selectedTab == 5 ||
                   _selectedTab == 6 ||
                   _selectedTab == 13 ||
                   _selectedTab == 14 ||
@@ -764,12 +883,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
                   ),
-                  leading: const Icon(Icons.hub_rounded, size: 20),
+                  leading: Icon(Icons.hub_rounded, size: 20, color: normalText),
                   title: Text(
                     'Recommendation Web Lab',
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
+                      color: normalText,
                     ),
                   ),
                   onTap: () {
@@ -806,16 +926,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ExpansionTile(
               tilePadding: const EdgeInsets.symmetric(horizontal: 4),
               childrenPadding: const EdgeInsets.only(left: 8),
+              iconColor: sectionText,
+              collapsedIconColor: sectionText,
               leading: const Icon(Icons.monitor_heart_rounded),
               title: Text(
                 'Monitoring',
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
+                  color: sectionText,
                 ),
               ),
-              initiallyExpanded:
-                  _selectedTab == 8 ||
+              initiallyExpanded: _selectedTab == 8 ||
                   _selectedTab == 9 ||
                   _selectedTab == 10 ||
                   _selectedTab == 11 ||
@@ -853,12 +975,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ExpansionTile(
               tilePadding: const EdgeInsets.symmetric(horizontal: 4),
               childrenPadding: const EdgeInsets.only(left: 8),
+              iconColor: sectionText,
+              collapsedIconColor: sectionText,
               leading: const Icon(Icons.tune_rounded),
               title: Text(
                 'System',
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
+                  color: sectionText,
                 ),
               ),
               initiallyExpanded: _selectedTab == 7,
@@ -873,6 +998,26 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             const SizedBox(height: 10),
             const Divider(height: 1),
             const SizedBox(height: 6),
+            ListTile(
+              dense: true,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+              ),
+              leading: Icon(
+                Icons.home_outlined,
+                size: 20,
+                color: normalText,
+              ),
+              title: Text(
+                'Home Feed',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: normalText,
+                ),
+              ),
+              onTap: () => context.go(RouteNames.home),
+            ),
             ListTile(
               dense: true,
               shape: RoundedRectangleBorder(
@@ -926,7 +1071,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
           ..._pendingQueue.map((post) => ListTile(
                 title: Text(post.title),
-                subtitle: Text('By ${post.authorName ?? post.authorId}'),
+                subtitle: Text(
+                  [
+                    'By ${post.authorName ?? post.authorId}',
+                    if ((post.aiDecision ?? '').isNotEmpty)
+                      'AI: ${post.aiDecision!.replaceAll('_', ' ')} (${(((post.aiConfidence ?? 0) * 100).round())}%)',
+                  ].join(' • '),
+                ),
                 trailing: Wrap(
                   spacing: 6,
                   children: [
@@ -951,12 +1102,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     IconButton(
                       tooltip: 'Approve',
                       onPressed: () => _approvePendingPost(post),
-                      icon: const Icon(Icons.check_circle_rounded, color: AppColors.success),
+                      icon: const Icon(Icons.check_circle_rounded,
+                          color: AppColors.success),
                     ),
                     IconButton(
                       tooltip: 'Reject',
                       onPressed: () => _rejectPendingPost(post),
-                      icon: const Icon(Icons.cancel_rounded, color: AppColors.danger),
+                      icon: const Icon(Icons.cancel_rounded,
+                          color: AppColors.danger),
                     ),
                   ],
                 ),
@@ -965,7 +1118,92 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       );
     }
 
+    if (_selectedTab == 16) {
+      final reviewed = _pendingQueue
+          .where((post) => (post.aiReviewStatus ?? '').isNotEmpty)
+          .toList(growable: false);
+      final needsHuman =
+          reviewed.where((post) => post.aiDecision == 'needs_human').length;
+      final approvalSuggestions =
+          reviewed.where((post) => post.aiDecision == 'approve').length;
+
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        children: [
+          Text(
+            'AI Project Review',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textSecondaryLight,
+            ),
+          ),
+          const SizedBox(height: 10),
+          _summaryCardsWrap([
+            _SummaryCard(
+              icon: Icons.auto_awesome_rounded,
+              iconColor: AppColors.primary,
+              value: reviewed.length.toString(),
+              label: 'AI Reviewed',
+            ),
+            _SummaryCard(
+              icon: Icons.person_search_rounded,
+              iconColor: AppColors.warning,
+              value: needsHuman.toString(),
+              label: 'Needs Human',
+            ),
+            _SummaryCard(
+              icon: Icons.check_circle_outline_rounded,
+              iconColor: AppColors.success,
+              value: approvalSuggestions.toString(),
+              label: 'Suggested Approval',
+            ),
+          ]),
+          const SizedBox(height: 18),
+          if (reviewed.isEmpty)
+            const ListTile(
+              leading: Icon(Icons.hourglass_empty_rounded),
+              title: Text('No AI-reviewed pending projects yet.'),
+            ),
+          ...reviewed.map((post) {
+            final confidence = ((post.aiConfidence ?? 0) * 100).round();
+            final decision =
+                (post.aiDecision ?? 'needs_human').replaceAll('_', ' ');
+            return Card(
+              margin: const EdgeInsets.only(bottom: 10),
+              child: ListTile(
+                leading: const Icon(Icons.auto_awesome_rounded),
+                title: Text(post.title),
+                subtitle: Text(
+                  [
+                    '${decision.toUpperCase()} • $confidence% confidence',
+                    if ((post.aiFinalTake ?? '').trim().isNotEmpty)
+                      post.aiFinalTake!.trim(),
+                  ].join('\n'),
+                ),
+                isThreeLine: (post.aiFinalTake ?? '').trim().isNotEmpty,
+                trailing: IconButton(
+                  tooltip: 'Open review',
+                  icon: const Icon(Icons.open_in_new_rounded),
+                  onPressed: () async {
+                    final changed = await context.push<bool>(
+                      RouteNames.adminPostReview
+                          .replaceFirst(':postId', post.id),
+                    );
+                    if (changed == true) {
+                      await _reloadDashboard();
+                    }
+                  },
+                ),
+              ),
+            );
+          }),
+        ],
+      );
+    }
+
     if (_selectedTab == 2) {
+      final currentUserId = sl<AuthCubit>().currentUser?.id;
       return ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         children: [
@@ -1014,147 +1252,219 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
           ..._filteredUsers.map(
             (user) {
-              final displayName = _bestUserLabel(
-                displayName: user.displayName,
-                email: user.email,
-                userId: user.id,
-              );
-              final initials = displayName.isNotEmpty
-                  ? displayName[0].toUpperCase()
-                  : '?';
+              final isSelf = user.id == currentUserId;
+              return FutureBuilder<UserModel>(
+                future: _hydrateUserProfile(user),
+                builder: (context, snapshot) {
+                  final hydratedUser = snapshot.data ?? user;
+                  final profile = hydratedUser.profile;
+                  final displayName = _bestUserLabel(
+                    displayName: hydratedUser.displayName,
+                    email: hydratedUser.email,
+                    userId: hydratedUser.id,
+                  );
+                  final initials =
+                      displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
+                  final hasPhoto = (hydratedUser.photoUrl ?? '').trim().isNotEmpty;
+                  final faculty = (profile?.faculty ?? '').trim();
+                  final programme = (profile?.programName ?? '').trim();
+                  final department = (profile?.department ?? '').trim();
+                  final academicLabel = hydratedUser.isLecturer
+                      ? (department.isNotEmpty
+                          ? department
+                          : (faculty.isNotEmpty ? faculty : 'No department'))
+                      : [faculty, programme]
+                          .where((part) => part.isNotEmpty)
+                          .join(' • ');
+                  final yearLabel = profile?.yearOfStudy == null
+                      ? ''
+                      : 'Year ${profile!.yearOfStudy}';
 
-              return Card(
-                margin: const EdgeInsets.only(bottom: 10),
-                child: ListTile(
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  leading: CircleAvatar(
-                    radius: 20,
-                    backgroundColor: AppColors.primaryTint10,
-                    child: Text(
-                      initials,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ),
-                  title: Text(
-                    displayName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          user.email,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 11,
-                            color: AppColors.textSecondaryLight,
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: ListTile(
+                      onTap: () {
+                        context.push(
+                          RouteNames.profile.replaceFirst(
+                            ':userId',
+                            Uri.encodeComponent(hydratedUser.id),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryTint10,
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(
-                                user.role.label,
+                        );
+                      },
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      leading: CircleAvatar(
+                        radius: 22,
+                        backgroundColor: AppColors.primaryTint10,
+                        backgroundImage:
+                            hasPhoto ? NetworkImage(hydratedUser.photoUrl!) : null,
+                        child: hasPhoto
+                            ? null
+                            : Text(
+                                initials,
                                 style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 10,
                                   fontWeight: FontWeight.w700,
                                   color: AppColors.primary,
                                 ),
                               ),
+                      ),
+                      title: Text(
+                        displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              hydratedUser.email,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11,
+                                color: AppColors.textSecondaryLight,
+                              ),
                             ),
-                            if (user.isSuspended)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: AppColors.warning.withValues(alpha: 0.14),
-                                  borderRadius: BorderRadius.circular(999),
-                                ),
-                                child: Text(
-                                  'Suspended',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.warning,
-                                  ),
+                            const SizedBox(height: 2),
+                            Text(
+                              academicLabel.isNotEmpty
+                                  ? academicLabel
+                                  : 'No academic profile data',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11,
+                                color: AppColors.textSecondaryLight,
+                              ),
+                            ),
+                            if (yearLabel.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                yearLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondaryLight,
                                 ),
                               ),
-                            if (user.isBanned)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: AppColors.danger.withValues(alpha: 0.14),
-                                  borderRadius: BorderRadius.circular(999),
-                                ),
-                                child: Text(
-                                  'Banned',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.danger,
+                            ],
+                            const SizedBox(height: 4),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryTint10,
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: Text(
+                                    hydratedUser.role.label,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.primary,
+                                    ),
                                   ),
                                 ),
-                              ),
+                                if (hydratedUser.isSuspended)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.warning
+                                          .withValues(alpha: 0.14),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      'Suspended',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.warning,
+                                      ),
+                                    ),
+                                  ),
+                                if (hydratedUser.isBanned)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          AppColors.danger.withValues(alpha: 0.14),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      'Banned',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.danger,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ],
                         ),
-                      ],
+                      ),
+                      trailing: PopupMenuButton<String>(
+                        tooltip: 'User actions',
+                        icon: const Icon(Icons.more_vert_rounded),
+                        onSelected: (value) async {
+                          switch (value) {
+                            case 'edit':
+                              await context.push(
+                                '${RouteNames.editProfile}?userId=${Uri.encodeComponent(hydratedUser.id)}',
+                              );
+                              break;
+                            case 'suspend':
+                              await _userDao.suspendUser(hydratedUser.id);
+                              break;
+                            case 'ban':
+                              await _userDao.banUser(hydratedUser.id);
+                              break;
+                            case 'delete':
+                              await _userDao.deleteUser(hydratedUser.id);
+                              break;
+                          }
+                          _userProfileHydrationFutures.remove(hydratedUser.id);
+                          await _reloadDashboard();
+                        },
+                        itemBuilder: (_) => [
+                          const PopupMenuItem<String>(
+                            value: 'edit',
+                            child: Text('Edit'),
+                          ),
+                          PopupMenuItem<String>(
+                            value: 'suspend',
+                            enabled: !isSelf,
+                            child: const Text('Suspend'),
+                          ),
+                          PopupMenuItem<String>(
+                            value: 'ban',
+                            enabled: !isSelf,
+                            child: const Text('Ban'),
+                          ),
+                          PopupMenuItem<String>(
+                            value: 'delete',
+                            enabled: !isSelf,
+                            child: const Text('Delete'),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  trailing: PopupMenuButton<String>(
-                    tooltip: 'User actions',
-                    icon: const Icon(Icons.more_vert_rounded),
-                    onSelected: (value) async {
-                      switch (value) {
-                        case 'suspend':
-                          await _userDao.suspendUser(user.id);
-                          break;
-                        case 'ban':
-                          await _userDao.banUser(user.id);
-                          break;
-                        case 'delete':
-                          await _userDao.deleteUser(user.id);
-                          break;
-                      }
-                      await _reloadDashboard();
-                    },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem<String>(
-                        value: 'suspend',
-                        child: Text('Suspend'),
-                      ),
-                      PopupMenuItem<String>(
-                        value: 'ban',
-                        child: Text('Ban'),
-                      ),
-                      PopupMenuItem<String>(
-                        value: 'delete',
-                        child: Text('Delete'),
-                      ),
-                    ],
-                  ),
-                ),
+                  );
+                },
               );
             },
           ),
@@ -1268,7 +1578,67 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
     if (_selectedTab == 7) {
       return ListView(
+        padding: const EdgeInsets.all(16),
         children: [
+          _AdminSettingsCard(
+            title: 'Appearance',
+            icon: Icons.palette_outlined,
+            child: BlocBuilder<ThemeCubit, ThemeMode>(
+              builder: (context, mode) {
+                return Column(
+                  children: [
+                    SwitchListTile.adaptive(
+                      value: mode == ThemeMode.dark,
+                      secondary: Icon(
+                        mode == ThemeMode.dark
+                            ? Icons.dark_mode_rounded
+                            : Icons.light_mode_rounded,
+                      ),
+                      title: const Text('Dark theme'),
+                      subtitle:
+                          const Text('Improve contrast across admin tools'),
+                      onChanged: (enabled) {
+                        context.read<ThemeCubit>().setMode(
+                              enabled ? ThemeMode.dark : ThemeMode.light,
+                            );
+                      },
+                    ),
+                    ListTile(
+                      leading: Icon(
+                        Icons.settings_suggest_outlined,
+                        color: mode == ThemeMode.system
+                            ? AppColors.primary
+                            : AppColors.textSecondary(context),
+                      ),
+                      title: const Text('Use system theme'),
+                      subtitle: const Text('Follow device appearance'),
+                      trailing: mode == ThemeMode.system
+                          ? const Icon(
+                              Icons.check_circle_rounded,
+                              color: AppColors.primary,
+                            )
+                          : null,
+                      onTap: () {
+                        context.read<ThemeCubit>().setMode(ThemeMode.system);
+                      },
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          _AdminSettingsCard(
+            title: 'Navigation',
+            icon: Icons.navigation_outlined,
+            child: ListTile(
+              leading: const Icon(Icons.home_outlined),
+              title: const Text('Open Home Feed'),
+              subtitle: const Text('Return to the shared student project feed'),
+              onTap: () => context.go(RouteNames.home),
+            ),
+          ),
+          const SizedBox(height: 12),
           ListTile(
             leading: const Icon(Icons.refresh_rounded),
             title: const Text('Reload dashboard data'),
@@ -1378,12 +1748,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final isWide = MediaQuery.of(context).size.width >= 980;
 
     return Scaffold(
+      backgroundColor: AppColors.background(context),
       drawer: isWide
           ? null
           : Drawer(
               child: _buildSidebar(),
             ),
       appBar: AppBar(
+        backgroundColor: AppColors.surface(context),
+        foregroundColor: AppColors.textPrimary(context),
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
         leading: isWide
             ? IconButton(
                 tooltip: _isSidebarVisible ? 'Hide sidebar' : 'Show sidebar',
@@ -1405,7 +1780,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ),
         title: Text(
           'Moderation Dashboard',
-          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+          style: GoogleFonts.plusJakartaSans(
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary(context),
+          ),
         ),
         actions: [
           // ── Notification bell ───────────────────────────────────────────
@@ -1415,9 +1793,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               IconButton(
                 tooltip: 'Notifications',
                 icon: const Icon(Icons.notifications_outlined),
-                onPressed: () {
-                  context.push(RouteNames.adminNotifications);
-                },
+                onPressed: () => unawaited(_openAdminNotifications()),
               ),
               if (_unreadNotifCount > 0)
                 Positioned(
@@ -1425,7 +1801,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   right: 6,
                   child: IgnorePointer(
                     child: Container(
-                      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                      constraints:
+                          const BoxConstraints(minWidth: 16, minHeight: 16),
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       decoration: BoxDecoration(
                         color: AppColors.danger,
@@ -1465,7 +1842,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               child: _buildSidebar(),
             ),
           Expanded(
-            child: _buildTabBody(),
+            child: ColoredBox(
+              color: AppColors.background(context),
+              child: _buildTabBody(),
+            ),
           ),
         ],
       ),
@@ -1488,6 +1868,53 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ),
             )
           : null,
+    );
+  }
+}
+
+class _AdminSettingsCard extends StatelessWidget {
+  const _AdminSettingsCard({
+    required this.title,
+    required this.icon,
+    required this.child,
+  });
+
+  final String title;
+  final IconData icon;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface(context),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+        border: Border.all(color: AppColors.border(context)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+            child: Row(
+              children: [
+                Icon(icon, size: 20, color: AppColors.primary),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          child,
+        ],
+      ),
     );
   }
 }
@@ -1558,14 +1985,32 @@ class _FlaggedCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (riskLabel, riskBg, riskFg) = switch (item.risk) {
-      _Risk.high => ('High Risk', const Color(0xFFFEF3C7), const Color(0xFFB45309)),
-      _Risk.medium => ('Medium', AppColors.surfaceLight, AppColors.textSecondaryLight),
-      _Risk.low => ('Low', AppColors.surfaceLight, AppColors.textSecondaryLight),
+      _Risk.high => (
+          'High Risk',
+          const Color(0xFFFEF3C7),
+          const Color(0xFFB45309)
+        ),
+      _Risk.medium => (
+          'Medium',
+          AppColors.surfaceLight,
+          AppColors.textSecondaryLight
+        ),
+      _Risk.low => (
+          'Low',
+          AppColors.surfaceLight,
+          AppColors.textSecondaryLight
+        ),
     };
 
     final (violIcon, violLabel) = switch (item.violation) {
-      _Violation.inappropriate => (Icons.warning_rounded, 'Inappropriate Content'),
-      _Violation.suspicious => (Icons.error_outline_rounded, 'Suspicious Activity'),
+      _Violation.inappropriate => (
+          Icons.warning_rounded,
+          'Inappropriate Content'
+        ),
+      _Violation.suspicious => (
+          Icons.error_outline_rounded,
+          'Suspicious Activity'
+        ),
       _Violation.spam => (Icons.block_rounded, 'Spam / Repeated Post'),
       _Violation.other => (Icons.help_outline_rounded, 'Other'),
     };
@@ -1576,7 +2021,9 @@ class _FlaggedCard extends StatelessWidget {
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: item.isSelected ? AppColors.primaryTint10 : Theme.of(context).cardColor,
+          color: item.isSelected
+              ? AppColors.primaryTint10
+              : Theme.of(context).cardColor,
           borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
           border: Border.all(
             color: item.isSelected ? AppColors.primary : AppColors.borderLight,
@@ -1621,7 +2068,8 @@ class _FlaggedCard extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: riskBg,
                     borderRadius: BorderRadius.circular(4),
@@ -1767,7 +2215,9 @@ class _AdminAppFeedbackTabState extends State<_AdminAppFeedbackTab> {
     if (userName.isNotEmpty) return userName;
     final email = row['user_email']?.toString().trim() ?? '';
     final local = email.split('@').first.trim();
-    if (local.isNotEmpty) return _titleCaseWords(local.replaceAll(RegExp(r'[_\-.]+'), ' '));
+    if (local.isNotEmpty) {
+      return _titleCaseWords(local.replaceAll(RegExp(r'[_\-.]+'), ' '));
+    }
     final userId = row['user_id']?.toString().trim() ?? '';
     if (userId.isEmpty) return 'Member';
     return userId.length > 8 ? '${userId.substring(0, 8)}…' : userId;
@@ -1949,7 +2399,8 @@ class _AdminAppFeedbackTabState extends State<_AdminAppFeedbackTab> {
                       runSpacing: 4,
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 2),
                           decoration: BoxDecoration(
                             color: AppColors.warning.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(999),
@@ -1964,7 +2415,8 @@ class _AdminAppFeedbackTabState extends State<_AdminAppFeedbackTab> {
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 2),
                           decoration: BoxDecoration(
                             color: AppColors.primaryTint10,
                             borderRadius: BorderRadius.circular(999),
@@ -2156,9 +2608,11 @@ class _AdminGroupsTabState extends State<_AdminGroupsTab> {
                       ),
                       trailing: group.isDissolved
                           ? Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: AppColors.warning.withValues(alpha: 0.14),
+                                color:
+                                    AppColors.warning.withValues(alpha: 0.14),
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: Text(
@@ -2248,7 +2702,7 @@ class _AdminRecommendationsTabState extends State<_AdminRecommendationsTab> {
     final memberComparisons = _buildMemberComparisons(recent);
     final reasonWeights = _buildReasonWeights(recent);
     final avgLogsPerUser =
-      unique.isEmpty ? 0.0 : (total.toDouble() / unique.length);
+        unique.isEmpty ? 0.0 : (total.toDouble() / unique.length);
 
     return _RecSummary(
       stats: stats,
@@ -2342,10 +2796,13 @@ class _AdminRecommendationsTabState extends State<_AdminRecommendationsTab> {
       final hybridItem = hybrid[key] ?? _AlgoAccumulator();
       if (localItem.count == 0 && hybridItem.count == 0) continue;
 
-      final localAvg = localItem.count == 0 ? 0.0 : localItem.scoreTotal / localItem.count;
-      final hybridAvg =
-          hybridItem.count == 0 ? 0.0 : hybridItem.scoreTotal / hybridItem.count;
-      final chosen = _chooseAlgorithm(localItem, hybridItem, localAvg, hybridAvg);
+      final localAvg =
+          localItem.count == 0 ? 0.0 : localItem.scoreTotal / localItem.count;
+      final hybridAvg = hybridItem.count == 0
+          ? 0.0
+          : hybridItem.scoreTotal / hybridItem.count;
+      final chosen =
+          _chooseAlgorithm(localItem, hybridItem, localAvg, hybridAvg);
 
       decisions.add(
         _MemberTaskDecision(
@@ -2378,7 +2835,8 @@ class _AdminRecommendationsTabState extends State<_AdminRecommendationsTab> {
     if (hybrid.count == 0 && local.count > 0) return 'local';
     if (local.count == 0 && hybrid.count > 0) return 'hybrid';
 
-    final localInteraction = local.count == 0 ? 0.0 : local.interacted / local.count;
+    final localInteraction =
+        local.count == 0 ? 0.0 : local.interacted / local.count;
     final hybridInteraction =
         hybrid.count == 0 ? 0.0 : hybrid.interacted / hybrid.count;
     final localComposite = localAvg + (localInteraction * 0.10);
@@ -2393,7 +2851,8 @@ class _AdminRecommendationsTabState extends State<_AdminRecommendationsTab> {
     final totalsByTask = <String, int>{};
 
     for (final row in rows) {
-      final algorithm = (row['algorithm'] as String? ?? '').trim().toLowerCase();
+      final algorithm =
+          (row['algorithm'] as String? ?? '').trim().toLowerCase();
       if (algorithm != 'local' && algorithm != 'hybrid') continue;
 
       final task = _taskBucketFromRecRow(row);
@@ -2421,8 +2880,11 @@ class _AdminRecommendationsTabState extends State<_AdminRecommendationsTab> {
       final taskTotal = totalsByTask[item.task] ?? 1;
       final frequencyShare = item.count / taskTotal;
       final avgScore = item.count == 0 ? 0.0 : item.scoreTotal / item.count;
-      final interactionRate = item.count == 0 ? 0.0 : item.interacted / item.count;
-      final weight = (frequencyShare * 0.60) + (avgScore * 0.30) + (interactionRate * 0.10);
+      final interactionRate =
+          item.count == 0 ? 0.0 : item.interacted / item.count;
+      final weight = (frequencyShare * 0.60) +
+          (avgScore * 0.30) +
+          (interactionRate * 0.10);
 
       return _ReasonWeightMetric(
         task: item.task,
@@ -2441,7 +2903,10 @@ class _AdminRecommendationsTabState extends State<_AdminRecommendationsTab> {
   List<String> _parseReasons(dynamic raw) {
     if (raw == null) return const [];
     if (raw is List) {
-      return raw.map((e) => e.toString()).where((e) => e.trim().isNotEmpty).toList();
+      return raw
+          .map((e) => e.toString())
+          .where((e) => e.trim().isNotEmpty)
+          .toList();
     }
     final text = raw.toString().trim();
     if (text.isEmpty) return const [];
@@ -2614,13 +3079,16 @@ class _AdminRecommendationsTabState extends State<_AdminRecommendationsTab> {
                                 label,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.plusJakartaSans(fontSize: 11),
+                                style:
+                                    GoogleFonts.plusJakartaSans(fontSize: 11),
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
-                                color: AppColors.warning.withValues(alpha: 0.12),
+                                color:
+                                    AppColors.warning.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
@@ -2662,7 +3130,12 @@ class _AdminRecommendationsTabState extends State<_AdminRecommendationsTab> {
                     selected: _filterTask == null,
                     onTap: () => setState(() => _filterTask = null),
                   ),
-                  for (final task in ['projects', 'opportunities', 'streaming', 'members'])
+                  for (final task in [
+                    'projects',
+                    'opportunities',
+                    'streaming',
+                    'members'
+                  ])
                     _RecentFilterChip(
                       label: _taskBucketLabel(task),
                       selected: _filterTask == task,
@@ -2673,7 +3146,8 @@ class _AdminRecommendationsTabState extends State<_AdminRecommendationsTab> {
             ),
             const SizedBox(height: 6),
             ...data.memberComparisons
-                .where((item) => _filterTask == null || item.task == _filterTask)
+                .where(
+                    (item) => _filterTask == null || item.task == _filterTask)
                 .take(30)
                 .map(
                   (item) => _MemberAlgoComparisonCard(
@@ -2722,8 +3196,7 @@ class _AdminRecommendationsTabState extends State<_AdminRecommendationsTab> {
                   IconButton(
                     icon: const Icon(Icons.refresh_rounded, size: 18),
                     tooltip: 'Refresh',
-                    onPressed: () =>
-                        setState(() => _future = _load()),
+                    onPressed: () => setState(() => _future = _load()),
                   ),
                 ],
               ),
@@ -2741,7 +3214,12 @@ class _AdminRecommendationsTabState extends State<_AdminRecommendationsTab> {
                     selected: _filterAlgo == null,
                     onTap: () => setState(() => _filterAlgo = null),
                   ),
-                  for (final algo in ['local', 'hybrid', 'applicant', 'collaborator'])
+                  for (final algo in [
+                    'local',
+                    'hybrid',
+                    'applicant',
+                    'collaborator'
+                  ])
                     _RecentFilterChip(
                       label: algo,
                       selected: _filterAlgo == algo,
@@ -2936,8 +3414,7 @@ class _AlgoStatCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: _color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
@@ -2994,7 +3471,8 @@ class _MemberAlgoComparisonCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final userLabel = _bestUserLabel(displayName: userName, userId: item.userId);
+    final userLabel =
+        _bestUserLabel(displayName: userName, userId: item.userId);
     final pickedColor = item.selectedAlgorithm == 'hybrid'
         ? AppColors.primary
         : AppColors.success;
@@ -3216,7 +3694,8 @@ class _RecentLogRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
       decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.borderLight, width: 0.5)),
+        border: Border(
+            bottom: BorderSide(color: AppColors.borderLight, width: 0.5)),
       ),
       child: Row(
         children: [

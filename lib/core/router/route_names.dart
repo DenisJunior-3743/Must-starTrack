@@ -21,6 +21,7 @@ abstract final class RouteNames {
   static const String home = '/home';
   static const String discover = '/discover';
   static const String peers = '/peers';
+  static const String groupDetail = '/groups/:groupId';
   static const String inbox = '/inbox';
   static const String notifications = '/notifications';
   static const String notificationSettings = '/notifications/settings';
@@ -58,6 +59,7 @@ abstract final class RouteNames {
   static const String lecturerApplicants = '/lecturer/applicants';
   static const String lecturerRanking = '/lecturer/ranking';
   static const String lecturerSearch = '/lecturer/search';
+  static const String lecturerLeaderboard = '/lecturer/leaderboard';
   static const String globalRanks = '/ranks/global';
 
   // ── Named Route Keys ──────────────────────────────────────────────────────
@@ -73,6 +75,7 @@ abstract final class RouteNames {
   static const String homeName = 'home';
   static const String discoverName = 'discover';
   static const String peersName = 'peers';
+  static const String groupDetailName = 'groupDetail';
   static const String inboxName = 'inbox';
   static const String notificationsName = 'notifications';
   static const String notificationSettingsName = 'notificationSettings';
@@ -96,6 +99,7 @@ abstract final class RouteNames {
   static const String lecturerApplicantsName = 'lecturerApplicants';
   static const String lecturerRankingName = 'lecturerRanking';
   static const String lecturerSearchName = 'lecturerSearch';
+  static const String lecturerLeaderboardName = 'lecturerLeaderboard';
   static const String globalRanksName = 'globalRanks';
 }
 
@@ -113,6 +117,7 @@ abstract final class Routes {
   static const String discover = RouteNames.discover;
   static const String peers = RouteNames.peers;
   static const String inbox = RouteNames.inbox;
+  static const String groupDetail = RouteNames.groupDetail;
   static const String projects = RouteNames.projects;
   static const String notifications = RouteNames.notifications;
   static const String notificationSettings = RouteNames.notificationSettings;
@@ -136,7 +141,8 @@ abstract final class Routes {
   static const String adminChatbotAnalytics = RouteNames.adminChatbotAnalytics;
   static const String adminPostReview = RouteNames.adminPostReview;
   static const String adminNotifications = RouteNames.adminNotifications;
-  static const String adminRecommendationLab = RouteNames.adminRecommendationLab;
+  static const String adminRecommendationLab =
+      RouteNames.adminRecommendationLab;
   static const String superAdminDashboard = RouteNames.superAdminDashboard;
   static const String superAdminSettings = RouteNames.superAdminSettings;
   static const String superAdminUsers = RouteNames.superAdminUsers;
@@ -147,5 +153,6 @@ abstract final class Routes {
   static const String lecturerApplicants = RouteNames.lecturerApplicants;
   static const String lecturerRanking = RouteNames.lecturerRanking;
   static const String lecturerSearch = RouteNames.lecturerSearch;
+  static const String lecturerLeaderboard = RouteNames.lecturerLeaderboard;
   static const String globalRanks = RouteNames.globalRanks;
 }

@@ -73,25 +73,55 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        layout: {
+          padding: {
+            top: 8,
+            right: 12,
+            bottom: 18,
+            left: 6,
+          },
+        },
         animation: {
           duration: 550,
           easing: 'easeOutQuart',
         },
         plugins: {
           legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title(items) {
+                const item = items && items[0];
+                return item ? item.label : '';
+              },
+            },
+          },
         },
         scales: {
           x: {
+            grid: {
+              drawTicks: false,
+            },
             ticks: {
-              maxRotation: 0,
+              maxRotation: 28,
+              minRotation: 0,
               autoSkip: true,
+              padding: 10,
               font: { size: 10 },
+              callback(value) {
+                const label = this.getLabelForValue(value);
+                if (typeof label !== 'string') return label;
+                return label.length > 18 ? `${label.slice(0, 16)}...` : label;
+              },
             },
           },
           y: {
             beginAtZero: true,
+            grid: {
+              color: 'rgba(15, 23, 42, 0.08)',
+            },
             ticks: {
               font: { size: 10 },
+              padding: 8,
             },
           },
         },

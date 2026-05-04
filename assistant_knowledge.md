@@ -24,17 +24,17 @@ The recommendation system is hybrid and local-first.
 - Local ranking always runs first.
 - Signals include user skills, faculty, program, bio, activity streak, total posts, collaborations, followers, recent activity, recent searches, post recency, engagement, and opportunity fit.
 - Recommendations are used in the home feed, discover, collaborator suggestions, and lecturer applicant ranking.
-- If Gemini is configured, it can rerank top candidates but does not replace the local model.
-- If Gemini is unavailable, recommendations still work through local ranking.
+- If OpenAI is configured, it can rerank top candidates but does not replace the local model.
+- If OpenAI is unavailable, recommendations still work through local ranking.
 
-## Gemini Usage
+## OpenAI Usage
 
-Gemini is used in the app in a supporting role.
+OpenAI is used in the app in a supporting role.
 
 - Assistant fallback: when local FAQ and project knowledge are insufficient
 - Recommendation reranking: optional reranking of already-ranked local candidates
 
-Gemini is not the core engine of the app. Critical product behavior stays local-first.
+OpenAI is not the core engine of the app. Critical product behavior stays local-first.
 
 ## Groups
 
@@ -57,12 +57,12 @@ Groups let users organize collaboration around a shared project.
 
 - The app uses local persistence and sync-aware workflows
 - Core usage should remain functional even when network quality is poor
-- Assistant and recommender features should prefer local knowledge first, then Gemini if configured
+- Assistant and recommender features should prefer local knowledge first, then OpenAI if configured
 
 ## Assistant Answering Rules
 
 - Prefer exact FAQ answers when the question is directly supported
 - Prefer project knowledge summaries for implementation-specific questions
-- Use Gemini only after local FAQ and project knowledge have been searched
-- Do not claim Gemini is required for the app to work
+- Use OpenAI only after local FAQ and project knowledge have been searched
+- Do not claim OpenAI is required for the app to work
 - When answering role-specific questions, explain what the user can do in that role

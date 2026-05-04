@@ -65,7 +65,8 @@ class GroupMemberDao {
       DatabaseSchema.tableGroupMembers,
       where: 'group_id = ?',
       whereArgs: [groupId],
-      orderBy: "CASE status WHEN 'active' THEN 0 ELSE 1 END, CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, updated_at DESC",
+      orderBy:
+          "CASE status WHEN 'active' THEN 0 ELSE 1 END, CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, updated_at DESC",
     );
     return rows.map(GroupMemberModel.fromMap).toList();
   }
@@ -75,7 +76,7 @@ class GroupMemberDao {
     final rows = await db.rawQuery('''
       SELECT gm.*, g.name AS group_name
       FROM ${DatabaseSchema.tableGroupMembers} gm
-      INNER JOIN ${DatabaseSchema.tableGroups} g ON g.id = gm.group_id
+      LEFT JOIN ${DatabaseSchema.tableGroups} g ON g.id = gm.group_id
       WHERE gm.user_id = ?
         AND gm.status = 'pending'
         AND COALESCE(g.is_dissolved, 0) = 0

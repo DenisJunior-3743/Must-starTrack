@@ -65,50 +65,27 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
     try {
       final faculties = await sl<FacultyDao>().getAllFaculties();
       final courseDao = sl<CourseDao>();
-      final map = <String, List<_ProgramOption>>{};
 
+      final loaded = <String, List<_ProgramOption>>{};
       for (final faculty in faculties) {
         final courses = await courseDao.getCoursesByFaculty(faculty.id);
-        map[faculty.name] = courses
-            .map((c) => _ProgramOption(code: c.code, name: '${c.name} (${c.code})'))
-            .toList();
+        loaded[faculty.name] = courses
+            .map((course) => _ProgramOption(code: course.code, name: course.name))
+            .toList(growable: false);
       }
 
-      if (mounted) {
-        setState(() {
-          _facultyPrograms = map;
-          _loadingFaculties = false;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _facultyPrograms = loaded;
+        _loadingFaculties = false;
+      });
     } catch (_) {
-      // Fallback to hardcoded data if DB is empty / unavailable
-      if (mounted) {
-        setState(() {
-          _facultyPrograms = _fallbackFacultyPrograms;
-          _loadingFaculties = false;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _loadingFaculties = false;
+      });
     }
   }
-
-  /// Fallback used only when the DB has no seeded faculties yet.
-  static const Map<String, List<_ProgramOption>> _fallbackFacultyPrograms = {
-    'Faculty of Computing and Informatics': [
-      _ProgramOption(code: 'BSE', name: 'Bachelor of Software Engineering (BSE)'),
-      _ProgramOption(code: 'BCS', name: 'Bachelor of Computer Science (BCS)'),
-      _ProgramOption(code: 'BIT', name: 'Bachelor of Information Technology (BIT)'),
-    ],
-    'Faculty of Applied Sciences and Technology': [
-      _ProgramOption(code: 'CVE', name: 'Civil Engineering (CVE)'),
-      _ProgramOption(code: 'EEE', name: 'Electrical and Electronics Engineering (EEE)'),
-      _ProgramOption(code: 'BME', name: 'Biomedical Engineering (BME)'),
-    ],
-    'Faculty of Business and Management Sciences': [
-      _ProgramOption(code: 'ECO', name: 'Bachelor of Science in Economics (ECO)'),
-      _ProgramOption(code: 'BAE', name: 'Bachelor of Arts in Economics (BAE)'),
-      _ProgramOption(code: 'BAF', name: 'Bachelor of Accounting and Finance (BAF)'),
-    ],
-  };
 
   List<String> get _faculties => _facultyPrograms.keys.toList(growable: false);
   List<_ProgramOption> get _programsForSelectedFaculty =>
@@ -259,9 +236,30 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
             title: const Text(AppStrings.step2Title),
             leading: BackButton(onPressed: () => ctx.pop()),
           ),
-          body: _loadingFaculties
-              ? const Center(child: CircularProgressIndicator())
-              : Form(
+          body: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFFF8FBFF), Color(0xFFECF3FF)],
+              ),
+            ),
+            child: Stack(
+              children: [
+                const Positioned(
+                  top: -80,
+                  right: -70,
+                  child: _GlowBlob(size: 220, color: Color(0x332563EB)),
+                ),
+                const Positioned(
+                  bottom: -90,
+                  left: -85,
+                  child: _GlowBlob(size: 250, color: Color(0x221152D4)),
+                ),
+                if (_loadingFaculties)
+                  const Center(child: CircularProgressIndicator())
+                else
+                  Form(
             key: _formKey,
             child: Column(
               children: [
@@ -391,6 +389,9 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
                 ),
               ],
             ),
+                  ),
+              ],
+            ),
           ),
 
           bottomNavigationBar: _StepFooter(
@@ -400,6 +401,33 @@ class _RegisterStep2ScreenState extends State<RegisterStep2Screen> {
           ),
         );
       }),
+    );
+  }
+}
+
+class _GlowBlob extends StatelessWidget {
+  final double size;
+  final Color color;
+
+  const _GlowBlob({required this.size, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: color,
+              blurRadius: 80,
+              spreadRadius: 25,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -542,21 +570,43 @@ class _StepFooter extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         child: Row(
           children: [
             if (showBack)
               Expanded(
-                child: OutlinedButton(
+                child: StOutlinedButton(
+                  label: AppStrings.previousStep,
+                  leadingIcon: Icons.arrow_back_rounded,
+                  buttonHeight: 48,
                   onPressed: onBack,
-                  child: const Text('Back'),
                 ),
               ),
             if (showBack) const SizedBox(width: 12),
             Expanded(
-              child: FilledButton(
-                onPressed: onNext,
-                child: const Text('Next'),
+              flex: showBack ? 2 : 1,
+              child: SizedBox(
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: onNext,
+                  iconAlignment: IconAlignment.end,
+                  icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                  label: Text(
+                    'Next Step',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2E7D32),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(AppDimensions.radiusMd),
+                    ),
+                  ),
+                ),
               ),
             ),
           ],

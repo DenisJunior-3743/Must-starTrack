@@ -45,7 +45,9 @@ class UserModel extends Equatable {
       isEmailVerified: (map['is_email_verified'] as int? ?? 0) == 1,
       isSuspended: (map['is_suspended'] as int? ?? 0) == 1,
       isBanned: (map['is_banned'] as int? ?? 0) == 1,
-      lastSeenAt: map['last_seen_at'] != null ? DateTime.tryParse(map['last_seen_at'] as String) : null,
+      lastSeenAt: map['last_seen_at'] != null
+          ? DateTime.tryParse(map['last_seen_at'] as String)
+          : null,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
       profile: profile,
@@ -53,40 +55,59 @@ class UserModel extends Equatable {
   }
 
   Map<String, dynamic> toMap() => {
-    'id': id, 'firebase_uid': firebaseUid, 'email': email,
-    'role': role.name, 'display_name': displayName, 'photo_url': photoUrl,
-    'is_email_verified': isEmailVerified ? 1 : 0,
-    'is_suspended': isSuspended ? 1 : 0, 'is_banned': isBanned ? 1 : 0,
-    'last_seen_at': lastSeenAt?.toIso8601String(),
-    'created_at': createdAt.toIso8601String(),
-    'updated_at': updatedAt.toIso8601String(), 'sync_status': 0,
-  };
+        'id': id,
+        'firebase_uid': firebaseUid,
+        'email': email,
+        'role': role.name,
+        'display_name': displayName,
+        'photo_url': photoUrl,
+        'is_email_verified': isEmailVerified ? 1 : 0,
+        'is_suspended': isSuspended ? 1 : 0,
+        'is_banned': isBanned ? 1 : 0,
+        'last_seen_at': lastSeenAt?.toIso8601String(),
+        'created_at': createdAt.toIso8601String(),
+        'updated_at': updatedAt.toIso8601String(),
+        'sync_status': 0,
+      };
 
   factory UserModel.fromJson(Map<String, dynamic> j) => UserModel(
-    id: j['id'] as String, firebaseUid: j['firebaseUid'] as String?,
-    email: j['email'] as String, role: UserRole.fromString(j['role'] as String?),
-    displayName: j['displayName'] as String?, photoUrl: j['photoUrl'] as String?,
-    isEmailVerified: j['isEmailVerified'] as bool? ?? false,
-    isSuspended: j['isSuspended'] as bool? ?? false,
-    isBanned: j['isBanned'] as bool? ?? false,
-    lastSeenAt: j['lastSeenAt'] != null ? DateTime.tryParse(j['lastSeenAt'] as String) : null,
-    createdAt: DateTime.parse(j['createdAt'] as String),
-    updatedAt: DateTime.parse(j['updatedAt'] as String),
-    profile: j['profile'] is Map<String, dynamic>
-        ? ProfileModel.fromJson(j['profile'] as Map<String, dynamic>)
-        : j['profile'] is Map
-            ? ProfileModel.fromJson(Map<String, dynamic>.from(j['profile'] as Map))
+        id: j['id'] as String,
+        firebaseUid: j['firebaseUid'] as String?,
+        email: j['email'] as String,
+        role: UserRole.fromString(j['role'] as String?),
+        displayName: j['displayName'] as String?,
+        photoUrl: j['photoUrl'] as String?,
+        isEmailVerified: j['isEmailVerified'] as bool? ?? false,
+        isSuspended: j['isSuspended'] as bool? ?? false,
+        isBanned: j['isBanned'] as bool? ?? false,
+        lastSeenAt: j['lastSeenAt'] != null
+            ? DateTime.tryParse(j['lastSeenAt'] as String)
             : null,
-  );
+        createdAt: DateTime.parse(j['createdAt'] as String),
+        updatedAt: DateTime.parse(j['updatedAt'] as String),
+        profile: j['profile'] is Map<String, dynamic>
+            ? ProfileModel.fromJson(j['profile'] as Map<String, dynamic>)
+            : j['profile'] is Map
+                ? ProfileModel.fromJson(
+                    Map<String, dynamic>.from(j['profile'] as Map))
+                : null,
+      );
 
   Map<String, dynamic> toJson() => {
-    'id': id, 'firebaseUid': firebaseUid, 'email': email, 'role': role.name,
-    'displayName': displayName, 'photoUrl': photoUrl,
-    'isEmailVerified': isEmailVerified, 'isSuspended': isSuspended,
-    'isBanned': isBanned, 'lastSeenAt': lastSeenAt?.toIso8601String(),
-    'createdAt': createdAt.toIso8601String(), 'updatedAt': updatedAt.toIso8601String(),
-    if (profile != null) 'profile': profile!.toJson(),
-  };
+        'id': id,
+        'firebaseUid': firebaseUid,
+        'email': email,
+        'role': role.name,
+        'displayName': displayName,
+        'photoUrl': photoUrl,
+        'isEmailVerified': isEmailVerified,
+        'isSuspended': isSuspended,
+        'isBanned': isBanned,
+        'lastSeenAt': lastSeenAt?.toIso8601String(),
+        'createdAt': createdAt.toIso8601String(),
+        'updatedAt': updatedAt.toIso8601String(),
+        if (profile != null) 'profile': profile!.toJson(),
+      };
 
   String get firstName => displayName?.split(' ').first ?? '';
   bool get isActive => !isSuspended && !isBanned;
@@ -94,19 +115,50 @@ class UserModel extends Equatable {
   bool get isLecturer => role == UserRole.lecturer;
   bool get isAdminUser => role == UserRole.admin || role == UserRole.superAdmin;
 
-  UserModel copyWith({String? id, String? firebaseUid, String? email, UserRole? role,
-    String? displayName, String? photoUrl, bool? isEmailVerified, bool? isSuspended,
-    bool? isBanned, DateTime? lastSeenAt, DateTime? createdAt, DateTime? updatedAt,
-    ProfileModel? profile}) => UserModel(
-    id: id ?? this.id, firebaseUid: firebaseUid ?? this.firebaseUid,
-    email: email ?? this.email, role: role ?? this.role,
-    displayName: displayName ?? this.displayName, photoUrl: photoUrl ?? this.photoUrl,
-    isEmailVerified: isEmailVerified ?? this.isEmailVerified,
-    isSuspended: isSuspended ?? this.isSuspended, isBanned: isBanned ?? this.isBanned,
-    lastSeenAt: lastSeenAt ?? this.lastSeenAt, createdAt: createdAt ?? this.createdAt,
-    updatedAt: updatedAt ?? this.updatedAt, profile: profile ?? this.profile,
-  );
+  UserModel copyWith(
+          {String? id,
+          String? firebaseUid,
+          String? email,
+          UserRole? role,
+          String? displayName,
+          String? photoUrl,
+          bool? isEmailVerified,
+          bool? isSuspended,
+          bool? isBanned,
+          DateTime? lastSeenAt,
+          DateTime? createdAt,
+          DateTime? updatedAt,
+          ProfileModel? profile}) =>
+      UserModel(
+        id: id ?? this.id,
+        firebaseUid: firebaseUid ?? this.firebaseUid,
+        email: email ?? this.email,
+        role: role ?? this.role,
+        displayName: displayName ?? this.displayName,
+        photoUrl: photoUrl ?? this.photoUrl,
+        isEmailVerified: isEmailVerified ?? this.isEmailVerified,
+        isSuspended: isSuspended ?? this.isSuspended,
+        isBanned: isBanned ?? this.isBanned,
+        lastSeenAt: lastSeenAt ?? this.lastSeenAt,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        profile: profile ?? this.profile,
+      );
 
   @override
-  List<Object?> get props => [id, email, role, displayName, isEmailVerified];
+  List<Object?> get props => [
+        id,
+        firebaseUid,
+        email,
+        role,
+        displayName,
+        photoUrl,
+        isEmailVerified,
+        isSuspended,
+        isBanned,
+        lastSeenAt,
+        createdAt,
+        updatedAt,
+        profile,
+      ];
 }

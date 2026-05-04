@@ -32,7 +32,8 @@ import '../schema/database_schema.dart';
 class NotificationModel {
   final String id;
   final String userId;
-  final String type; // collaboration|message|opportunity|achievement|endorsement|system
+  final String
+      type; // collaboration|message|opportunity|achievement|endorsement|system
   final String? senderId;
   final String? senderName;
   final String? senderPhotoUrl;
@@ -41,7 +42,8 @@ class NotificationModel {
   final String? entityId; // postId / userId / skillName depending on type
   final DateTime createdAt;
   final bool isRead;
-  final Map<String, dynamic> extra; // extensible payload (skill name, streak count, etc.)
+  final Map<String, dynamic>
+      extra; // extensible payload (skill name, streak count, etc.)
 
   const NotificationModel({
     required this.id,
@@ -83,19 +85,19 @@ class NotificationModel {
   }
 
   Map<String, dynamic> toMap() => {
-    'id': id,
-    'user_id': userId,
-    'type': type,
-    'sender_id': senderId,
-    'sender_name': senderName,
-    'sender_photo_url': senderPhotoUrl,
-    'body': body,
-    'detail': detail,
-    'entity_id': entityId,
-    'created_at': createdAt.millisecondsSinceEpoch,
-    'is_read': isRead ? 1 : 0,
-    'extra_json': extra.isEmpty ? null : jsonEncode(extra),
-  };
+        'id': id,
+        'user_id': userId,
+        'type': type,
+        'sender_id': senderId,
+        'sender_name': senderName,
+        'sender_photo_url': senderPhotoUrl,
+        'body': body,
+        'detail': detail,
+        'entity_id': entityId,
+        'created_at': createdAt.millisecondsSinceEpoch,
+        'is_read': isRead ? 1 : 0,
+        'extra_json': extra.isEmpty ? null : jsonEncode(extra),
+      };
 }
 
 // ── DAO ───────────────────────────────────────────────────────────────────────
@@ -125,17 +127,17 @@ class NotificationDao {
     final db = await _db.database;
     final args = <dynamic>[userId, type];
     final filters = <String>['user_id = ?', 'type = ?'];
-    
+
     if (senderId != null && senderId.isNotEmpty) {
       filters.add('sender_id = ?');
       args.add(senderId);
     }
-    
+
     if (entityId != null && entityId.isNotEmpty) {
       filters.add('entity_id = ?');
       args.add(entityId);
     }
-    
+
     final where = filters.join(' AND ');
     final rows = await db.query(
       'notifications',
@@ -163,7 +165,7 @@ class NotificationDao {
     }
 
     final db = await _db.database;
-    
+
     // Skip if duplicate check is enabled and a similar notification exists
     if (checkDuplicate) {
       final exists = await notificationExists(
@@ -181,7 +183,7 @@ class NotificationDao {
         return;
       }
     }
-    
+
     await db.insert(
       'notifications',
       notification.toMap(),
@@ -311,6 +313,40 @@ class NotificationDao {
     return collabRequestId;
   }
 
+  Future<void> setResponseState({
+    required String notificationId,
+    required bool accepted,
+  }) async {
+    final db = await _db.database;
+
+    final rows = await db.query(
+      'notifications',
+      columns: ['extra_json'],
+      where: 'id = ?',
+      whereArgs: [notificationId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return;
+
+    Map<String, dynamic> extra = {};
+    try {
+      final raw = rows.first['extra_json'] as String?;
+      if (raw != null && raw.isNotEmpty) {
+        extra = jsonDecode(raw) as Map<String, dynamic>;
+      }
+    } catch (_) {}
+
+    extra['accepted'] = accepted;
+
+    await db.update(
+      'notifications',
+      {'extra_json': jsonEncode(extra), 'is_read': 1},
+      where: 'id = ?',
+      whereArgs: [notificationId],
+    );
+    _notifyChanged();
+  }
+
   // ── Delete one ───────────────────────────────────────────────────────────
 
   Future<void> deleteNotification(String notificationId) async {
@@ -329,9 +365,8 @@ class NotificationDao {
   /// Call from a background isolate weekly to prevent DB bloat.
   Future<int> clearOlderThan({required String userId, int days = 30}) async {
     final db = await _db.database;
-    final cutoff = DateTime.now()
-        .subtract(Duration(days: days))
-        .millisecondsSinceEpoch;
+    final cutoff =
+        DateTime.now().subtract(Duration(days: days)).millisecondsSinceEpoch;
 
     final deleted = await db.delete(
       'notifications',

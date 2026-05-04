@@ -7,7 +7,7 @@
 //
 // Tabs:
 //   Feed      — shared home feed (browse student projects)
-//   My Opps   — lecturer dashboard (own opportunity posts)
+//   My Posts   — lecturer dashboard (own opportunity posts)
 //   [+]       — create an opportunity post (centre FAB)
 //   Search    — advanced student search
 //   Inbox     — messaging (shared with student shell)
@@ -24,10 +24,11 @@ import '../../../core/constants/app_colors.dart';
 enum LecturerNavTab {
   feed,
   dashboard,
-  search,
+  leaderboard,
   inbox,
   none,
 }
+
 
 class LecturerBottomNav extends StatelessWidget {
   const LecturerBottomNav({
@@ -36,7 +37,7 @@ class LecturerBottomNav extends StatelessWidget {
     required this.onFeedTap,
     required this.onDashboardTap,
     required this.onAddTap,
-    required this.onSearchTap,
+    required this.onLeaderboardTap,
     required this.onInboxTap,
     this.unreadMessageCount = 0,
   });
@@ -45,7 +46,7 @@ class LecturerBottomNav extends StatelessWidget {
   final VoidCallback onFeedTap;
   final VoidCallback onDashboardTap;
   final VoidCallback onAddTap;
-  final VoidCallback onSearchTap;
+  final VoidCallback onLeaderboardTap;
   final VoidCallback onInboxTap;
   final int unreadMessageCount;
 
@@ -82,7 +83,7 @@ class LecturerBottomNav extends StatelessWidget {
             Expanded(
               child: _LecturerNavItem(
                 icon: Icons.work_outline_rounded,
-                label: 'My Opps',
+                label: 'My Posts',
                 active: activeTab == LecturerNavTab.dashboard,
                 onTap: onDashboardTap,
               ),
@@ -110,10 +111,10 @@ class LecturerBottomNav extends StatelessWidget {
             ),
             Expanded(
               child: _LecturerNavItem(
-                icon: Icons.manage_search_rounded,
-                label: 'Search',
-                active: activeTab == LecturerNavTab.search,
-                onTap: onSearchTap,
+                icon: Icons.emoji_events_rounded,
+                label: 'Leaderboard',
+                active: activeTab == LecturerNavTab.leaderboard,
+                onTap: onLeaderboardTap,
               ),
             ),
             Expanded(

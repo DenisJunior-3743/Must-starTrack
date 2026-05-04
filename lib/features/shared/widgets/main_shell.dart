@@ -25,6 +25,7 @@ import '../../../core/di/injection_container.dart';
 import '../../../core/network/connectivity_service.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/router/route_guards.dart';
+import '../../auth/bloc/auth_cubit.dart';
 import '../../messaging/bloc/message_cubit.dart';
 import 'lecturer_bottom_nav.dart';
 import 'startrack_bottom_nav.dart';
@@ -44,6 +45,7 @@ class _MainShellState extends State<MainShell> {
   bool _isOnline = true;
   bool _showOnlineBanner = false;
   int _lastUnreadCount = 0;
+  String? _lastUnreadUserId;
 
   void _setStateAfterPointerFrame(VoidCallback update) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -212,13 +214,13 @@ class _MainShellState extends State<MainShell> {
   }
 
   LecturerNavTab _lecturerCurrentTab(String location) {
-    if (location.startsWith(RouteNames.lecturerDashboard) ||
-        location.startsWith(RouteNames.lecturerApplicants) ||
+    if (location.startsWith(RouteNames.lecturerLeaderboard) ||
         location.startsWith(RouteNames.lecturerRanking)) {
-      return LecturerNavTab.dashboard;
+      return LecturerNavTab.leaderboard;
     }
-    if (location.startsWith(RouteNames.lecturerSearch)) {
-      return LecturerNavTab.search;
+    if (location.startsWith(RouteNames.lecturerDashboard) ||
+        location.startsWith(RouteNames.lecturerApplicants)) {
+      return LecturerNavTab.dashboard;
     }
     if (location.startsWith(RouteNames.inbox)) return LecturerNavTab.inbox;
     if (location.startsWith(RouteNames.home) ||
@@ -329,18 +331,26 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
     final role = sl<RouteGuards>().currentRole;
+    final currentUserId = sl<AuthCubit>().currentUser?.id;
+
+    if (_lastUnreadUserId != currentUserId) {
+      _lastUnreadUserId = currentUserId;
+      _lastUnreadCount = 0;
+    }
 
     final unreadCount = () {
       final msgState = context.watch<MessageCubit>().state;
       if (msgState is ConversationsLoaded) {
-        final unreadChats = msgState.conversations
-            .where((c) => c.unreadCount > 0)
-            .length;
-        final unviewedRequests = msgState.requests
-            .where((request) =>
-                request.isIncoming && request.receiverViewedAt == null)
-            .length;
-        _lastUnreadCount = unreadChats + unviewedRequests;
+        _lastUnreadCount = msgState.conversations.fold<int>(
+          0,
+          (total, convo) => total + convo.unreadCount,
+        );
+      } else if (msgState is MessageInitial ||
+          msgState is ConversationsLoading ||
+          msgState is MessageError ||
+          currentUserId == null ||
+          currentUserId.isEmpty) {
+        _lastUnreadCount = 0;
       }
       return _lastUnreadCount;
     }();
@@ -354,7 +364,7 @@ class _MainShellState extends State<MainShell> {
           onFeedTap: () => context.go(RouteNames.home),
           onDashboardTap: () => context.go(RouteNames.lecturerDashboard),
           onAddTap: () => _handleAddTap(context),
-          onSearchTap: () => context.go(RouteNames.lecturerSearch),
+          onLeaderboardTap: () => context.go(RouteNames.lecturerLeaderboard),
           onInboxTap: () => context.go(RouteNames.inbox),
           unreadMessageCount: unreadCount,
         ),

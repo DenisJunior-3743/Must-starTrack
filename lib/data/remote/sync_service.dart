@@ -52,6 +52,7 @@ import '../local/database_helper.dart';
 import '../local/schema/database_schema.dart';
 import 'cloudinary_service.dart';
 import 'firestore_service.dart';
+import 'recommender_service.dart';
 import '../models/post_model.dart';
 import '../models/user_model.dart';
 import '../models/group_model.dart';
@@ -97,8 +98,8 @@ class SyncService {
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _notifSub;
   bool _isSyncing = false;
-    StreamSubscription<User?>? _authSub;
-    bool _isHydrating = false;
+  StreamSubscription<User?>? _authSub;
+  bool _isHydrating = false;
   Future<void>? _hydrationFuture;
   String _lastJobError = 'sync_failed';
 
@@ -251,15 +252,15 @@ class SyncService {
         unawaited(syncRemoteToLocal());
       }
     });
-      // Re-start the Firestore notification watcher whenever auth state
-      // changes (login, logout, token refresh).  On fresh app start the
-      // current user is null, so we must wait for authStateChanges rather
-      // than reading FirebaseAuth.instance.currentUser once at startup.
-      _authSub?.cancel();
-      _authSub = FirebaseAuth.instance.authStateChanges().listen((_) {
-        _startWatchingNotifications();
-      });
+    // Re-start the Firestore notification watcher whenever auth state
+    // changes (login, logout, token refresh).  On fresh app start the
+    // current user is null, so we must wait for authStateChanges rather
+    // than reading FirebaseAuth.instance.currentUser once at startup.
+    _authSub?.cancel();
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((_) {
       _startWatchingNotifications();
+    });
+    _startWatchingNotifications();
   }
 
   /// Starts a real-time Firestore listener on the current user's unread
@@ -270,6 +271,7 @@ class SyncService {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null || uid.isEmpty) return;
 
+    var isInitialSnapshot = true;
     _notifSub = FirebaseFirestore.instance
         .collection('notifications')
         .where('user_id', isEqualTo: uid)
@@ -279,6 +281,8 @@ class SyncService {
         .snapshots()
         .listen(
       (snapshot) {
+        final shouldShowAlertsForSnapshot =
+            !isInitialSnapshot && !snapshot.metadata.isFromCache;
         debugPrint(
           '[SyncDownlink] notification snapshot docs=${snapshot.docs.length} '
           'changes=${snapshot.docChanges.length} fromCache=${snapshot.metadata.isFromCache}',
@@ -293,17 +297,32 @@ class SyncService {
           final createdAtMs = ts is Timestamp
               ? ts.millisecondsSinceEpoch
               : DateTime.now().millisecondsSinceEpoch;
+          final remoteExtra = d['extra'];
+          final remoteExtraJson = d['extra_json'] as String? ??
+              (remoteExtra is Map
+                  ? jsonEncode(Map<String, dynamic>.from(remoteExtra))
+                  : null);
+          var parsedExtra = <String, dynamic>{};
+          if (remoteExtra is Map) {
+            parsedExtra = Map<String, dynamic>.from(remoteExtra);
+          } else if (remoteExtraJson != null && remoteExtraJson.isNotEmpty) {
+            try {
+              parsedExtra = jsonDecode(remoteExtraJson) as Map<String, dynamic>;
+            } catch (_) {}
+          }
           final row = <String, Object?>{
             'id': notificationId,
             'user_id': d['user_id'] as String? ?? uid,
             'type': d['type'] as String? ?? 'system',
             'sender_id': d['sender_id'] as String?,
             'sender_name': d['sender_name'] as String?,
+            'sender_photo_url': d['sender_photo_url'] as String?,
             'body': d['body'] as String? ?? 'You have a new notification.',
             'detail': d['detail'] as String?,
             'entity_id': d['entity_id'] as String?,
             'created_at': createdAtMs,
             'is_read': 0,
+            'extra_json': remoteExtraJson,
           };
           final rowUserId = row['user_id'] as String;
           final rowSenderId = row['sender_id'] as String?;
@@ -326,11 +345,13 @@ class SyncService {
               type: row['type'] as String,
               senderId: row['sender_id'] as String?,
               senderName: row['sender_name'] as String?,
+              senderPhotoUrl: row['sender_photo_url'] as String?,
               body: row['body'] as String,
               detail: row['detail'] as String?,
               entityId: row['entity_id'] as String?,
               createdAt: DateTime.fromMillisecondsSinceEpoch(createdAtMs),
               isRead: false,
+              extra: parsedExtra,
             ),
           ));
           debugPrint(
@@ -338,9 +359,12 @@ class SyncService {
             'type=${row['type']} user=${row['user_id']}',
           );
 
-          unawaited(_showLocalAlertForNotification(row));
+          if (shouldShowAlertsForSnapshot) {
+            unawaited(_showLocalAlertForNotification(row));
+          }
           unawaited(_preferences.markNotificationDelivered(notificationId));
         }
+        isInitialSnapshot = false;
       },
       onError: (dynamic error) {
         debugPrint('[SyncService] Notification watcher error: $error');
@@ -373,7 +397,7 @@ class SyncService {
   void stopListening() {
     _connectivitySub?.cancel();
     _notifSub?.cancel();
-      _authSub?.cancel();
+    _authSub?.cancel();
   }
 
   // ── Process sync queue ────────────────────────────────────────────────────
@@ -417,7 +441,7 @@ class SyncService {
       for (final job in jobs) {
         jobMix[job.entityType] = (jobMix[job.entityType] ?? 0) + 1;
       }
-        _syncTrace('QUEUE_JOBS_FETCHED', details: {'jobs': jobs.length});
+      _syncTrace('QUEUE_JOBS_FETCHED', details: {'jobs': jobs.length});
       _syncTrace('QUEUE_JOBS_MIX', details: jobMix);
 
       for (final job in jobs) {
@@ -457,8 +481,7 @@ class SyncService {
           });
           processed++;
         } else {
-          await _queueDao.incrementAttempt(job.id,
-              errorMessage: _lastJobError);
+          await _queueDao.incrementAttempt(job.id, errorMessage: _lastJobError);
           debugPrint(
             '=========== sync_result job=${job.id} status=retry entity=${job.entityType} ===========',
           );
@@ -504,6 +527,7 @@ class SyncService {
   Future<void> syncRemoteToLocal({
     int postLimit = 50,
     bool forceIncludePendingForAdmin = false,
+    bool suppressNotificationAlerts = false,
   }) {
     if (_isHydrating) {
       debugPrint(
@@ -514,6 +538,7 @@ class SyncService {
     _hydrationFuture = _runHydration(
       postLimit: postLimit,
       forceIncludePendingForAdmin: forceIncludePendingForAdmin,
+      suppressNotificationAlerts: suppressNotificationAlerts,
     );
     return _hydrationFuture!;
   }
@@ -521,6 +546,7 @@ class SyncService {
   Future<void> _runHydration({
     int postLimit = 50,
     bool forceIncludePendingForAdmin = false,
+    bool suppressNotificationAlerts = false,
   }) async {
     final syncedPostIds = <String>[];
     try {
@@ -610,7 +636,8 @@ class SyncService {
       if (currentUid != null && currentUid.isNotEmpty) {
         await _runHydrationStep('groups', () => _syncRemoteGroups(currentUid));
       } else {
-        debugPrint('[SyncService] skipping groups hydration (no authenticated user)');
+        debugPrint(
+            '[SyncService] skipping groups hydration (no authenticated user)');
       }
       if (currentUid != null && currentUid.isNotEmpty) {
         await _runHydrationStep(
@@ -686,7 +713,7 @@ class SyncService {
             await db.insert('notifications', row,
                 conflictAlgorithm: ConflictAlgorithm.replace);
             if (!alreadyDelivered && !notifSnap.metadata.isFromCache) {
-              if (!effectiveIsRead) {
+              if (!effectiveIsRead && !suppressNotificationAlerts) {
                 await _showLocalAlertForNotification(row);
               }
               await _preferences.markNotificationDelivered(notificationId);
@@ -853,15 +880,15 @@ class SyncService {
   /// Called at the top of admin hydration so all FK dependencies are satisfied
   /// before posts / groups / follows are written.
   Future<void> _syncAllUsers() async {
-    debugPrint('[SyncService][UserSync] ── _syncAllUsers starting ──────────────');
+    debugPrint(
+        '[SyncService][UserSync] ── _syncAllUsers starting ──────────────');
 
     // ── Remote count ──────────────────────────────────────────────────────
     final users = await _firestore.getAllUsersFromRemote(limit: 500);
     debugPrint(
         '[SyncService][UserSync] remote Firestore user count = ${users.length}');
     for (final user in users) {
-      debugPrint(
-          '[SyncService][UserSync]   remote uid=${user.id} '
+      debugPrint('[SyncService][UserSync]   remote uid=${user.id} '
           'email=${user.email} role=${user.role.name}');
     }
 
@@ -879,8 +906,7 @@ class SyncService {
         upserted++;
       } catch (error) {
         failed++;
-        debugPrint(
-            '[SyncService][UserSync] ⚠ failed upserting uid=${user.id} '
+        debugPrint('[SyncService][UserSync] ⚠ failed upserting uid=${user.id} '
             'email=${user.email} role=${user.role.name}: $error');
       }
     }
@@ -889,21 +915,20 @@ class SyncService {
     final localAfter = await _userDao.getUserCount();
     debugPrint(
         '[SyncService][UserSync] local SQLite count AFTER upsert  = $localAfter');
-    debugPrint(
-        '[SyncService][UserSync] summary  remote=${users.length} '
+    debugPrint('[SyncService][UserSync] summary  remote=${users.length} '
         'upserted=$upserted failed=$failed '
         'localBefore=$localBefore localAfter=$localAfter '
         'delta=${localAfter - localBefore}');
     if (localAfter < users.length) {
-      debugPrint(
-          '[SyncService][UserSync] ⚠ CONSISTENCY GAP: '
+      debugPrint('[SyncService][UserSync] ⚠ CONSISTENCY GAP: '
           'remote=${users.length} but local=$localAfter '
           '— ${users.length - localAfter} user(s) missing locally. '
           'Check failed upserts above for FK/constraint errors.');
     } else {
       debugPrint('[SyncService][UserSync] ✓ local count matches remote.');
     }
-    debugPrint('[SyncService][UserSync] ── _syncAllUsers done ───────────────────');
+    debugPrint(
+        '[SyncService][UserSync] ── _syncAllUsers done ───────────────────');
   }
 
   Future<Set<String>> _getExistingLocalUserIds(Iterable<String> userIds) async {
@@ -937,7 +962,8 @@ class SyncService {
           ? normalizedEmail
           : _placeholderEmailForUser(userId),
       role: UserRole.fromString(role),
-      displayName: (displayName ?? '').trim().isEmpty ? null : displayName?.trim(),
+      displayName:
+          (displayName ?? '').trim().isEmpty ? null : displayName?.trim(),
       photoUrl: (photoUrl ?? '').trim().isEmpty ? null : photoUrl?.trim(),
       createdAt: now,
       updatedAt: now,
@@ -950,12 +976,10 @@ class SyncService {
   }) async {
     try {
       await _userDao.insertUser(user);
-      debugPrint(
-          '[SyncService] inserted placeholder user=${user.id} '
+      debugPrint('[SyncService] inserted placeholder user=${user.id} '
           'email=${user.email} role=${user.role.name} context=$logContext');
     } catch (error, stackTrace) {
-      debugPrint(
-          '[SyncService] failed inserting placeholder user=${user.id} '
+      debugPrint('[SyncService] failed inserting placeholder user=${user.id} '
           'email=${user.email} context=$logContext: $error');
       debugPrint('$stackTrace');
     }
@@ -977,7 +1001,8 @@ class SyncService {
         try {
           await _userDao.insertUser(user);
         } catch (error, stackTrace) {
-          debugPrint('[SyncService] failed inserting dependency user=${user.id}: $error');
+          debugPrint(
+              '[SyncService] failed inserting dependency user=${user.id}: $error');
           debugPrint('$stackTrace');
         }
       }
@@ -993,8 +1018,8 @@ class SyncService {
           '[SyncService] unresolved user dependencies context=$logContext '
           'missing=${missingIds.length} ids=$missingIds');
       for (final userId in missingIds) {
-        final placeholder = placeholderUsers?[userId] ??
-            _buildPlaceholderUser(userId: userId);
+        final placeholder =
+            placeholderUsers?[userId] ?? _buildPlaceholderUser(userId: userId);
         await _insertPlaceholderUser(placeholder, logContext: logContext);
       }
       existingIds = await _getExistingLocalUserIds(normalizedIds);
@@ -1122,7 +1147,8 @@ class SyncService {
         upsertedMembers++;
       } catch (error, stackTrace) {
         deferredMembers++;
-        debugPrint('[SyncService] failed inserting group_member=${member.id}: $error');
+        debugPrint(
+            '[SyncService] failed inserting group_member=${member.id}: $error');
         debugPrint('$stackTrace');
       }
     }
@@ -1139,6 +1165,117 @@ class SyncService {
       '[SyncService] Hydrated groups upserted=$upsertedGroups deferred=$deferredGroups '
       'memberships upserted=$upsertedMembers deferred=$deferredMembers',
     );
+  }
+
+  Future<void> refreshGroupWorkspace({
+    required String groupId,
+    String? currentUid,
+  }) async {
+    final safeGroupId = groupId.trim();
+    final safeUid =
+        (currentUid ?? FirebaseAuth.instance.currentUser?.uid ?? '').trim();
+    if (safeGroupId.isEmpty || safeUid.isEmpty) {
+      debugPrint(
+        '[SyncService] refreshGroupWorkspace skipped group=$safeGroupId user=$safeUid',
+      );
+      return;
+    }
+
+    try {
+      final groups = await _firestore.getGroupsByIds([safeGroupId]);
+      final members = await _firestore.getGroupMembersByGroupIds([safeGroupId]);
+      final personalMemberships = await _firestore.getGroupMembersForUser(
+        safeUid,
+      );
+      final posts = await _firestore.getPostsByGroupId(
+        safeGroupId,
+        limit: 80,
+        includePendingForAdmin: false,
+      );
+
+      final referencedUserIds = <String>{
+        ...groups.map((group) => group.creatorId),
+        ...members.map((member) => member.userId),
+        ...personalMemberships.map((member) => member.userId),
+        ...posts.map((post) => post.authorId),
+      }..removeWhere((id) => id.trim().isEmpty);
+
+      final placeholderUsers = <String, UserModel>{
+        for (final group in groups)
+          if (group.creatorId.isNotEmpty)
+            group.creatorId: _buildPlaceholderUser(
+              userId: group.creatorId,
+              displayName: group.creatorName,
+            ),
+        for (final member in members)
+          if (member.userId.isNotEmpty)
+            member.userId: _buildPlaceholderUser(
+              userId: member.userId,
+              displayName: member.userName,
+              photoUrl: member.userPhotoUrl,
+            ),
+        for (final member in personalMemberships)
+          if (member.userId.isNotEmpty)
+            member.userId: _buildPlaceholderUser(
+              userId: member.userId,
+              displayName: member.userName,
+              photoUrl: member.userPhotoUrl,
+            ),
+        for (final post in posts)
+          if (post.authorId.isNotEmpty)
+            post.authorId: _buildPlaceholderUser(
+              userId: post.authorId,
+              displayName: post.authorName,
+              photoUrl: post.authorPhotoUrl,
+            ),
+      };
+      final existingUserIds = await _cacheUsersAndGetExistingIds(
+        referencedUserIds,
+        placeholderUsers: placeholderUsers,
+        logContext: 'refresh_group_workspace',
+      );
+
+      for (final group in groups) {
+        if (existingUserIds.contains(group.creatorId)) {
+          await _groupDao.upsertGroup(group);
+        }
+      }
+
+      final mergedMembers = <String, GroupMemberModel>{
+        for (final member in members) member.id: member,
+        for (final member in personalMemberships.where(
+          (member) => member.groupId == safeGroupId,
+        ))
+          member.id: member,
+      };
+      for (final member in mergedMembers.values) {
+        if (existingUserIds.contains(member.userId)) {
+          if (member.status != 'active') {
+            final local = await _groupMemberDao.getMemberById(member.id);
+            if (local != null && local.status == 'active') {
+              continue;
+            }
+          }
+          await _groupMemberDao.upsertMember(member);
+        }
+      }
+
+      for (final post in posts) {
+        if (existingUserIds.contains(post.authorId)) {
+          await _postDao.insertPost(post);
+        }
+      }
+
+      debugPrint(
+        '[SyncService] refreshed group workspace group=$safeGroupId '
+        'groups=${groups.length} members=${mergedMembers.length} posts=${posts.length}',
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[SyncService] refreshGroupWorkspace failed group=$safeGroupId: $error',
+      );
+      debugPrint('$stackTrace');
+    }
   }
 
   // ── Process a single job ──────────────────────────────────────────────────
@@ -1282,6 +1419,11 @@ class SyncService {
           operation: job.operation,
           previousRemoteStatus: previousRemote?.moderationStatus,
         );
+        await _fanoutOpportunityMatchNotifications(
+          post: syncedPost,
+          operation: job.operation,
+          previousRemoteStatus: previousRemote?.moderationStatus,
+        );
         return true;
       case 'archive':
         await _firestore.archivePost(job.entityId);
@@ -1302,7 +1444,8 @@ class SyncService {
         final group = localGroup ??
             (job.payloadJson.isEmpty
                 ? null
-                : GroupModel.fromJson({'id': job.entityId, ...job.payloadJson}));
+                : GroupModel.fromJson(
+                    {'id': job.entityId, ...job.payloadJson}));
         if (group == null) return true;
         await _firestore.setGroup(group);
         return true;
@@ -1413,9 +1556,9 @@ class SyncService {
       );
       return true;
     }
-    final convoParts = conversationId.split('_');
-    final convoPeerId = convoParts.length >= 2 ? convoParts[1].trim() : '';
-    if (convoPeerId.isNotEmpty && convoPeerId == senderId) {
+    final receiverId =
+        _resolveMessageReceiverId(conversationId, senderId, payload);
+    if (receiverId == null || receiverId == senderId) {
       debugPrint(
         '[SyncMessage] Skipping self-target message job ${job.id}: '
         'conversationId=$conversationId senderId=$senderId',
@@ -1439,9 +1582,75 @@ class SyncService {
     debugPrint(
         '[SyncMessage] Writing to Firestore conversations/${msg.conversationId}/messages/${msg.id}');
     await _firestore.sendMessage(msg);
+    await _fanoutMessageNotification(
+      message: msg,
+      receiverId: receiverId,
+      senderName: payload['sender_name'] as String?,
+    );
     debugPrint(
         '[SyncMessage] ✅ Message ${msg.id} written to Firestore successfully');
     return true;
+  }
+
+  String? _resolveMessageReceiverId(
+    String conversationId,
+    String senderId,
+    Map<String, dynamic> payload,
+  ) {
+    final explicit = (payload['receiver_id'] as String?)?.trim();
+    if (explicit != null && explicit.isNotEmpty) {
+      return explicit;
+    }
+
+    final parts = conversationId
+        .split('_')
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
+    for (final part in parts) {
+      if (part != senderId) {
+        return part;
+      }
+    }
+    return null;
+  }
+
+  String _messageNotificationPreview(MessageModel message) {
+    final type = message.messageType.trim().toLowerCase();
+    if (type == 'audio') return 'Voice message';
+    if (type == 'image') return 'Image';
+    if (type == 'file') return 'Document';
+    final text = message.content.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (text.isEmpty) return 'New message';
+    return text.length > 90 ? '${text.substring(0, 90)}...' : text;
+  }
+
+  Future<void> _fanoutMessageNotification({
+    required MessageModel message,
+    required String receiverId,
+    String? senderName,
+  }) async {
+    final senderLabel = _uplinkUserLabel(
+      name: senderName,
+      id: message.senderId,
+    );
+    await _bestEffortUserNotification(
+      source: 'message',
+      notificationId: 'message_${message.id}',
+      receiverId: receiverId,
+      senderId: message.senderId,
+      senderName: senderName,
+      type: 'message',
+      body: '$senderLabel: ${_messageNotificationPreview(message)}',
+      detail: 'Tap to open the chat.',
+      entityId: message.senderId,
+      extra: {
+        'peer_id': message.senderId,
+        'conversation_id': message.conversationId,
+        'message_id': message.id,
+        'message_type': message.messageType,
+      },
+    );
   }
 
   Future<bool> _syncPostRating(SyncJob job) async {
@@ -1597,7 +1806,7 @@ class SyncService {
     }
 
     if (job.operation == 'create') {
-        debugPrint(
+      debugPrint(
           '[SyncFollow] Writing follow follower=$followerId followee=$followingId entity=${job.entityType}');
       await _firestore.follow(followerId: followerId, followingId: followingId);
       final followerName = payload['follower_name'] as String? ?? 'Someone';
@@ -1688,8 +1897,9 @@ class SyncService {
     debugPrint(
         '[SyncNotification] Updating notification=$notificationId keys=${updates.keys.toList()}');
 
-    final docRef =
-        FirebaseFirestore.instance.collection('notifications').doc(notificationId);
+    final docRef = FirebaseFirestore.instance
+        .collection('notifications')
+        .doc(notificationId);
     try {
       // Use update() to match security rules that only allow owner updates on
       // existing notification docs (is_read/extra), not create semantics.
@@ -1717,9 +1927,9 @@ class SyncService {
   Future<bool> _syncLike(SyncJob job) async {
     final payload = job.payloadJson;
     final payloadUserId = payload['user_id'] as String?;
-    final actorName =
-      (payload['actor_name'] ?? payload['user_name'] ?? payload['author_name'])
-        as String?;
+    final actorName = (payload['actor_name'] ??
+        payload['user_name'] ??
+        payload['author_name']) as String?;
     final postId = payload['post_id'] as String?;
     final isLiking = payload['is_liking'] as bool? ?? true;
 
@@ -1800,9 +2010,9 @@ class SyncService {
   Future<bool> _syncDislike(SyncJob job) async {
     final payload = job.payloadJson;
     final userId = payload['user_id'] as String?;
-    final actorName =
-      (payload['actor_name'] ?? payload['user_name'] ?? payload['author_name'])
-        as String?;
+    final actorName = (payload['actor_name'] ??
+        payload['user_name'] ??
+        payload['author_name']) as String?;
     final postId = payload['post_id'] as String?;
     final isDisliking = payload['is_disliking'] as bool? ?? true;
 
@@ -1928,9 +2138,8 @@ class SyncService {
 
     await _verifyUplinkDoc(
       action: 'COMMENT',
-      docRef: FirebaseFirestore.instance
-          .collection('comments')
-          .doc(job.entityId),
+      docRef:
+          FirebaseFirestore.instance.collection('comments').doc(job.entityId),
       expectedExists: true,
       details: {
         'jobId': job.id,
@@ -1990,13 +2199,13 @@ class SyncService {
       );
     }
 
-    final normalizedViewId = payloadViewerId == currentUid
-        ? job.entityId
-        : '${viewerId}_$postId';
+    final normalizedViewId =
+        payloadViewerId == currentUid ? job.entityId : '${viewerId}_$postId';
     final authorId = payload['author_id'] as String?;
 
-    final docRef =
-        FirebaseFirestore.instance.collection('post_views').doc(normalizedViewId);
+    final docRef = FirebaseFirestore.instance
+        .collection('post_views')
+        .doc(normalizedViewId);
     _uplinkTrace('VIEW_WRITE_START', details: {
       'jobId': job.id,
       'operation': job.operation,
@@ -2017,24 +2226,30 @@ class SyncService {
         '[SyncView] Remote view updated viewId=$normalizedViewId post=$postId viewer=$viewerId',
       );
     } on FirebaseException catch (error) {
-      if (error.code != 'not-found') {
+      final shouldAttemptCreateFallback =
+          error.code == 'not-found' || error.code == 'permission-denied';
+      if (!shouldAttemptCreateFallback) {
         rethrow;
       }
 
-      createdRemoteView = true;
-      await docRef.set({
-        'id': normalizedViewId,
-        'viewer_id': viewerId,
-        'viewer_name': payload['viewer_name'] as String?,
-        'author_id': authorId,
-        'post_id': postId,
-        'post_title': payload['post_title'] as String?,
-        'created_at': FieldValue.serverTimestamp(),
-        'updated_at': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-      debugPrint(
-        '[SyncView] Remote view created viewId=$normalizedViewId post=$postId viewer=$viewerId',
-      );
+      try {
+        createdRemoteView = true;
+        await docRef.set({
+          'id': normalizedViewId,
+          'viewer_id': viewerId,
+          'viewer_name': payload['viewer_name'] as String?,
+          'author_id': authorId,
+          'post_id': postId,
+          'post_title': payload['post_title'] as String?,
+          'created_at': FieldValue.serverTimestamp(),
+          'updated_at': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        debugPrint(
+          '[SyncView] Remote view created viewId=$normalizedViewId post=$postId viewer=$viewerId',
+        );
+      } on FirebaseException catch (_) {
+        rethrow;
+      }
     }
 
     await _verifyUplinkDoc(
@@ -2252,9 +2467,9 @@ class SyncService {
     }
 
     final payloadSenderId =
-      (payload['sender_id'] ?? payload['from_user_id']) as String?;
+        (payload['sender_id'] ?? payload['from_user_id']) as String?;
     final receiverId =
-      (payload['receiver_id'] ?? payload['to_user_id']) as String?;
+        (payload['receiver_id'] ?? payload['to_user_id']) as String?;
     final postId = payload['post_id'] as String?;
     final message = payload['message'] as String? ?? '';
     final status = payload['status'] as String? ?? 'pending';
@@ -2346,6 +2561,9 @@ class SyncService {
       body: '$senderName sent you a collaboration request for "$postTitle"',
       detail: message.isNotEmpty ? message : null,
       entityId: job.entityId,
+      extra: {
+        if (postId != null && postId.isNotEmpty) 'post_id': postId,
+      },
     );
     debugPrint('[SyncCollab] ✅ Receiver notification written for $notifId');
     return true;
@@ -2361,6 +2579,7 @@ class SyncService {
     String? detail,
     String? entityId,
     String? senderName,
+    Map<String, Object?> extra = const {},
   }) async {
     final normalizedReceiver = receiverId.trim();
     final normalizedSender = senderId.trim();
@@ -2402,6 +2621,7 @@ class SyncService {
         detail: detail,
         entityId: entityId,
         senderName: senderName,
+        extra: extra,
       );
       _notificationDebugBlock(
         activity: source,
@@ -2417,7 +2637,8 @@ class SyncService {
         receiver: receiverLabel,
         notificationId: notificationId,
         status: 'not sent',
-        error: 'FirebaseException(code=${error.code}, message=${error.message ?? ''})',
+        error:
+            'FirebaseException(code=${error.code}, message=${error.message ?? ''})',
       );
       debugPrint(
         '[SyncNotification] Skipping fan-out for source=$source notification=$notificationId '
@@ -2481,7 +2702,8 @@ class SyncService {
           .collection('users')
           .doc(currentUid)
           .get(const GetOptions(source: Source.serverAndCache));
-      final role = (profileDoc.data()?['role'] as String?)?.trim().toLowerCase();
+      final role =
+          (profileDoc.data()?['role'] as String?)?.trim().toLowerCase();
       if (role == 'admin' || role == 'super_admin') {
         return true;
       }
@@ -2507,8 +2729,8 @@ class SyncService {
     try {
       final snapshot = await FirebaseFirestore.instance
           .collection('users')
-          .where('role', whereIn: ['admin', 'super_admin'])
-          .get(const GetOptions(source: Source.serverAndCache));
+          .where('role', whereIn: ['admin', 'super_admin']).get(
+              const GetOptions(source: Source.serverAndCache));
       return snapshot.docs.map((doc) => doc.id).toList(growable: false);
     } catch (_) {
       return const <String>[];
@@ -2527,7 +2749,8 @@ class SyncService {
         post.moderationStatus == ModerationStatus.rejected;
 
     final becamePending = nowPending &&
-        (operation == 'create' || previousRemoteStatus != ModerationStatus.pending);
+        (operation == 'create' ||
+            previousRemoteStatus != ModerationStatus.pending);
     final moderationChanged = nowReviewed &&
         previousRemoteStatus != null &&
         previousRemoteStatus != post.moderationStatus;
@@ -2553,7 +2776,8 @@ class SyncService {
     if (moderationChanged && post.authorId.isNotEmpty) {
       final approved = post.moderationStatus == ModerationStatus.approved;
       final actorId = FirebaseAuth.instance.currentUser?.uid ?? 'system';
-      final actorName = FirebaseAuth.instance.currentUser?.displayName ?? 'Admin';
+      final actorName =
+          FirebaseAuth.instance.currentUser?.displayName ?? 'Admin';
       await _bestEffortUserNotification(
         source: 'moderation_result',
         notificationId: 'post_review_${post.id}_${post.moderationStatus.name}',
@@ -2568,6 +2792,137 @@ class SyncService {
             ? 'Your content is now visible to viewers.'
             : 'You can edit the post and resubmit for review.',
         entityId: post.id,
+      );
+    }
+  }
+
+  Future<List<UserModel>> _loadOpportunityCandidateStudents() async {
+    final byId = <String, UserModel>{};
+
+    try {
+      final remote = await _firestore.getAllUsersFromRemote(limit: 500);
+      for (final user in remote) {
+        if (user.isStudent && user.isActive) {
+          byId[user.id] = user;
+        }
+      }
+    } catch (error) {
+      debugPrint('[SyncOpportunity] remote candidate load failed: $error');
+    }
+
+    try {
+      final local = await _userDao.getAllUsers(
+        role: UserRole.student.name,
+        includeSuspended: false,
+        pageSize: 500,
+      );
+      for (final user in local.where((user) => user.isActive)) {
+        final existing = byId[user.id];
+        if (existing == null || existing.profile == null) {
+          byId[user.id] = user;
+        }
+      }
+    } catch (error) {
+      debugPrint('[SyncOpportunity] local candidate load failed: $error');
+    }
+
+    return byId.values.toList(growable: false);
+  }
+
+  bool _shouldNotifyOpportunityCandidate(RecommendedUser item) {
+    final reasons = item.reasons.toSet();
+    final hasSkill = reasons.contains('skill_match');
+    final hasFaculty = reasons.contains('faculty_match');
+    final hasProgram = reasons.contains('program_match');
+    final matchScore = item.scoreBreakdown['match_score'] ?? 0.0;
+    final opportunityFit = item.scoreBreakdown['opportunity_fit'] ?? 0.0;
+
+    if (hasSkill && item.score >= 0.42) return true;
+    if (hasProgram && item.score >= 0.48) return true;
+    if (hasFaculty && matchScore >= 0.10 && item.score >= 0.36) return true;
+    if (opportunityFit >= 0.35) return true;
+    return item.score >= 0.58 && (hasSkill || hasFaculty || hasProgram);
+  }
+
+  String _opportunityMatchDetail(RecommendedUser item) {
+    final skills = item.matchedSkills
+        .map((skill) => skill.trim())
+        .where((skill) => skill.isNotEmpty)
+        .take(4)
+        .toList(growable: false);
+    if (skills.isNotEmpty) {
+      return 'Matched skills: ${skills.join(', ')}. '
+          'Confidence ${(item.score * 100).round()}%.';
+    }
+    if (item.reasons.contains('program_match')) {
+      return 'Your program aligns with this opportunity. '
+          'Confidence ${(item.score * 100).round()}%.';
+    }
+    if (item.reasons.contains('faculty_match')) {
+      return 'Your faculty aligns with this opportunity. '
+          'Confidence ${(item.score * 100).round()}%.';
+    }
+    return 'This opportunity looks relevant to your profile. '
+        'Confidence ${(item.score * 100).round()}%.';
+  }
+
+  Future<void> _fanoutOpportunityMatchNotifications({
+    required PostModel post,
+    required String operation,
+    ModerationStatus? previousRemoteStatus,
+  }) async {
+    if (post.type.trim().toLowerCase() != 'opportunity') return;
+    if (post.id.isEmpty || post.isArchived) return;
+    if (post.moderationStatus != ModerationStatus.approved) return;
+    if (post.opportunityDeadline != null &&
+        post.opportunityDeadline!.isBefore(DateTime.now())) {
+      return;
+    }
+
+    final becameAvailable = operation == 'create' ||
+        (previousRemoteStatus != null &&
+            previousRemoteStatus != ModerationStatus.approved);
+    if (!becameAvailable) return;
+
+    final candidates = (await _loadOpportunityCandidateStudents())
+        .where((user) => user.id != post.authorId)
+        .toList(growable: false);
+    if (candidates.isEmpty) return;
+
+    final ranked = RecommenderService()
+        .rankStudentsForOpportunity(
+          opportunity: post,
+          candidates: candidates,
+        )
+        .where(_shouldNotifyOpportunityCandidate)
+        .take(20)
+        .toList(growable: false);
+    if (ranked.isEmpty) return;
+
+    final senderId = post.authorId.trim().isNotEmpty
+        ? post.authorId.trim()
+        : (FirebaseAuth.instance.currentUser?.uid ?? '').trim();
+    if (senderId.isEmpty) return;
+
+    for (final item in ranked) {
+      final user = item.user;
+      await _bestEffortUserNotification(
+        source: 'opportunity_match',
+        notificationId: 'opportunity_match_${post.id}_${user.id}',
+        receiverId: user.id,
+        senderId: senderId,
+        senderName: post.authorName ?? 'MUST StarTrack',
+        type: 'opportunity',
+        body: 'Opportunity match: "${post.title}" fits your profile.',
+        detail: _opportunityMatchDetail(item),
+        entityId: post.id,
+        extra: {
+          'post_id': post.id,
+          'match_score': item.score,
+          'confidence_percent': (item.score * 100).round(),
+          'matched_skills': item.matchedSkills,
+          'reasons': item.reasons,
+        },
       );
     }
   }
@@ -2774,8 +3129,7 @@ class SyncService {
         for (final row in refreshed) {
           final messageId = row['id'] as String? ?? '';
           if (messageId.isEmpty) continue;
-          localReadByMessageId[messageId] =
-              (row['is_read'] as int? ?? 0) == 1;
+          localReadByMessageId[messageId] = (row['is_read'] as int? ?? 0) == 1;
         }
       }
 
@@ -3025,7 +3379,8 @@ class SyncService {
       try {
         _syncTrace('INTERACTION_STEP_FETCH_BEGIN', details: {'postId': postId});
         final localBefore = await _readLocalInteractionCounts(postId);
-        final postRef = FirebaseFirestore.instance.collection('posts').doc(postId);
+        final postRef =
+            FirebaseFirestore.instance.collection('posts').doc(postId);
         final postDoc =
             await postRef.get(const GetOptions(source: Source.serverAndCache));
         final postData = postDoc.data() ?? const <String, dynamic>{};
@@ -3056,7 +3411,8 @@ class SyncService {
 
         int remoteLikeCount;
         try {
-          final likesCountSnap = await postRef.collection('likes').count().get();
+          final likesCountSnap =
+              await postRef.collection('likes').count().get();
           remoteLikeCount = likesCountSnap.count ??
               parseCount(postData['like_count'], localLikeCount);
         } catch (_) {
@@ -3745,6 +4101,7 @@ class SyncService {
     String? detail,
     String? entityId,
     String? senderName,
+    Map<String, Object?> extra = const {},
   }) async {
     if (receiverId.trim().isEmpty ||
         senderId.trim().isEmpty ||
@@ -3759,6 +4116,8 @@ class SyncService {
     final docRef = FirebaseFirestore.instance
         .collection('notifications')
         .doc(notificationId);
+    final senderPhotoUrl =
+        (await _userDao.getUserById(senderId.trim()))?.photoUrl;
     debugPrint(
       '[SyncNotification] Upsert start notification=$notificationId '
       'receiver=$receiverId sender=$senderId type=$type',
@@ -3773,9 +4132,11 @@ class SyncService {
       'type': type,
       'sender_id': senderId,
       'sender_name': senderName,
+      'sender_photo_url': senderPhotoUrl,
       'body': body,
       'detail': detail,
       'entity_id': entityId,
+      if (extra.isNotEmpty) 'extra': extra,
       'is_read': false,
       'created_at': FieldValue.serverTimestamp(),
     };
@@ -3809,7 +4170,7 @@ class SyncService {
         ),
       ),
       payload: jsonEncode({'type': type, 'entity_id': row['entity_id']}),
-      );
+    );
   }
 
   String _notificationTitle(String type) {
@@ -3824,6 +4185,10 @@ class SyncService {
         return 'New view';
       case 'rating':
         return 'New rating';
+      case 'message':
+        return 'New message';
+      case 'opportunity':
+        return 'Opportunity match';
       case 'collaboration':
         return 'Collaboration request';
       case 'moderation':
@@ -4047,17 +4412,45 @@ class SyncService {
       return true;
     }
 
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUid == null || currentUid.isEmpty) {
+      debugPrint(
+        '[SyncRecLog] No active auth session for job ${job.id}; will retry.',
+      );
+      return false;
+    }
+
     final payload = job.payloadJson;
+    final payloadUserId = (payload['user_id'] as String?)?.trim();
+    if (payloadUserId != null &&
+        payloadUserId.isNotEmpty &&
+        payloadUserId != currentUid) {
+      debugPrint(
+        '[SyncService] ⚠️ Skipping recommendation log job ${job.id}: '
+        'payload user=$payloadUserId but current uid=$currentUid '
+        '— removing from queue.',
+      );
+      return true;
+    }
+
     final id = (payload['id']?.toString().trim().isNotEmpty ?? false)
         ? payload['id'].toString().trim()
         : job.entityId;
     if (id.isEmpty) return true;
 
+    final normalizedPayload = <String, dynamic>{
+      ...payload,
+      'user_id':
+          (payloadUserId != null && payloadUserId.isNotEmpty)
+              ? payloadUserId
+              : currentUid,
+    };
+
     await FirebaseFirestore.instance
         .collection('recommendation_logs')
         .doc(id)
         .set({
-      ...payload,
+      ...normalizedPayload,
       'server_ts': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 

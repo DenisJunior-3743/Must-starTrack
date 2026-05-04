@@ -40,6 +40,7 @@ import 'package:go_router/go_router.dart';
 import '../core/di/injection_container.dart';
 import '../core/router/app_router.dart';
 import '../core/router/route_guards.dart';
+import '../core/router/route_names.dart';
 import '../core/services/session_timeout_service.dart';
 import '../core/services/user_presence_service.dart';
 import '../core/theme/app_theme.dart';
@@ -47,9 +48,11 @@ import '../core/theme/theme_cubit.dart';
 import '../core/constants/app_strings.dart';
 
 import '../features/auth/bloc/auth_cubit.dart';
+import '../features/feed/services/feed_video_playback_coordinator.dart';
 import '../features/notifications/bloc/notification_cubit.dart';
 import '../features/messaging/bloc/message_cubit.dart';
 import '../data/remote/fcm_service.dart';
+import '../features/shared/widgets/student_experience_overlay.dart';
 
 class StarTrackApp extends StatefulWidget {
   const StarTrackApp({super.key});
@@ -62,6 +65,7 @@ class _StarTrackAppState extends State<StarTrackApp>
     with WidgetsBindingObserver {
   late final GoRouter _router;
   StreamSubscription<AuthState>? _authSub;
+  String? _lastPlaybackRoutePath;
 
   @override
   void initState() {
@@ -70,12 +74,14 @@ class _StarTrackAppState extends State<StarTrackApp>
 
     final guards = sl<RouteGuards>();
     _router = AppRouter.router(guards: guards);
+    _router.routeInformationProvider.addListener(_syncFeedVideoPlayback);
+    _syncFeedVideoPlayback();
 
     // FCM init needs the router to handle notification taps.
     // We use addPostFrameCallback so context is available.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        sl<FcmService>().init(context, _router);
+        unawaited(_initPushNotifications());
       }
     });
 
@@ -104,6 +110,26 @@ class _StarTrackAppState extends State<StarTrackApp>
     }
   }
 
+  Future<void> _initPushNotifications() async {
+    final fcm = sl<FcmService>();
+    await fcm.init(context, _router);
+    final authState = sl<AuthCubit>().state;
+    if (authState is AuthAuthenticated) {
+      unawaited(fcm.saveTokenForUser(authState.user.id));
+    }
+  }
+
+  void _syncFeedVideoPlayback() {
+    final path = _router.routeInformationProvider.value.uri.path;
+    if (path == _lastPlaybackRoutePath) return;
+    _lastPlaybackRoutePath = path;
+
+    FeedVideoPlaybackCoordinator.setPlaybackAllowed(
+      path == RouteNames.home,
+      reason: path,
+    );
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
@@ -120,6 +146,7 @@ class _StarTrackAppState extends State<StarTrackApp>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _router.routeInformationProvider.removeListener(_syncFeedVideoPlayback);
     _authSub?.cancel();
     unawaited(sl<UserPresenceService>().stop());
     sl<SessionTimeoutService>().dispose();
@@ -162,7 +189,7 @@ class _StarTrackAppState extends State<StarTrackApp>
           darkTheme: AppTheme.dark,
           themeMode: themeMode,
 
-        // ── Router ─────────────────────────────────────────────────────────
+          // ── Router ─────────────────────────────────────────────────────────
           routerConfig: _router,
 
           // ── Locale ─────────────────────────────────────────────────────────
@@ -181,17 +208,21 @@ class _StarTrackAppState extends State<StarTrackApp>
               ),
             );
             final content = child ?? const SizedBox.shrink();
+            final withStudentTools = StudentExperienceOverlay(
+              router: _router,
+              child: content,
+            );
             return MediaQuery(
               data: constrained,
               // Avoid web pointer re-entrancy assertions caused by a global
               // root Listener while keeping inactivity tracking on native.
               child: kIsWeb
-                  ? content
+                  ? withStudentTools
                   : Listener(
                       onPointerDown: (_) =>
                           sl<SessionTimeoutService>().resetActivity(),
                       behavior: HitTestBehavior.translucent,
-                      child: content,
+                      child: withStudentTools,
                     ),
             );
           },

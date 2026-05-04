@@ -19,6 +19,9 @@ import '../../../data/remote/recommender_service.dart';
 import '../../shared/widgets/settings_drawer.dart';
 import '../bloc/lecturer_cubit.dart';
 
+const Color _lecturerCardBlue = AppColors.primary;
+const Color _lecturerButtonGreen = AppColors.mustGreen;
+
 class OpportunityApplicantsScreen extends StatefulWidget {
   final PostModel opportunity;
 
@@ -43,12 +46,33 @@ class _OpportunityApplicantsScreenState
 
     return Scaffold(
       endDrawer: const SettingsDrawer(),
-      backgroundColor:
-          isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
+      backgroundColor: isDark ? AppColors.backgroundDark : const Color(0xFFEAF0FF),
       appBar: AppBar(
-        title: Text(
-          'Applicants',
-          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Applicants',
+              style: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w800,
+                fontSize: 17,
+                color: Colors.white,
+              ),
+            ),
+            Text(
+              widget.opportunity.title,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 11,
+                color: Colors.white70,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
         actions: [
           Builder(
@@ -110,8 +134,6 @@ class _ApplicantsBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return CustomScrollView(
       slivers: [
         // â”€â”€ Opportunity header card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -120,29 +142,24 @@ class _ApplicantsBody extends StatelessWidget {
             margin: const EdgeInsets.all(16),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: isDark ? AppColors.surfaceDark : Colors.white,
+              color: _lecturerCardBlue,
               borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-              border: Border.all(
-                color: AppColors.roleLecturer.withValues(alpha: 0.3),
-              ),
+              border: Border.all(color: AppColors.primaryDark),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.campaign_rounded,
-                        color: AppColors.roleLecturer, size: 20),
+                    const Icon(Icons.campaign_rounded, color: Colors.white, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         opportunity.title,
-                        style: GoogleFonts.plusJakartaSans(
+                        style: GoogleFonts.sora(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
-                          color: isDark
-                              ? AppColors.textPrimaryDark
-                              : AppColors.textPrimaryLight,
+                          color: Colors.white,
                         ),
                       ),
                     ),
@@ -154,7 +171,7 @@ class _ApplicantsBody extends StatelessWidget {
                     opportunity.description!,
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 12,
-                      color: AppColors.textSecondaryLight,
+                      color: Colors.white70,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -227,15 +244,27 @@ class _ApplicantsBody extends StatelessWidget {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-              child: Text(
-                'Applicants',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: isDark
-                      ? AppColors.textPrimaryDark
-                      : AppColors.textPrimaryLight,
-                ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 4,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: _lecturerCardBlue,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Applicants',
+                    style: GoogleFonts.sora(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimaryLight,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -272,14 +301,13 @@ class _ApplicantCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final profile = user.profile;
     final skills = profile?.skills ?? [];
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
       child: Material(
-        color: isDark ? AppColors.surfaceDark : Colors.white,
+        color: _lecturerCardBlue,
         borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
         child: InkWell(
           onTap: () {
@@ -292,9 +320,7 @@ class _ApplicantCard extends StatelessWidget {
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-              border: Border.all(
-                color: isDark ? AppColors.borderDark : AppColors.borderLight,
-              ),
+              border: Border.all(color: AppColors.primaryDark),
             ),
             child: Row(
               children: [
@@ -312,7 +338,7 @@ class _ApplicantCard extends StatelessWidget {
                               : '?',
                           style: GoogleFonts.plusJakartaSans(
                             fontWeight: FontWeight.w700,
-                            color: AppColors.primary,
+                            color: Colors.white,
                           ),
                         )
                       : null,
@@ -326,12 +352,10 @@ class _ApplicantCard extends StatelessWidget {
                     children: [
                       Text(
                         user.displayName ?? user.email,
-                        style: GoogleFonts.plusJakartaSans(
+                        style: GoogleFonts.sora(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: isDark
-                              ? AppColors.textPrimaryDark
-                              : AppColors.textPrimaryLight,
+                          color: Colors.white,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -339,7 +363,7 @@ class _ApplicantCard extends StatelessWidget {
                         profile?.programName ?? profile?.faculty ?? user.email,
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 12,
-                          color: AppColors.textSecondaryLight,
+                          color: Colors.white70,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -355,14 +379,14 @@ class _ApplicantCard extends StatelessWidget {
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 7, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: AppColors.primaryTint10,
+                                    color: Colors.white.withValues(alpha: 0.14),
                                     borderRadius: BorderRadius.circular(20),
                                   ),
                                   child: Text(
                                     s,
                                     style: GoogleFonts.plusJakartaSans(
                                       fontSize: 10,
-                                      color: AppColors.primary,
+                                      color: Colors.white,
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
@@ -381,7 +405,7 @@ class _ApplicantCard extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: AppColors.roleLecturer.withValues(alpha: 0.12),
+                                color: _lecturerButtonGreen,
                                 borderRadius: BorderRadius.circular(16),
                               ),
                               child: Text(
@@ -389,7 +413,7 @@ class _ApplicantCard extends StatelessWidget {
                                 style: GoogleFonts.plusJakartaSans(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w700,
-                                  color: AppColors.roleLecturer,
+                                  color: Colors.white,
                                 ),
                               ),
                             ),
@@ -398,7 +422,7 @@ class _ApplicantCard extends StatelessWidget {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
-                                  color: AppColors.success.withValues(alpha: 0.12),
+                                  color: Colors.white.withValues(alpha: 0.16),
                                   borderRadius: BorderRadius.circular(16),
                                 ),
                                 child: Text(
@@ -406,7 +430,7 @@ class _ApplicantCard extends StatelessWidget {
                                   style: GoogleFonts.plusJakartaSans(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w600,
-                                    color: AppColors.success,
+                                    color: Colors.white,
                                   ),
                                 ),
                               ),
@@ -438,7 +462,7 @@ class _ApplicantCard extends StatelessWidget {
                 // Chat button
                 IconButton(
                   icon: const Icon(Icons.chat_bubble_outline_rounded,
-                      size: 20, color: AppColors.primary),
+                      size: 20, color: Colors.white),
                   tooltip: 'Message ${user.firstName}',
                   onPressed: () {
                     context.push(
@@ -452,8 +476,7 @@ class _ApplicantCard extends StatelessWidget {
                   },
                 ),
 
-                const Icon(Icons.chevron_right,
-                    size: 20, color: AppColors.textHintLight),
+                const Icon(Icons.chevron_right, size: 20, color: Colors.white70),
               ],
             ),
           ),
@@ -475,13 +498,13 @@ class _MetaChip extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 14, color: AppColors.textSecondaryLight),
+        Icon(icon, size: 14, color: Colors.white70),
         const SizedBox(width: 3),
         Text(
           label,
           style: GoogleFonts.plusJakartaSans(
             fontSize: 11,
-            color: AppColors.textSecondaryLight,
+            color: Colors.white,
           ),
         ),
       ],

@@ -2,32 +2,116 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Start Local OpenAI Proxy",
+      "label": "Start Local AI Proxy",
       "type": "shell",
       "command": "powershell",
       "args": [
         "-NoProfile",
         "-ExecutionPolicy",
         "Bypass",
-        "-Command",
-        "$projectRoot = 'D:\\start_track\\must_startrack'; Set-Location (Join-Path $projectRoot 'functions'); $env:OPENAI_API_KEY = (Get-Content (Join-Path $projectRoot 'Open API.txt') -Raw).Trim(); if ([string]::IsNullOrWhiteSpace($env:OPENAI_API_KEY)) { throw 'Open API.txt is empty'; }; node .\\local-proxy.js"
+        "-File",
+        "${workspaceFolder}\\scripts\\Run-StarTrackAI.ps1",
+        "proxy"
       ],
-      "isBackground": true,
-      "problemMatcher": {
-        "owner": "custom",
-        "pattern": {
-          "regexp": "."
-        },
-        "background": {
-          "activeOnStart": true,
-          "beginsPattern": ".*",
-          "endsPattern": "Local OpenAI proxy listening on http://127.0.0.1:8787/openAiRerank"
-        }
-      },
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated"
-      }
+      "problemMatcher": []
+    },
+    {
+      "label": "Prepare Android AI",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\Run-StarTrackAI.ps1",
+        "prepare-android"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Run Web With AI",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\Run-StarTrackAI.ps1",
+        "web"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Run Android With AI",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\Run-StarTrackAI.ps1",
+        "android"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Build Local AI APK",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\Run-StarTrackAI.ps1",
+        "apk-local"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Build Release APK With Cloud AI",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\Run-StarTrackAI.ps1",
+        "release"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Stop Local AI Proxy",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\Run-StarTrackAI.ps1",
+        "stop"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Deploy OpenAI Cloud Functions",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\Run-StarTrackAI.ps1",
+        "deploy-cloud"
+      ],
+      "problemMatcher": []
     }
   ]
 }

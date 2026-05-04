@@ -1,0 +1,117 @@
+Yes. For validating student projects with AI, I’d split it into two checks: **ownership** and **project-likeness**. They should be separate, because “this is a real project” and “this student owns it” are different claims.
+
+**1. Project-Likeness Check**
+This answers: “Is this actually a project, not random content?”
+
+Good signals:
+
+- Title looks like a buildable artifact: app, system, website, model, dashboard, prototype, research tool.
+- Description contains purpose, users, features, tools, implementation details, or problem solved.
+- Media shows actual output: UI screenshot, demo video, GitHub repo, APK, web link, prototype screen, dataset, code snippet.
+- Skills/tags match the description.
+- Avoids vague content like “my idea”, memes, adverts, motivational posts, event announcements, jokes, screenshots with no explanation.
+
+AI can classify posts as:
+
+```text
+project
+project_update
+idea_only
+advert
+event
+generic_post
+low_evidence_project
+```
+
+Then approve only `project` and maybe `project_update`.
+
+**2. Ownership Check**
+This answers: “Did this student likely build or contribute to this?”
+
+Useful techniques:
+
+- Require proof fields:
+  - GitHub/link to repo
+  - demo video
+  - screenshots
+  - problem statement
+  - tech stack
+  - role/contribution
+  - date built
+  - collaborators
+
+- AI compares the student’s claimed contribution against the project evidence:
+  - “I built the Flutter frontend”
+  - repo contains Flutter/Dart
+  - screenshots match app description
+  - profile skills include Flutter
+  - previous posts show related progress
+
+- Check authorship consistency:
+  - Same student posted earlier updates about this project.
+  - The GitHub username/link is connected to their profile.
+  - Media watermark/name or repo README mentions them.
+  - Collaborators tagged by the student also confirm/appear in project metadata.
+
+**3. Plagiarism / Duplicate Detection**
+This is very important.
+
+Use AI plus local matching to detect:
+
+- Same title/description already posted by another student.
+- Same screenshots/media hash already uploaded.
+- Description copied from online templates.
+- GitHub repo belongs to someone else.
+- Project name appears publicly with different author.
+- Same code/demo reused by multiple students.
+
+Even without web search, you can do local duplicate detection using:
+
+```text
+text similarity + image hash + media URL reuse + repo URL uniqueness
+```
+
+**4. Evidence Score**
+Instead of a simple yes/no, give each project an approval score:
+
+```text
+project_likeness_score: 0.0 - 1.0
+ownership_score: 0.0 - 1.0
+evidence_score: 0.0 - 1.0
+duplicate_risk: 0.0 - 1.0
+```
+
+Then final status:
+
+```text
+approved
+needs_more_evidence
+lecturer_review_required
+rejected_as_non_project
+rejected_duplicate_or_plagiarized
+```
+
+**5. Human-in-the-loop**
+I would not let AI permanently reject student work alone. Better flow:
+
+- AI auto-approves strong cases.
+- AI asks for more evidence on weak cases.
+- AI flags suspicious cases for lecturer/admin review.
+- Lecturer sees explanation: “low ownership proof”, “generic content”, “duplicate screenshot”, etc.
+
+**Best Practical MVP**
+For StarTrack, I’d start with:
+
+1. Add project submission fields:
+   `title`, `description`, `techStack`, `githubUrl`, `demoUrl`, `studentContribution`, `media`.
+
+2. Run AI validation:
+   classify content type, score ownership evidence, explain missing proof.
+
+3. Store validation result:
+   `project_validation_status`, `ai_project_score`, `ai_ownership_score`, `ai_validation_reasons`.
+
+4. Only allow high-confidence approved projects to affect:
+   leaderboard points, recommendations, portfolio strength, AI ranking.
+
+That would make the ranking system much harder to game.

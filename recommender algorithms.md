@@ -39,7 +39,7 @@ Key implementation anchors:
 The recommender is hybrid and local-first:
 
 1. Local scoring computes robust baseline ranking using profile + behavior + content signals.
-2. Optional AI rerank (Gemini) reranks top candidates only.
+2. Optional AI rerank (OpenAI) reranks top candidates only.
 3. If AI unavailable, local ranking remains fully functional.
 
 This architecture guarantees feed continuity in offline/limited-connectivity conditions.

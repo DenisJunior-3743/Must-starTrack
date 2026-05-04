@@ -25,6 +25,27 @@ import '../../shared/widgets/guest_auth_required_view.dart';
 
 enum _MyProjectsFilter { all, active, opportunities, applied, archived }
 
+class _GlowBlob extends StatelessWidget {
+  const _GlowBlob({required this.color});
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: 220,
+        height: 220,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(color: color, blurRadius: 80, spreadRadius: 24),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class MyProjectsScreen extends StatefulWidget {
   const MyProjectsScreen({super.key});
 
@@ -308,45 +329,114 @@ class _MyProjectsScreenState extends State<MyProjectsScreen> {
     final guards = sl<RouteGuards>();
     final isGuest = sl<AuthCubit>().currentUser == null;
     final posts = _visiblePosts;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgTop = isDark ? const Color(0xFF061845) : const Color(0xFFF8FBFF);
+    final bgBottom =
+        isDark ? const Color(0xFF030D27) : const Color(0xFFECF3FF);
+    final fgPrimary = isDark ? Colors.white : const Color(0xFF0F172A);
+    final pillBg = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.white.withValues(alpha: 0.80);
+    final pillBorder = isDark
+        ? Colors.white.withValues(alpha: 0.12)
+        : const Color(0xFFE2E8F0);
+
+    final gradient = BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [bgTop, bgBottom],
+      ),
+    );
 
     if (isGuest) {
       return Scaffold(
+        backgroundColor: Colors.transparent,
         appBar: AppBar(
+          backgroundColor: pillBg,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
           title: Text(
             'My Projects',
-            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+            style: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w700, color: fgPrimary),
+          ),
+          iconTheme: IconThemeData(color: fgPrimary),
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(1),
+            child: Container(height: 1, color: pillBorder),
           ),
         ),
-        body: const GuestAuthRequiredView(
-          icon: Icons.lock_outline_rounded,
-          title: 'Sign in to access My Projects',
-          subtitle:
-              'You need an account to manage your project posts, applications, and archived work.',
-          fromRoute: RouteNames.projects,
+        body: Stack(
+          children: [
+            Positioned.fill(child: DecoratedBox(decoration: gradient)),
+            const Positioned(
+                top: -60,
+                right: -50,
+                child: _GlowBlob(color: Color(0x332563EB))),
+            const Positioned(
+                bottom: 180,
+                left: -80,
+                child: _GlowBlob(color: Color(0x221152D4))),
+            const GuestAuthRequiredView(
+              icon: Icons.lock_outline_rounded,
+              title: 'Sign in to access My Projects',
+              subtitle:
+                  'You need an account to manage your project posts, applications, and archived work.',
+              fromRoute: RouteNames.projects,
+            ),
+          ],
         ),
       );
     }
 
     return Scaffold(
-      backgroundColor: AppColors.background(context),
+      backgroundColor: Colors.transparent,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
+        backgroundColor: pillBg,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
         title: Text(
           'My Projects',
-          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+          style: GoogleFonts.plusJakartaSans(
+              fontWeight: FontWeight.w700, color: fgPrimary),
+        ),
+        iconTheme: IconThemeData(color: fgPrimary),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: pillBorder),
         ),
         actions: [
           IconButton(
             tooltip: 'Refresh',
             onPressed: _loadPosts,
-            icon: const Icon(Icons.refresh_rounded),
+            style: IconButton.styleFrom(
+              backgroundColor: AppColors.mustGreen.withValues(alpha: 0.15),
+              minimumSize: const Size(34, 34),
+            ),
+            icon: const Icon(Icons.refresh_rounded, color: AppColors.mustGreen),
           ),
+          const SizedBox(width: 8),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadPosts,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-          children: [
+      body: Stack(
+        children: [
+          Positioned.fill(child: DecoratedBox(decoration: gradient)),
+          const Positioned(
+              top: -60, right: -50, child: _GlowBlob(color: Color(0x332563EB))),
+          const Positioned(
+              bottom: 180,
+              left: -80,
+              child: _GlowBlob(color: Color(0x221152D4))),
+          SafeArea(
+            child: RefreshIndicator(
+              onRefresh: _loadPosts,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+                children: [
             _MyProjectsOverviewHeader(
               totalPosts: _posts.length,
               activePosts: _posts.where((p) => !p.isArchived).length,
@@ -452,8 +542,11 @@ class _MyProjectsScreenState extends State<MyProjectsScreen> {
                         ),
                 ),
               ),
-          ],
+            ],
+          ),
         ),
+        ),
+          ],
       ),
     );
   }
@@ -530,8 +623,17 @@ class _MyProjectsMessageCard extends StatelessWidget {
             const SizedBox(height: 16),
             FilledButton.icon(
               onPressed: onAction,
-              icon: const Icon(Icons.add_rounded),
+              icon: const Icon(Icons.add_rounded, size: 18),
               label: Text(actionLabel!),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.mustGreen,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+                ),
+              ),
             ),
           ],
         ],
@@ -614,6 +716,10 @@ class _MyProjectsOverviewHeader extends StatelessWidget {
                 IconButton.filled(
                   tooltip: 'Create post',
                   onPressed: onCreate,
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppColors.mustGreen,
+                    foregroundColor: Colors.white,
+                  ),
                   icon: const Icon(Icons.add_rounded),
                 ),
             ],
@@ -824,72 +930,47 @@ class _MyProjectCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             _MyProjectMediaTabs(post: post),
-            if (onViewApplicants != null) ...[
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: onViewApplicants,
-                  icon: const Icon(Icons.people_rounded, size: 18),
-                  label: Text('View Applicants (${post.joinCount})'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.roleLecturer,
-                    side: BorderSide(
-                        color: AppColors.roleLecturer.withValues(alpha: 0.4)),
-                  ),
-                ),
-              ),
-            ],
             const SizedBox(height: 14),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onOpen,
-                    icon: const Icon(Icons.open_in_new_rounded),
-                    label: const Text('Open'),
-                  ),
+                _CompactActionButton(
+                  icon: Icons.open_in_new_rounded,
+                  tooltip: 'Open',
+                  onPressed: onOpen,
+                  backgroundColor: AppColors.mustGreenDark,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: onEdit,
-                    icon: const Icon(Icons.edit_outlined),
-                    label: const Text('Edit'),
-                  ),
+                _CompactActionButton(
+                  icon: Icons.edit_outlined,
+                  tooltip: 'Edit',
+                  onPressed: onEdit,
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                if (onRestore != null) ...[
-                  Expanded(
-                    child: TextButton.icon(
-                      onPressed: onRestore,
-                      icon: const Icon(Icons.restore_rounded),
-                      label: const Text('Restore'),
-                    ),
+                if (onViewApplicants != null)
+                  _CompactActionButton(
+                    icon: Icons.people_rounded,
+                    tooltip: 'View Applicants (${post.joinCount})',
+                    onPressed: onViewApplicants,
                   ),
-                  const SizedBox(width: 8),
-                ] else if (onArchive != null) ...[
-                  Expanded(
-                    child: TextButton.icon(
-                      onPressed: onArchive,
-                      icon: const Icon(Icons.archive_outlined),
-                      label: const Text('Archive'),
-                    ),
+                if (onRestore != null)
+                  _CompactActionButton(
+                    icon: Icons.restore_rounded,
+                    tooltip: 'Restore',
+                    onPressed: onRestore,
+                    backgroundColor: AppColors.mustGreenDark,
+                  )
+                else if (onArchive != null)
+                  _CompactActionButton(
+                    icon: Icons.archive_outlined,
+                    tooltip: 'Archive',
+                    onPressed: onArchive,
+                    backgroundColor: AppColors.mustGreenDark,
                   ),
-                  const SizedBox(width: 8),
-                ],
-                Expanded(
-                  child: TextButton.icon(
-                    onPressed: onDelete,
-                    icon: const Icon(Icons.delete_outline_rounded,
-                        color: AppColors.danger),
-                    label: const Text('Delete',
-                        style: TextStyle(color: AppColors.danger)),
-                  ),
+                _CompactActionButton(
+                  icon: Icons.delete_outline_rounded,
+                  tooltip: 'Delete',
+                  onPressed: onDelete,
+                  backgroundColor: AppColors.danger,
                 ),
               ],
             ),
@@ -1651,6 +1732,43 @@ class _MetricChip extends StatelessWidget {
   }
 }
 
+class _CompactActionButton extends StatelessWidget {
+  const _CompactActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+    this.backgroundColor = AppColors.mustGreen,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+  final Color backgroundColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: SizedBox(
+        width: 44,
+        height: 40,
+        child: FilledButton(
+          onPressed: onPressed,
+          style: FilledButton.styleFrom(
+            backgroundColor: backgroundColor,
+            foregroundColor: Colors.white,
+            padding: EdgeInsets.zero,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+            ),
+          ),
+          child: Icon(icon, size: 18),
+        ),
+      ),
+    );
+  }
+}
+
 // â”€â”€ Applied opportunity card (student view) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _AppliedOpportunityCard extends StatelessWidget {
@@ -1761,23 +1879,18 @@ class _AppliedOpportunityCard extends StatelessWidget {
             const SizedBox(height: 14),
             Row(
               children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onOpen,
-                    icon: const Icon(Icons.open_in_new_rounded),
-                    label: const Text('View'),
-                  ),
+                _CompactActionButton(
+                  icon: Icons.open_in_new_rounded,
+                  tooltip: 'View',
+                  onPressed: onOpen,
+                  backgroundColor: AppColors.mustGreenDark,
                 ),
                 const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: onMessage,
-                    icon: const Icon(Icons.chat_bubble_outline_rounded),
-                    label: const Text('Message'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.roleLecturer,
-                    ),
-                  ),
+                _CompactActionButton(
+                  icon: Icons.chat_bubble_outline_rounded,
+                  tooltip: 'Message',
+                  onPressed: onMessage,
+                  backgroundColor: AppColors.mustGreen,
                 ),
               ],
             ),

@@ -1,7 +1,9 @@
 bool isVideoMediaPath(String path) {
   final lower = path.toLowerCase();
-  return lower.contains('/video/upload/') ||
-      lower.endsWith('.mp4') ||
+  // Only explicit video file extensions are reliable.
+  // Cloudinary uses /video/upload/ for ALL media (images AND videos),
+  // so the path alone cannot be used to identify videos.
+  return lower.endsWith('.mp4') ||
       lower.endsWith('.mov') ||
       lower.endsWith('.m4v') ||
       lower.endsWith('.3gp') ||

@@ -1,6 +1,6 @@
 ﻿// lib/features/auth/screens/login_screen.dart
 //
-// MUST StarTrack â€” Login Screen (Phase 2)
+// MUST StarTrack Login Screen (Phase 2)
 //
 // HCI: Affordance, Feedback, Constraints, Natural Mapping, Universal Design
 
@@ -28,6 +28,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _emailTooltipKey = GlobalKey<TooltipState>();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _emailFocus = FocusNode();
@@ -49,6 +50,10 @@ class _LoginScreenState extends State<LoginScreen> {
       email: _emailCtrl.text.trim(),
       password: _passwordCtrl.text,
     );
+  }
+
+  void _showEmailTooltip() {
+    _emailTooltipKey.currentState?.ensureTooltipVisible();
   }
 
   @override
@@ -90,8 +95,28 @@ class _LoginScreenState extends State<LoginScreen> {
         builder: (ctx, state) {
           final loading = state is AuthLoading;
           return Scaffold(
-            body: SafeArea(
-              child: SingleChildScrollView(
+            body: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFFF8FBFF), Color(0xFFECF3FF)],
+                ),
+              ),
+              child: Stack(
+                children: [
+                  const Positioned(
+                    top: -80,
+                    right: -70,
+                    child: _GlowBlob(size: 220, color: Color(0x332563EB)),
+                  ),
+                  const Positioned(
+                    bottom: -90,
+                    left: -85,
+                    child: _GlowBlob(size: 250, color: Color(0x221152D4)),
+                  ),
+                  SafeArea(
+                    child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(
                   AppDimensions.screenHPadding,
                   24,
@@ -126,16 +151,35 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 24),
 
                       // Email
-                      StTextField(
-                        label: 'Email Address',
-                        hint: 'Your MUST email address',
-                        controller: _emailCtrl,
-                        keyboardType: TextInputType.emailAddress,
-                        focusNode: _emailFocus,
-                        textInputAction: TextInputAction.next,
-                        prefixIcon: const Icon(Icons.mail_outline_rounded),
-                        onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
-                        validator: MustValidators.validateEmail,
+                      Tooltip(
+                        key: _emailTooltipKey,
+                        triggerMode: TooltipTriggerMode.manual,
+                        showDuration: const Duration(seconds: 4),
+                        waitDuration: Duration.zero,
+                        verticalOffset: 14,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F172A),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        textStyle: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          color: Colors.white,
+                          height: 1.35,
+                        ),
+                        message:
+                            'Use your MUST institutional email (student: @std.must.ac.ug, staff: @must.ac.ug).',
+                        child: StTextField(
+                          label: 'Email Address',
+                          hint: 'Your MUST email address',
+                          controller: _emailCtrl,
+                          keyboardType: TextInputType.emailAddress,
+                          focusNode: _emailFocus,
+                          textInputAction: TextInputAction.next,
+                          prefixIcon: const Icon(Icons.mail_outline_rounded),
+                          onTap: _showEmailTooltip,
+                          onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
+                          validator: MustValidators.validateEmail,
+                        ),
                       ),
                       const SizedBox(height: AppDimensions.spacingMd),
 
@@ -149,10 +193,31 @@ class _LoginScreenState extends State<LoginScreen> {
                         textInputAction: TextInputAction.done,
                         prefixIcon: const Icon(Icons.lock_outline_rounded),
                         suffixIcon: IconButton(
-                          icon: Icon(_obscurePassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined),
-                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                          tooltip: _obscurePassword
+                              ? 'Show password'
+                              : 'Hide password',
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppColors.primary.withValues(alpha: 0.10),
+                            foregroundColor: AppColors.primary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            minimumSize: const Size(40, 40),
+                          ),
+                          icon: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 180),
+                            transitionBuilder: (child, animation) =>
+                                ScaleTransition(scale: animation, child: child),
+                            child: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_rounded
+                                  : Icons.visibility_off_rounded,
+                              key: ValueKey(_obscurePassword),
+                            ),
+                          ),
+                          onPressed: () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
                         ),
                         onFieldSubmitted: (_) => _submit(ctx),
                         validator: (v) => (v == null || v.isEmpty) ? 'Password is required.' : null,
@@ -192,10 +257,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 24),
 
                       // Info banner
-                      const InfoBanner(
-                        message: 'Use your MUST institutional email (@std.must.ac.ug or @must.ac.ug) to access your academic records.',
-                      ),
-                      const SizedBox(height: 32),
+                      
 
                       // Register links
                       _RegisterLinks(),
@@ -203,9 +265,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     ],
                   ),
                 ),
+                ),
               ),
-            ),
-          );
+            ],
+          ),
+        ),
+      );
         },
       ),
     );
@@ -215,64 +280,121 @@ class _LoginScreenState extends State<LoginScreen> {
 class _Branding extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF0D3FA8), Color(0xFF1152D4), Color(0xFF2563EB)],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.35),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 700),
+      curve: Curves.easeOutCubic,
+      tween: Tween<double>(begin: 0, end: 1),
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value,
+          child: Transform.translate(
+            offset: Offset(0, (1 - value) * 20),
+            child: child,
           ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.3),
-                width: 1.5,
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 22),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF0C3B93), Color(0xFF1152D4), Color(0xFF3B82F6)],
+          ),
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.30),
+              blurRadius: 28,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 88,
+              height: 88,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.85),
+                  width: 2,
+                ),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.asset(
+                  'assets/icons/icon.png',
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
-            child: const Icon(
-              Icons.auto_awesome_rounded,
-              size: 32,
-              color: Colors.white,
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    'MUST StarTrack',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 25,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      letterSpacing: -0.4,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Your skills, Your story, Your network.',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white.withValues(alpha: 0.86),
+                      height: 1.4,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            AppStrings.appFullName,
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              color: Colors.white,
-              letterSpacing: -0.5,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GlowBlob extends StatelessWidget {
+  final double size;
+  final Color color;
+
+  const _GlowBlob({required this.size, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: color,
+              blurRadius: 80,
+              spreadRadius: 25,
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            AppStrings.appTagline,
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 12,
-              color: Colors.white.withValues(alpha: 0.80),
-              height: 1.4,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -299,17 +421,14 @@ class _RegisterLinks extends StatelessWidget {
         ),
         TextButton(
           onPressed: () => context.push(RouteNames.lecturerRegister),
-          child: Text('Staff / Lecturer Registration',
+          child: Text('Register as Staff',
             style: GoogleFonts.plusJakartaSans(
-              fontSize: 13, fontWeight: FontWeight.w600,
-              color: AppColors.textSecondaryLight, decoration: TextDecoration.underline,
-              decorationColor: AppColors.textSecondaryLight,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.primary,
+              decoration: TextDecoration.underline,
+              decorationColor: AppColors.primary,
             )),
-        ),
-        TextButton(
-          onPressed: () => context.go(RouteNames.guestDiscover),
-          child: Text(AppStrings.exploreAsGuest,
-            style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AppColors.textSecondaryLight)),
         ),
       ],
     );

@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
+
 import '../models/post_model.dart';
 import '../models/skill_pattern_model.dart';
 import '../models/user_model.dart';
@@ -54,6 +56,22 @@ class FeedVideoQueueItem {
   final List<String> reasons;
   final Map<String, double> signalBreakdown;
 }
+
+class GlobalStudentRankScore {
+  const GlobalStudentRankScore({
+    required this.score,
+    required this.breakdown,
+    required this.projectCount,
+    required this.projectTitles,
+  });
+
+  final double score;
+  final Map<String, double> breakdown;
+  final int projectCount;
+  final List<String> projectTitles;
+}
+
+enum GlobalStudentRankTimeRange { sprint, term, allTime }
 
 class HybridRerankDiagnostics {
   const HybridRerankDiagnostics({
@@ -345,7 +363,7 @@ class RecommenderService {
     Map<String, double> lecturerRatingsByPost = const {},
     Map<String, double> studentRatingsByPost = const {},
     Map<String, List<String>> commentSnippetsByPost = const {},
-    bool allowProxyFallback = true,
+    bool allowProxyFallback = false,
   }) async {
     final result = await rankHybridWithDiagnostics(
       user: user,
@@ -370,7 +388,7 @@ class RecommenderService {
     Map<String, double> lecturerRatingsByPost = const {},
     Map<String, double> studentRatingsByPost = const {},
     Map<String, List<String>> commentSnippetsByPost = const {},
-    bool allowProxyFallback = true,
+    bool allowProxyFallback = false,
   }) async {
     final localRanked = rankLocally(
       user: user,
@@ -446,6 +464,13 @@ class RecommenderService {
       );
 
       final ranking = (openAiResponse?['ranking'] as List?) ?? const [];
+      final upstreamError =
+          (openAiResponse?['error'] ?? openAiResponse?['status'])
+              ?.toString()
+              .trim();
+      final emptyReason = (upstreamError != null && upstreamError.isNotEmpty)
+          ? 'openai_empty_ranking_$upstreamError'
+          : 'openai_empty_ranking';
       if (ranking.isEmpty) {
         final fallback = allowProxyFallback
             ? _applyProxyHybridRerank(localRanked)
@@ -459,7 +484,7 @@ class RecommenderService {
             usedOpenAi: false,
             usedProxy: allowProxyFallback,
             rankingRows: 0,
-            reason: 'openai_empty_ranking',
+            reason: emptyReason,
           ),
         );
       }
@@ -468,8 +493,8 @@ class RecommenderService {
       for (final row in ranking) {
         if (row is! Map) continue;
         final data = Map<String, dynamic>.from(row);
-        final id = (data['postId'] ?? data['post_id'] ?? data['id'])
-            ?.toString();
+        final id =
+            (data['postId'] ?? data['post_id'] ?? data['id'])?.toString();
         final score = _asDouble(
           data['score'] ?? data['relevance'] ?? data['finalScore'],
         );
@@ -529,8 +554,9 @@ class RecommenderService {
         ),
       );
     } catch (error) {
-      final fallback =
-          allowProxyFallback ? _applyProxyHybridRerank(localRanked) : localRanked;
+      final fallback = allowProxyFallback
+          ? _applyProxyHybridRerank(localRanked)
+          : localRanked;
       return HybridRerankResult(
         posts: fallback,
         diagnostics: HybridRerankDiagnostics(
@@ -553,9 +579,8 @@ class RecommenderService {
       final base = _proxyAiBaseScore(item.scoreBreakdown, fallback: item.score);
       final drift = _deterministicDriftForPost(item.post.id);
       final aiScore = (base + drift).clamp(0.0, 1.0).toDouble();
-      final blended = ((item.score * 0.72) + (aiScore * 0.28))
-          .clamp(0.0, 1.0)
-          .toDouble();
+      final blended =
+          ((item.score * 0.72) + (aiScore * 0.28)).clamp(0.0, 1.0).toDouble();
 
       return RecommendedPost(
         post: item.post,
@@ -748,10 +773,10 @@ class RecommenderService {
       breakdown['program_match'] = programMatch ? 1.0 : 0.0;
 
       final projectsScore = _logNorm(profile.totalPosts, maxInput: 20);
-        const likesScore = 0.0;
-        const studentRatingScore = 0.0;
+      const likesScore = 0.0;
+      const studentRatingScore = 0.0;
       final collaborationScore = _logNorm(profile.totalCollabs, maxInput: 10);
-        const lecturerRatingScore = 0.0;
+      const lecturerRatingScore = 0.0;
       final versatilityScore =
           (candidateSkills.length.clamp(0, 10).toInt() / 10.0)
               .clamp(0.0, 1.0)
@@ -1384,16 +1409,284 @@ class RecommenderService {
   }
 
   double computeGlobalStudentScore(UserModel student) {
-    final profile = student.profile;
-    if (profile == null) return 0.0;
+    return computeGlobalStudentRankScore(
+      student: student,
+      projects: const <PostModel>[],
+    ).score;
+  }
 
-    return (0.25 * ((profile.skills.length / 8).clamp(0.0, 1.0)) +
-            0.20 * ((profile.activityStreak / 14).clamp(0.0, 1.0)) +
-            0.20 * ((profile.totalPosts / 12).clamp(0.0, 1.0)) +
-            0.20 * ((profile.totalCollabs / 8).clamp(0.0, 1.0)) +
-            0.15 * _scoreProfileCompleteness(student))
+  int computeGlobalStudentRankPoints({
+    required double score,
+    required DateTime updatedAt,
+    required GlobalStudentRankTimeRange timeRange,
+  }) {
+    final boosted =
+        (score * 0.86) + (_globalStudentTimeBoost(updatedAt, timeRange) * 0.14);
+    return (boosted.clamp(0.0, 1.0) * 1000).round();
+  }
+
+  GlobalStudentRankScore computeGlobalStudentRankScore({
+    required UserModel student,
+    required List<PostModel> projects,
+    int followerCount = 0,
+    double? aiCommentSentiment,
+  }) {
+    final profile = student.profile;
+    if (profile == null) {
+      return const GlobalStudentRankScore(
+        score: 0.0,
+        breakdown: <String, double>{},
+        projectCount: 0,
+        projectTitles: <String>[],
+      );
+    }
+
+    final studentProjects = projects
+        .where((post) => post.authorId == student.id && post.type == 'project')
+        .toList(growable: false);
+
+    final skillScore = ((profile.skills.length / 8).clamp(0.0, 1.0)).toDouble();
+    final activityScore =
+        ((profile.activityStreak / 14).clamp(0.0, 1.0)).toDouble();
+    final profilePostScore =
+        ((profile.totalPosts / 12).clamp(0.0, 1.0)).toDouble();
+    final profileCollabScore =
+        ((profile.totalCollabs / 8).clamp(0.0, 1.0)).toDouble();
+    final completenessScore = _scoreProfileCompleteness(student);
+
+    final profileScore = ((0.25 * skillScore) +
+            (0.20 * activityScore) +
+            (0.20 * profilePostScore) +
+            (0.20 * profileCollabScore) +
+            (0.15 * completenessScore))
         .clamp(0.0, 1.0)
         .toDouble();
+
+    var engagementTotal = 0.0;
+    var trustTotal = 0.0;
+    var freshnessTotal = 0.0;
+    var projectSkillTotal = 0.0;
+    var mediaTotal = 0.0;
+
+    for (final project in studentProjects) {
+      final engagement = ((project.likeCount +
+                  (project.commentCount * 2) +
+                  (project.shareCount * 3) +
+                  (project.viewCount * 0.12)) /
+              180.0)
+          .clamp(0.0, 1.0)
+          .toDouble();
+      final trust = (project.trustScore / 100.0).clamp(0.0, 1.0).toDouble();
+      final ageDays = DateTime.now().difference(project.updatedAt).inDays;
+      final freshness = (1.0 - (ageDays / 180.0)).clamp(0.0, 1.0).toDouble();
+      final projectSkills =
+          (project.skillsUsed.length / 6.0).clamp(0.0, 1.0).toDouble();
+      final mediaRichness =
+          (project.mediaUrls.isNotEmpty || project.youtubeUrl != null)
+              ? 1.0
+              : 0.35;
+
+      engagementTotal += engagement;
+      trustTotal += trust;
+      freshnessTotal += freshness;
+      projectSkillTotal += projectSkills;
+      mediaTotal += mediaRichness;
+    }
+
+    final projectCount = studentProjects.length;
+    final projectCoverage = (projectCount / 8.0).clamp(0.0, 1.0).toDouble();
+    final divisor = projectCount == 0 ? 1.0 : projectCount.toDouble();
+    final projectEngagement = (engagementTotal / divisor).clamp(0.0, 1.0);
+    final projectTrust = (trustTotal / divisor).clamp(0.0, 1.0);
+    final projectFreshness = (freshnessTotal / divisor).clamp(0.0, 1.0);
+    final projectSkillEvidence = (projectSkillTotal / divisor).clamp(0.0, 1.0);
+    final projectMediaEvidence = (mediaTotal / divisor).clamp(0.0, 1.0);
+
+    final projectPortfolioScore = projectCount == 0
+        ? 0.0
+        : ((0.24 * projectCoverage) +
+                (0.24 * projectEngagement) +
+                (0.18 * projectSkillEvidence) +
+                (0.14 * projectFreshness) +
+                (0.12 * projectTrust) +
+                (0.08 * projectMediaEvidence))
+            .clamp(0.0, 1.0)
+            .toDouble();
+
+    final followerScore =
+        ((math.max(profile.totalFollowers, followerCount)) / 40.0)
+            .clamp(0.0, 1.0)
+            .toDouble();
+    final sentiment = (aiCommentSentiment ?? 0.5).clamp(0.0, 1.0).toDouble();
+    final sentimentDelta =
+        ((sentiment - 0.5) * 0.12).clamp(-0.06, 0.06).toDouble();
+
+    final score = ((0.54 * profileScore) +
+            (0.34 * projectPortfolioScore) +
+            (0.12 * followerScore) +
+            sentimentDelta)
+        .clamp(0.0, 1.0)
+        .toDouble();
+
+    return GlobalStudentRankScore(
+      score: score,
+      breakdown: <String, double>{
+        'profile_score': profileScore,
+        'skill_score': skillScore,
+        'activity_score': activityScore,
+        'profile_post_score': profilePostScore,
+        'profile_collab_score': profileCollabScore,
+        'profile_completeness': completenessScore,
+        'project_portfolio_score': projectPortfolioScore,
+        'project_coverage': projectCoverage,
+        'project_engagement': projectEngagement.toDouble(),
+        'project_skill_evidence': projectSkillEvidence.toDouble(),
+        'project_freshness': projectFreshness.toDouble(),
+        'project_trust': projectTrust.toDouble(),
+        'project_media_evidence': projectMediaEvidence.toDouble(),
+        'follower_score': followerScore,
+        'ai_comment_sentiment': sentiment,
+        'sentiment_delta': sentimentDelta,
+      },
+      projectCount: projectCount,
+      projectTitles: studentProjects
+          .map((project) => project.title.trim())
+          .where((title) => title.isNotEmpty)
+          .take(5)
+          .toList(growable: false),
+    );
+  }
+
+  Future<Map<String, double>> scoreProjectCommentSentimentByStudent({
+    required List<UserModel> students,
+    required List<PostModel> projects,
+    required Map<String, List<String>> commentSnippetsByPost,
+    String? faculty,
+  }) async {
+    final selectedStudents = students.where((student) {
+      if (faculty == null || faculty.isEmpty) return true;
+      return student.profile?.faculty == faculty;
+    }).toList(growable: false);
+
+    final stableScoreByStudent = <String, double>{};
+    for (final student in selectedStudents) {
+      final comments = <String>[];
+      for (final post in projects) {
+        if (post.type != 'project' || post.authorId != student.id) continue;
+        comments.addAll(commentSnippetsByPost[post.id] ?? const <String>[]);
+      }
+
+      final compactComments = comments
+          .map((comment) => comment.trim())
+          .where((comment) => comment.isNotEmpty)
+          .take(8)
+          .toList(growable: false);
+      if (compactComments.isEmpty) continue;
+
+      stableScoreByStudent[student.id] =
+          _normalizedSentimentFromComments(compactComments);
+    }
+
+    final openAi = _openAiService;
+    if (openAi == null || !openAi.isConfigured) {
+      debugPrint(
+        '[GlobalRankAI] skipped: openAiConfigured=false students=${students.length} projects=${projects.length} commentPosts=${commentSnippetsByPost.length}',
+      );
+      return stableScoreByStudent;
+    }
+
+    final payloadRows = <Map<String, dynamic>>[];
+    for (final student in selectedStudents) {
+      final comments = <String>[];
+      for (final post in projects) {
+        if (post.type != 'project' || post.authorId != student.id) continue;
+        comments.addAll(commentSnippetsByPost[post.id] ?? const <String>[]);
+      }
+
+      final compactComments = comments
+          .map((comment) => comment.trim())
+          .where((comment) => comment.isNotEmpty)
+          .take(8)
+          .toList(growable: false);
+      if (compactComments.isEmpty) continue;
+
+      payloadRows.add({
+        'id': student.id,
+        'title':
+            'Comment sentiment profile for ${student.displayName ?? student.email}',
+        'category': student.profile?.faculty,
+        'skills': student.profile?.skills ?? const <String>[],
+        'type': 'project_comment_sentiment',
+        'commentCount': compactComments.length,
+        'comments': compactComments,
+      });
+    }
+
+    debugPrint(
+      '[GlobalRankAI] payload students=${selectedStudents.length} rows=${payloadRows.length} projects=${projects.length} commentPosts=${commentSnippetsByPost.length} faculty=${faculty ?? 'all'}',
+    );
+
+    if (payloadRows.isEmpty) return stableScoreByStudent;
+
+    try {
+      final response = await openAi.rankPosts(
+        userProfile: {
+          'requestType': 'general_comment_sentiment',
+          'objective':
+              'Score each student by positivity and constructiveness of project comments. Positive sentiment should increase score, negative sentiment should lower score.',
+          'faculty': faculty,
+        },
+        posts: payloadRows,
+      );
+
+      final ranking = (response?['ranking'] as List?) ?? const [];
+      final scoreByStudent = <String, double>{};
+      for (final row in ranking) {
+        if (row is! Map) continue;
+        final data = Map<String, dynamic>.from(row);
+        final id = (data['postId'] ?? data['id'])?.toString();
+        if (id == null || id.isEmpty) continue;
+        final rawScore =
+            data['score'] ?? data['sentimentScore'] ?? data['finalScore'];
+        final parsed = rawScore is num
+            ? rawScore.toDouble()
+            : double.tryParse(rawScore?.toString() ?? '');
+        if (parsed == null) continue;
+        scoreByStudent[id] = parsed.clamp(0.0, 1.0).toDouble();
+      }
+      debugPrint(
+        '[GlobalRankAI] response rows=${ranking.length} parsed=${scoreByStudent.length} stable=${stableScoreByStudent.length} scores=${scoreByStudent.entries.take(6).map((entry) => '${entry.key}:${entry.value.toStringAsFixed(3)}').join(', ')}',
+      );
+      if (scoreByStudent.isEmpty) return stableScoreByStudent;
+      return <String, double>{
+        ...stableScoreByStudent,
+        ...scoreByStudent,
+      };
+    } catch (error) {
+      debugPrint('[GlobalRankAI] failed: $error');
+      return stableScoreByStudent;
+    }
+  }
+
+  double _globalStudentTimeBoost(
+    DateTime updatedAt,
+    GlobalStudentRankTimeRange timeRange,
+  ) {
+    final days = DateTime.now().difference(updatedAt).inDays;
+    switch (timeRange) {
+      case GlobalStudentRankTimeRange.sprint:
+        if (days <= 30) return 1.0;
+        if (days <= 90) return (1.0 - ((days - 30) / 120)).clamp(0.35, 1.0);
+        return 0.35;
+      case GlobalStudentRankTimeRange.term:
+        if (days <= 120) return 1.0;
+        if (days <= 240) {
+          return (1.0 - ((days - 120) / 240)).clamp(0.55, 1.0);
+        }
+        return 0.55;
+      case GlobalStudentRankTimeRange.allTime:
+        return 1.0;
+    }
   }
 
   double _scoreProfileCompleteness(UserModel user) {

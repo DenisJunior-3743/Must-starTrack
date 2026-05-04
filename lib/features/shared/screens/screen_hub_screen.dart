@@ -16,8 +16,7 @@ import '../../discover/screens/skill_search_results_screen.dart';
 import '../../discover/screens/university_events_screen.dart';
 import '../../feed/screens/archive_project_confirmation_screen.dart';
 import '../../feed/screens/archived_projects_screen.dart';
-import '../../feed/screens/my_applications_screen.dart';
-import '../../feed/screens/project_application_screen.dart';
+
 import '../../lecturer/screens/advanced_search_screen.dart';
 import '../../lecturer/screens/faculty_leaderboards_screen.dart';
 import '../../lecturer/screens/lecturer_ranking_screen.dart';
@@ -59,8 +58,7 @@ class ScreenHubScreen extends StatelessWidget {
       const _HubItem('Achievement Certificate', 'Profile', AchievementCertificateScreen()),
       const _HubItem('Digital Portfolio', 'Profile', PortfolioScreen()),
       const _HubItem('Peer Endorsements', 'Profile', PeerEndorsementScreen()),
-      const _HubItem('My Applications', 'Feed', MyApplicationsScreen()),
-      const _HubItem('Project Application', 'Feed', ProjectApplicationScreen()),
+
       const _HubItem('Archive Project Confirmation', 'Feed', ArchiveProjectConfirmationScreen()),
       const _HubItem('Archived Projects', 'Feed', ArchivedProjectsScreen()),
       const _HubItem('Discover by Faculty', 'Discover', FacultyDiscoverScreen()),

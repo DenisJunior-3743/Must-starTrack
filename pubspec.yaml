@@ -76,6 +76,8 @@ dependencies:
   # ── Media ──────────────────────────────────────────────────
   # image_picker: camera + gallery access
   image_picker: ^1.1.2
+  # file_picker: pick PDF/Word documents for chat attachments
+  file_picker: ^8.0.7
   # image_cropper: WhatsApp-style square crop before upload
   image_cropper: ^7.0.0
   # flutter_image_compress: compress images to ≤1.5MB limit
@@ -91,6 +93,10 @@ dependencies:
   record: ^5.2.0
   # just_audio: play voice notes from local path or URL
   just_audio: ^0.9.44
+  # speech_to_text: microphone voice input for chatbot
+  speech_to_text: ^6.6.0
+  # flutter_tts: spoken assistant replies (screen-reader style)
+  flutter_tts: ^4.2.2
 
   # ── Feed & Lists ───────────────────────────────────────────
   # infinite_scroll_pagination: paginated lazy-loading feeds

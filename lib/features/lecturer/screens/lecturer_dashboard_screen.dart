@@ -24,6 +24,12 @@ import '../../auth/bloc/auth_cubit.dart';
 import '../../shared/widgets/settings_drawer.dart';
 import '../bloc/lecturer_cubit.dart';
 
+const Color _lecturerCardBlue = AppColors.primary;
+const Color _lecturerCardBlueDeep = AppColors.institutionalBlue;
+const Color _lecturerButtonGreen = AppColors.mustGreen;
+// ignore: unused_element
+const Color _lecturerTextOnCard = Colors.white;
+
 class LecturerDashboardScreen extends StatefulWidget {
   const LecturerDashboardScreen({super.key});
 
@@ -311,11 +317,37 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
     return Scaffold(
       endDrawer: const SettingsDrawer(),
       backgroundColor:
-          isDark ? AppColors.backgroundDark : AppColors.backgroundLight,
+          isDark ? AppColors.backgroundDark : const Color(0xFFF0F4FF),
       appBar: AppBar(
-        title: Text(
-          'Lecturer Dashboard',
-          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+        backgroundColor: isDark ? AppColors.surfaceDark : Colors.white,
+        foregroundColor:
+            isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+        elevation: 0,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Lecturer Dashboard',
+              style: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w800,
+                fontSize: 18,
+                color: isDark
+                    ? AppColors.textPrimaryDark
+                    : AppColors.textPrimaryLight,
+                letterSpacing: 0.2,
+              ),
+            ),
+            Text(
+              'MUST StarTrack',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 11,
+                color: isDark
+                    ? AppColors.textSecondaryDark
+                    : AppColors.textSecondaryLight,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
         ),
         centerTitle: false,
         actions: [
@@ -348,7 +380,14 @@ class _LecturerDashboardScreenState extends State<LecturerDashboardScreen> {
                     const SizedBox(height: 12),
                     Text(state.message, textAlign: TextAlign.center),
                     const SizedBox(height: 16),
-                    FilledButton(onPressed: _loadData, child: const Text('Retry')),
+                    FilledButton(
+                      onPressed: _loadData,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _lecturerButtonGreen,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Retry'),
+                    ),
                   ],
                 ),
               ),
@@ -410,6 +449,92 @@ class _DashboardBody extends StatelessWidget {
       child: CustomScrollView(
         slivers: [
           // â”€â”€ Stat cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+          // ── Welcome hero ─────────────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [_lecturerCardBlueDeep, _lecturerCardBlue],
+                ),
+                borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+                boxShadow: [
+                  BoxShadow(
+                    color: _lecturerCardBlue.withValues(alpha: 0.30),
+                    blurRadius: 28,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'LECTURER PORTAL',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white60,
+                            letterSpacing: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Dashboard Overview',
+                          style: GoogleFonts.sora(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
+                          children: [
+                            _HeroBadge(
+                              icon: Icons.campaign_rounded,
+                              label: '${state.activeOpportunities} Active',
+                              color: _lecturerButtonGreen,
+                            ),
+                            _HeroBadge(
+                              icon: Icons.people_rounded,
+                              label: '${state.totalApplicants} Applicants',
+                              color: Colors.white.withValues(alpha: 0.18),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.school_rounded,
+                      color: Colors.white,
+                      size: 32,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -480,15 +605,58 @@ class _DashboardBody extends StatelessWidget {
           // Recent group projects visibility for lecturers
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 18, 16, 6),
-              child: Text(
-                'Recent Group Projects',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: isDark
-                      ? AppColors.textPrimaryDark
-                      : AppColors.textPrimaryLight,
+              padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.surfaceDark : Colors.white,
+                  borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+                  border: Border.all(
+                    color: _lecturerCardBlue.withValues(alpha: isDark ? 0.30 : 0.14),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 4,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: _lecturerCardBlue,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Recent Group Projects',
+                            style: GoogleFonts.sora(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: isDark
+                                  ? AppColors.textPrimaryDark
+                                  : AppColors.textPrimaryLight,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Latest collaborative work published on StarTrack.',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11,
+                              color: isDark
+                                  ? AppColors.textSecondaryDark
+                                  : AppColors.textSecondaryLight,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -506,21 +674,36 @@ class _DashboardBody extends StatelessWidget {
                 }
                 if (posts.isEmpty) {
                   return Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                    child: Text(
-                      'No group projects published yet.',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        color: AppColors.textSecondaryLight,
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.surfaceDark : Colors.white,
+                        borderRadius:
+                            BorderRadius.circular(AppDimensions.radiusMd),
+                        border: Border.all(
+                          color: _lecturerCardBlue.withValues(
+                            alpha: isDark ? 0.30 : 0.12,
+                          ),
+                        ),
+                      ),
+                      child: Text(
+                        'No group projects published yet.',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 12,
+                          color: isDark
+                              ? AppColors.textSecondaryDark
+                              : AppColors.textSecondaryLight,
+                        ),
                       ),
                     ),
                   );
                 }
                 return SizedBox(
-                  height: 126,
+                  height: 146,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                     itemCount: posts.length,
                     separatorBuilder: (_, __) => const SizedBox(width: 10),
                     itemBuilder: (context, index) {
@@ -530,36 +713,83 @@ class _DashboardBody extends StatelessWidget {
                           RouteNames.projectDetail.replaceFirst(':postId', post.id),
                         ),
                         child: Container(
-                          width: 244,
+                          width: 264,
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: isDark ? AppColors.surfaceDark : Colors.white,
+                            color: isDark
+                                ? AppColors.surfaceDark
+                                : Colors.white,
                             borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
                             border: Border.all(
-                              color: isDark ? AppColors.borderDark : AppColors.borderLight,
+                              color: isDark
+                                  ? AppColors.primary.withValues(alpha: 0.26)
+                                  : AppColors.primary.withValues(alpha: 0.14),
                             ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.06),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                post.groupName ?? 'Group Project',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.success,
-                                ),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 3,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: _lecturerCardBlue.withValues(
+                                        alpha: isDark ? 0.22 : 0.12,
+                                      ),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      'GROUP',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w700,
+                                        color: isDark
+                                            ? Colors.white
+                                            : AppColors.primary,
+                                        letterSpacing: 0.6,
+                                      ),
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  Flexible(
+                                    child: Text(
+                                      post.groupName ?? 'Group Project',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.right,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: isDark
+                                            ? Colors.white70
+                                            : AppColors.textSecondaryLight,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 6),
+                              const SizedBox(height: 8),
                               Text(
                                 post.title,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.plusJakartaSans(
+                                style: GoogleFonts.sora(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w700,
+                                  color: isDark
+                                      ? AppColors.textPrimaryDark
+                                      : AppColors.textPrimaryLight,
                                 ),
                               ),
                               const Spacer(),
@@ -567,7 +797,9 @@ class _DashboardBody extends StatelessWidget {
                                 'By ${post.authorName ?? 'Unknown'}',
                                 style: GoogleFonts.plusJakartaSans(
                                   fontSize: 11,
-                                  color: AppColors.textSecondaryLight,
+                                  color: isDark
+                                      ? Colors.white60
+                                      : AppColors.textSecondaryLight,
                                 ),
                               ),
                             ],
@@ -584,75 +816,108 @@ class _DashboardBody extends StatelessWidget {
           // â”€â”€ Section header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Your Opportunities',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                        color: isDark
-                            ? AppColors.textPrimaryDark
-                            : AppColors.textPrimaryLight,
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.surfaceDark : Colors.white,
+                  borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+                  border: Border.all(
+                    color: _lecturerCardBlue.withValues(alpha: isDark ? 0.30 : 0.14),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 4,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              color: _lecturerCardBlue,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Your Opportunities',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.sora(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w800,
+                                    color: isDark
+                                        ? AppColors.textPrimaryDark
+                                        : AppColors.textPrimaryLight,
+                                    letterSpacing: -0.2,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${activeOpportunities.length} active, ${archivedOpportunities.length} archived',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 11,
+                                    color: isDark
+                                        ? AppColors.textSecondaryDark
+                                        : AppColors.textSecondaryLight,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Flexible(
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: OutlinedButton.icon(
-                        onPressed: () => onShowArchived(archivedOpportunities),
-                        icon: const Icon(Icons.unarchive_outlined, size: 18),
-                        label: Text(
-                          'Archived${archivedOpportunities.isNotEmpty ? ' (${archivedOpportunities.length})' : ''}',
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: OutlinedButton.icon(
+                          onPressed: () => onShowArchived(archivedOpportunities),
+                          icon: const Icon(Icons.unarchive_outlined, size: 18),
+                          label: Text(
+                            'Archived${archivedOpportunities.isNotEmpty ? ' (${archivedOpportunities.length})' : ''}',
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.primary,
-                          side: BorderSide(
-                            color: AppColors.primary.withValues(alpha: 0.24),
-                          ),
-                          minimumSize: const Size(0, 40),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(AppDimensions.radiusMd),
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: isDark
+                                ? _lecturerButtonGreen.withValues(alpha: 0.20)
+                                : _lecturerButtonGreen.withValues(alpha: 0.12),
+                            foregroundColor:
+                                isDark ? Colors.white : AppColors.mustGreenDark,
+                            side: BorderSide(
+                              color: _lecturerButtonGreen.withValues(alpha: 0.35),
+                            ),
+                            minimumSize: const Size(0, 40),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius:
+                                  BorderRadius.circular(AppDimensions.radiusMd),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          if (archivedOpportunities.isNotEmpty)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Text(
-                  '${archivedOpportunities.length} archived opportunit${archivedOpportunities.length == 1 ? 'y' : 'ies'} available',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12,
-                    color: isDark
-                        ? AppColors.textSecondaryDark
-                        : AppColors.textSecondaryLight,
-                  ),
+                  ],
                 ),
               ),
             ),
+          ),
 
           // â”€â”€ Opportunity list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           if (state.opportunities.isEmpty)
@@ -729,6 +994,48 @@ class _DashboardBody extends StatelessWidget {
 
 // â”€â”€ Stat card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+// ── Hero badge ────────────────────────────────────────────────────────────────
+
+class _HeroBadge extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  const _HeroBadge({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: Colors.white),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Stat card ─────────────────────────────────────────────────────────────────
+
 class _StatCard extends StatelessWidget {
   final String label;
   final String value;
@@ -746,14 +1053,28 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final valueColor = isDark
+        ? AppColors.textPrimaryDark
+        : AppColors.textPrimaryLight;
+    final labelColor = isDark
+        ? AppColors.textSecondaryDark
+        : AppColors.textSecondaryLight;
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
       decoration: BoxDecoration(
         color: isDark ? AppColors.surfaceDark : Colors.white,
         borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
         border: Border.all(
-          color: isDark ? AppColors.borderDark : AppColors.borderLight,
+          color: color.withValues(alpha: isDark ? 0.36 : 0.24),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         children: [
@@ -761,12 +1082,10 @@ class _StatCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             value,
-            style: GoogleFonts.plusJakartaSans(
+            style: GoogleFonts.sora(
               fontSize: 22,
               fontWeight: FontWeight.w800,
-              color: isDark
-                  ? AppColors.textPrimaryDark
-                  : AppColors.textPrimaryLight,
+              color: valueColor,
             ),
           ),
           const SizedBox(height: 2),
@@ -774,7 +1093,7 @@ class _StatCard extends StatelessWidget {
             label,
             style: GoogleFonts.plusJakartaSans(
               fontSize: 11,
-              color: AppColors.textSecondaryLight,
+              color: labelColor,
             ),
           ),
         ],
@@ -799,6 +1118,9 @@ class _ActionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fgPrimary = isDark
+        ? AppColors.textPrimaryDark
+        : AppColors.textPrimaryLight;
 
     return Material(
       color: isDark ? AppColors.surfaceDark : Colors.white,
@@ -811,27 +1133,30 @@ class _ActionTile extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
             border: Border.all(
-              color: isDark ? AppColors.borderDark : AppColors.borderLight,
+              color: _lecturerCardBlue.withValues(alpha: isDark ? 0.30 : 0.18),
             ),
           ),
           child: Row(
             children: [
-              Icon(icon, size: 20, color: AppColors.roleLecturer),
+              Icon(icon, size: 20, color: _lecturerCardBlue),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   label,
-                  style: GoogleFonts.plusJakartaSans(
+                  style: GoogleFonts.sora(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: isDark
-                        ? AppColors.textPrimaryDark
-                        : AppColors.textPrimaryLight,
+                    color: fgPrimary,
                   ),
                 ),
               ),
-              const Icon(Icons.arrow_forward_ios,
-                  size: 14, color: AppColors.textSecondaryLight),
+              Icon(
+                Icons.arrow_forward_ios,
+                size: 14,
+                color: isDark
+                    ? Colors.white70
+                    : AppColors.textSecondaryLight,
+              ),
             ],
           ),
         ),
@@ -860,6 +1185,13 @@ class _OpportunityTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fgPrimary = isDark
+      ? AppColors.textPrimaryDark
+      : AppColors.textPrimaryLight;
+    final fgSecondary = isDark
+      ? AppColors.textSecondaryDark
+      : AppColors.textSecondaryLight;
+
     final isArchived = opportunity.isArchived;
     final isExpired = opportunity.opportunityDeadline != null &&
         opportunity.opportunityDeadline!.isBefore(DateTime.now());
@@ -882,7 +1214,7 @@ class _OpportunityTile extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
               border: Border.all(
-                color: isDark ? AppColors.borderDark : AppColors.borderLight,
+                color: _lecturerCardBlue.withValues(alpha: isDark ? 0.30 : 0.16),
               ),
             ),
             child: Column(
@@ -894,12 +1226,10 @@ class _OpportunityTile extends StatelessWidget {
                     Expanded(
                       child: Text(
                         opportunity.title,
-                        style: GoogleFonts.plusJakartaSans(
+                        style: GoogleFonts.sora(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: isDark
-                              ? AppColors.textPrimaryDark
-                              : AppColors.textPrimaryLight,
+                          color: fgPrimary,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -922,17 +1252,15 @@ class _OpportunityTile extends StatelessWidget {
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: isArchived
-                              ? AppColors.warning
-                              : (isExpired ? AppColors.warning : AppColors.success),
+                          color: Colors.white,
                         ),
                       ),
                     ),
                     PopupMenuButton<String>(
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.more_vert_rounded,
                         size: 20,
-                        color: AppColors.textSecondaryLight,
+                        color: fgSecondary,
                       ),
                       onSelected: (value) {
                         if (value == 'edit') {
@@ -1013,7 +1341,7 @@ class _OpportunityTile extends StatelessWidget {
                       '${opportunity.joinCount} applicant${opportunity.joinCount == 1 ? '' : 's'}',
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 12,
-                        color: AppColors.textSecondaryLight,
+                        color: fgSecondary,
                       ),
                     ),
                     if (opportunity.areaOfExpertise != null) ...[
@@ -1026,7 +1354,7 @@ class _OpportunityTile extends StatelessWidget {
                           opportunity.areaOfExpertise!,
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 12,
-                            color: AppColors.textSecondaryLight,
+                            color: fgSecondary,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -1041,7 +1369,7 @@ class _OpportunityTile extends StatelessWidget {
                         _formatDeadline(opportunity.opportunityDeadline!),
                         style: GoogleFonts.plusJakartaSans(
                           fontSize: 11,
-                          color: AppColors.textHintLight,
+                          color: fgSecondary,
                         ),
                       ),
                     ],
@@ -1061,15 +1389,15 @@ class _OpportunityTile extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
-                              color: AppColors.primaryTint10,
+                              color: _lecturerCardBlue.withValues(alpha: isDark ? 0.20 : 0.10),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
                               s,
                               style: GoogleFonts.plusJakartaSans(
                                 fontSize: 11,
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w500,
+                                color: fgPrimary,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ),
@@ -1086,10 +1414,9 @@ class _OpportunityTile extends StatelessWidget {
                       icon: const Icon(Icons.unarchive_outlined, size: 18),
                       label: const Text('Unarchive'),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.primary,
-                        side: BorderSide(
-                          color: AppColors.primary.withValues(alpha: 0.22),
-                        ),
+                        backgroundColor: _lecturerButtonGreen,
+                        foregroundColor: Colors.white,
+                        side: BorderSide.none,
                       ),
                     ),
                   ),

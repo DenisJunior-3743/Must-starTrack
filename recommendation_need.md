@@ -6,7 +6,7 @@ This document explains how the current recommendation logic in MUST StarTrack wo
 1. What data the algorithms use
 2. How scores are calculated
 3. Where each algorithm is used in the app
-4. How Gemini is involved
+4. How OpenAI is involved
 5. What the current limitations are
 
 ## Main Implementation Files
@@ -24,8 +24,8 @@ Our recommendation system is **hybrid**, but **local-first**.
 That means:
 
 1. We always compute a **local score** inside the app first.
-2. If Gemini is configured, we optionally **rerank the top posts**.
-3. If Gemini is unavailable, the **local ranking still works**.
+2. If OpenAI is configured, we optionally **rerank the top posts**.
+3. If OpenAI is unavailable, the **local ranking still works**.
 
 This design matters because MUST StarTrack is offline-first and should still behave intelligently even without cloud AI.
 
@@ -118,7 +118,7 @@ Used when ranking projects or opportunities.
 - `search_intent`
 - `collaborative_signal`
 - `opportunity_fit`
-- `gemini_rerank`
+- `openai_rerank`
 
 ### 4.2 `RecommendedUser`
 **Fields**
@@ -134,7 +134,7 @@ Used when ranking people, such as collaborators or applicants.
 **Method:** `rankLocally(...)`
 
 ### Purpose
-This is the base algorithm for ranking posts before any Gemini reranking happens.
+This is the base algorithm for ranking posts before any OpenAI reranking happens.
 
 ### Inputs
 - Current user
@@ -247,34 +247,34 @@ Posts are sorted by:
 ### Practical meaning
 Skill relevance is still the most important factor. Freshness, popularity, and recent behavior refine the ordering.
 
-## 6. Algorithm 2: Hybrid Post Ranking With Gemini
+## 6. Algorithm 2: Hybrid Post Ranking With OpenAI
 **Method:** `rankHybrid(...)`
 
 ### Purpose
-This method first computes the local ranking, then optionally asks Gemini to rerank the top items.
+This method first computes the local ranking, then optionally asks OpenAI to rerank the top items.
 
-### When Gemini is used
-Gemini is only used if:
+### When OpenAI is used
+OpenAI is only used if:
 
-1. `GeminiService` exists
+1. `OpenAiService` exists
 2. The API key is configured
 3. There are ranked candidates to process
 
 ### Process
 1. Run `rankLocally(...)`
 2. Keep the top 25 posts
-3. Send user profile and candidate post summaries to Gemini
-4. Gemini returns JSON with scores
+3. Send user profile and candidate post summaries to OpenAI
+4. OpenAI returns JSON with scores
 5. Blend the scores
 
 ### Blended score formula
-- `finalScore = localScore * 0.65 + geminiScore * 0.35`
+- `finalScore = localScore * 0.65 + openAiScore * 0.35`
 
 Reason added:
-- `gemini_rerank`
+- `openai_rerank`
 
 ### Why this blend is useful
-We do not let Gemini replace the local algorithm completely. The local model remains the anchor. Gemini only adjusts the ordering.
+We do not let OpenAI replace the local algorithm completely. The local model remains the anchor. OpenAI only adjusts the ordering.
 
 This protects the app from:
 - Network failure
@@ -282,7 +282,7 @@ This protects the app from:
 - Total loss of explainability
 
 ### Fallback behavior
-If Gemini throws an error or returns no useful ranking, the app silently falls back to the local ranking.
+If OpenAI throws an error or returns no useful ranking, the app silently falls back to the local ranking.
 
 ## 7. Algorithm 3: Collaborator Recommendation
 **Method:** `rankCollaborators(...)`
@@ -626,8 +626,8 @@ The current system is solid for a Phase 5 classroom project, but it is not yet a
 3. No negative feedback model yet
    Dislikes are logged in some flows, but are not yet reducing recommendation scores directly.
 
-4. Gemini is only reranking posts
-   Gemini is not yet reranking collaborators or applicants.
+4. OpenAI is only reranking posts
+   OpenAI is not yet reranking collaborators or applicants.
 
 5. Nudge generation is rule-based
    It is explainable and stable, but not yet adaptive beyond the current signal checks.
@@ -685,15 +685,15 @@ This likely scores low because:
 3. Post C lowest
 
 ## 15. One-Minute Explanation For Groupmates
-> Our recommender is a local-first hybrid algorithm. It ranks posts and users using skill overlap, faculty/program match, recent behavior, profile quality, activity level, and engagement. The local algorithm always works offline. If Gemini is configured, it reranks the top content and blends its score with the local score. We use this for the home feed, discover page, collaborator suggestions, lecturer applicant matching, AI recommendations, and activity nudges.
+> Our recommender is a local-first hybrid algorithm. It ranks posts and users using skill overlap, faculty/program match, recent behavior, profile quality, activity level, and engagement. The local algorithm always works offline. If OpenAI is configured, it reranks the top content and blends its score with the local score. We use this for the home feed, discover page, collaborator suggestions, lecturer applicant matching, AI recommendations, and activity nudges.
 
 ## 16. Suggested Future Improvements
 1. Add negative-feedback scoring from dislikes and skips
 2. Add stronger collaborative filtering from similar-user interactions
 3. Add explicit weighting decay for older searches and actions
-4. Use Gemini to explain why a post or applicant was recommended
+4. Use OpenAI to explain why a post or applicant was recommended
 5. Add A/B testing for weight tuning
-6. Move Gemini calls behind a backend proxy for production safety
+6. Keep OpenAI calls behind a backend proxy for production safety
 
 ## 17. Final Conclusion
 The current MUST StarTrack recommender system is already structured around explainable, academic-context recommendations.
@@ -707,7 +707,7 @@ It is mainly driven by:
 - User activity quality
 - Contextual opportunity fit
 
-Gemini is an enhancement layer, not the foundation.
+OpenAI is an enhancement layer, not the foundation.
 
 The foundation is the local ranking logic inside `recommender_service.dart`.
 

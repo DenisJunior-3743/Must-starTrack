@@ -64,14 +64,39 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
     final groupDao = sl<GroupDao>();
     final memberDao = sl<GroupMemberDao>();
     final postDao = sl<PostDao>();
+    final syncService = sl<SyncService>();
     final userId = _currentUserId;
+
+    try {
+      await syncService.processPendingSync();
+      if (userId != null && userId.isNotEmpty) {
+        await syncService.refreshGroupWorkspace(
+          groupId: widget.groupId,
+          currentUid: userId,
+        );
+      } else {
+        await syncService.syncRemoteToLocal(
+          postLimit: 120,
+          suppressNotificationAlerts: true,
+        );
+      }
+    } catch (error) {
+      debugPrint(
+        '[GroupDetail] Remote refresh failed for group=${widget.groupId}: $error',
+      );
+    }
 
     final group = await groupDao.getGroupById(widget.groupId);
     final members = await memberDao.getMembersForGroup(widget.groupId);
-    final posts = await postDao.getPostsByGroup(widget.groupId, pageSize: 80);
+    final posts = await postDao.getFeedPage(
+      pageSize: 80,
+      filterGroupId: widget.groupId,
+      currentUserId: userId,
+    );
     final myMembership = userId == null
         ? null
-        : await memberDao.getMembership(groupId: widget.groupId, userId: userId);
+        : await memberDao.getMembership(
+            groupId: widget.groupId, userId: userId);
 
     if (!mounted) return;
     setState(() {
@@ -131,6 +156,12 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
     }
     await _refreshGroupCount();
     await syncService.processPendingSync();
+    if (accept) {
+      await syncService.refreshGroupWorkspace(
+        groupId: group.id,
+        currentUid: userId,
+      );
+    }
     await _load();
   }
 
@@ -183,7 +214,8 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
                 child: const Text('Cancel'),
               ),
               FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+                style:
+                    FilledButton.styleFrom(backgroundColor: AppColors.danger),
                 onPressed: () => Navigator.of(context).pop(true),
                 child: const Text('Dissolve'),
               ),
@@ -249,17 +281,79 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
             }).toList();
 
             return AlertDialog(
-              title: const Text('Invite Members'),
+              insetPadding:
+                  const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+              titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+              contentPadding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+              title: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.14),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.group_add_rounded,
+                      size: 18,
+                      color: Color(0xFF10B981),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Invite Members',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 18,
+                    ),
+                  ),
+                ],
+              ),
               content: SizedBox(
-                width: 460,
+                width: 520,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Text(
+                      'Search and select users to send group invites.',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        color: AppColors.textSecondaryLight,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
                     TextField(
-                      onChanged: (value) => setModalState(() => query = value.toLowerCase()),
-                      decoration: const InputDecoration(
+                      onChanged: (value) =>
+                          setModalState(() => query = value.toLowerCase()),
+                      decoration: InputDecoration(
                         hintText: 'Search registered users',
-                        prefixIcon: Icon(Icons.search_rounded),
+                        hintStyle: GoogleFonts.plusJakartaSans(fontSize: 13),
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        filled: true,
+                        fillColor: AppColors.primaryTint10,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: AppColors.primary.withValues(alpha: 0.16),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: AppColors.primary.withValues(alpha: 0.16),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: AppColors.primary.withValues(alpha: 0.42),
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -268,19 +362,50 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
                         shrinkWrap: true,
                         children: filtered.map((user) {
                           final checked = selectedIds.contains(user.id);
-                          return CheckboxListTile(
-                            value: checked,
-                            title: Text(user.displayName ?? user.email),
-                            subtitle: Text(user.email),
-                            onChanged: (_) {
-                              setModalState(() {
-                                if (checked) {
-                                  selectedIds.remove(user.id);
-                                } else {
-                                  selectedIds.add(user.id);
-                                }
-                              });
-                            },
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              color: checked
+                                  ? AppColors.primaryTint10
+                                  : Colors.transparent,
+                              border: Border.all(
+                                color: checked
+                                    ? AppColors.primary.withValues(alpha: 0.30)
+                                    : AppColors.borderLight,
+                              ),
+                            ),
+                            child: CheckboxListTile(
+                              value: checked,
+                              activeColor: const Color(0xFF10B981),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                              ),
+                              controlAffinity:
+                                  ListTileControlAffinity.trailing,
+                              title: Text(
+                                user.displayName ?? user.email,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              subtitle: Text(
+                                user.email,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondaryLight,
+                                ),
+                              ),
+                              onChanged: (_) {
+                                setModalState(() {
+                                  if (checked) {
+                                    selectedIds.remove(user.id);
+                                  } else {
+                                    selectedIds.add(user.id);
+                                  }
+                                });
+                              },
+                            ),
                           );
                         }).toList(),
                       ),
@@ -294,6 +419,10 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
                   child: const Text('Cancel'),
                 ),
                 FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF10B981),
+                    foregroundColor: Colors.white,
+                  ),
                   onPressed: () => Navigator.of(context).pop(true),
                   child: const Text('Send Invites'),
                 ),
@@ -354,10 +483,16 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
     }
 
     final activeMembers = _members.where((member) => member.isActive).toList();
-    final pendingMembers = _members.where((member) => !member.isActive).toList();
+    final pendingMembers =
+        _members.where((member) => !member.isActive).toList();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
         title: Text(
           group.name,
           style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
@@ -382,231 +517,348 @@ class _GroupDetailScreenState extends State<GroupDetailScreen>
               tooltip: 'Edit group',
             ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Projects'),
-            Tab(text: 'Members'),
-            Tab(text: 'Info'),
-          ],
-        ),
-      ),
-      body: Column(
-        children: [
-          if (_myMembership?.status == 'pending')
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              color: AppColors.warning.withValues(alpha: 0.14),
-              child: Row(
-                children: [
-                  const Icon(Icons.mark_email_unread_rounded, color: AppColors.warning),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'You have a pending invite to join this group.',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.warning,
-                      ),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () => _respondToInvite(false),
-                    child: const Text('Decline'),
-                  ),
-                  const SizedBox(width: 4),
-                  SizedBox(
-                    height: 36,
-                    child: FilledButton(
-                      onPressed: () => _respondToInvite(true),
-                      child: const Text('Accept'),
-                    ),
-                  ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(62),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: Container(
+              height: 46,
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.white.withValues(alpha: 0.86),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.16)
+                      : AppColors.primary.withValues(alpha: 0.12),
+                ),
+              ),
+              child: TabBar(
+                controller: _tabController,
+                labelStyle: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+                unselectedLabelStyle: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+                dividerColor: Colors.transparent,
+                indicatorSize: TabBarIndicatorSize.tab,
+                indicator: BoxDecoration(
+                  color: const Color(0xFF10B981),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                labelColor: Colors.white,
+                unselectedLabelColor: AppColors.textSecondaryLight,
+                tabs: const [
+                  Tab(text: 'Projects'),
+                  Tab(text: 'Members'),
+                  Tab(text: 'Info'),
                 ],
               ),
             ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
+          ),
+        ),
+      ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: isDark
+                ? const [Color(0xFF0B1222), Color(0xFF111D36)]
+                : const [Color(0xFFF8FBFF), Color(0xFFECF3FF)],
+          ),
+        ),
+        child: Stack(
+          children: [
+            const Positioned(
+              top: -70,
+              right: -70,
+              child: _GlowBlob(size: 220, color: Color(0x332563EB)),
+            ),
+            const Positioned(
+              bottom: -82,
+              left: -88,
+              child: _GlowBlob(size: 250, color: Color(0x221152D4)),
+            ),
+            Column(
               children: [
-                RefreshIndicator(
-                  onRefresh: _load,
-                  child: _posts.isEmpty
-                      ? ListView(
-                          padding: const EdgeInsets.all(24),
-                          children: [
-                            const SizedBox(height: 80),
-                            const Icon(Icons.folder_copy_outlined,
-                                size: 64, color: AppColors.primary),
-                            const SizedBox(height: 16),
+                if (_myMembership?.status == 'pending')
+                  Container(
+                    margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: AppColors.warning.withValues(alpha: 0.40),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.mark_email_unread_rounded,
+                            color: AppColors.warning),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'You have a pending invite to join this group.',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.warning,
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => _respondToInvite(false),
+                          child: const Text('Decline'),
+                        ),
+                        const SizedBox(width: 4),
+                        SizedBox(
+                          height: 36,
+                          child: FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF10B981),
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () => _respondToInvite(true),
+                            child: const Text('Accept'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      RefreshIndicator(
+                        onRefresh: _load,
+                        child: _posts.isEmpty
+                            ? ListView(
+                                padding: const EdgeInsets.all(24),
+                                children: [
+                                  const SizedBox(height: 80),
+                                  const Icon(Icons.folder_copy_outlined,
+                                      size: 64, color: AppColors.primary),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'No group projects yet',
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    _canUpload
+                                        ? 'Use the upload action to publish the first project for this group.'
+                                        : 'Projects will appear here after active members publish them.',
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 13,
+                                      color: AppColors.textSecondaryLight,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : ListView(
+                                padding:
+                                    const EdgeInsets.fromLTRB(16, 16, 16, 96),
+                                children: _posts
+                                    .map(
+                                      (post) => Container(
+                                        margin:
+                                            const EdgeInsets.only(bottom: 12),
+                                        decoration: BoxDecoration(
+                                          color: isDark
+                                              ? Colors.white
+                                                  .withValues(alpha: 0.06)
+                                              : Colors.white
+                                                  .withValues(alpha: 0.86),
+                                          borderRadius:
+                                              BorderRadius.circular(14),
+                                          border: Border.all(
+                                            color: isDark
+                                                ? Colors.white.withValues(
+                                                    alpha: 0.15)
+                                                : AppColors.primary
+                                                    .withValues(alpha: 0.10),
+                                          ),
+                                        ),
+                                        child: ListTile(
+                                          contentPadding:
+                                              const EdgeInsets.all(14),
+                                          title: Text(
+                                            post.title,
+                                            style:
+                                                GoogleFonts.plusJakartaSans(
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          subtitle: Padding(
+                                            padding:
+                                                const EdgeInsets.only(top: 8),
+                                            child: Text(
+                                              post.description ??
+                                                  'No description provided.',
+                                              maxLines: 3,
+                                              overflow: TextOverflow.ellipsis,
+                                              style:
+                                                  GoogleFonts.plusJakartaSans(
+                                                fontSize: 12,
+                                                color: AppColors
+                                                    .textSecondaryLight,
+                                                height: 1.4,
+                                              ),
+                                            ),
+                                          ),
+                                          trailing: const Icon(
+                                            Icons.arrow_forward_ios_rounded,
+                                            size: 16,
+                                          ),
+                                          onTap: () => context.push(
+                                            RouteNames.projectDetail
+                                                .replaceFirst(
+                                                    ':postId', post.id),
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                              ),
+                      ),
+                      ListView(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+                        children: [
+                          Text(
+                            'Active Members (${activeMembers.length})',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          ...activeMembers
+                              .map((member) => _MemberTile(member: member)),
+                          if (pendingMembers.isNotEmpty) ...[
+                            const SizedBox(height: 20),
                             Text(
-                              'No group projects yet',
-                              textAlign: TextAlign.center,
+                              'Pending Invites (${pendingMembers.length})',
                               style: GoogleFonts.plusJakartaSans(
-                                fontSize: 18,
+                                fontSize: 16,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _canUpload
-                                  ? 'Use the upload action to publish the first project for this group.'
-                                  : 'Projects will appear here after active members publish them.',
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 13,
-                                color: AppColors.textSecondaryLight,
-                              ),
-                            ),
+                            const SizedBox(height: 10),
+                            ...pendingMembers
+                                .map((member) => _MemberTile(member: member)),
                           ],
-                        )
-                      : ListView(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-                          children: _posts
-                              .map(
-                                (post) => Card(
-                                  margin: const EdgeInsets.only(bottom: 12),
-                                  child: ListTile(
-                                    contentPadding: const EdgeInsets.all(14),
-                                    title: Text(
-                                      post.title,
-                                      style: GoogleFonts.plusJakartaSans(
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    subtitle: Padding(
-                                      padding: const EdgeInsets.only(top: 8),
-                                      child: Text(
-                                        post.description ?? 'No description provided.',
-                                        maxLines: 3,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: GoogleFonts.plusJakartaSans(
-                                          fontSize: 12,
-                                          color: AppColors.textSecondaryLight,
-                                          height: 1.4,
-                                        ),
-                                      ),
-                                    ),
-                                    trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
-                                    onTap: () => context.push(
-                                      RouteNames.projectDetail.replaceFirst(':postId', post.id),
-                                    ),
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                        ),
-                ),
-                ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-                  children: [
-                    Text(
-                      'Active Members (${activeMembers.length})',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    ...activeMembers.map((member) => _MemberTile(member: member)),
-                    if (pendingMembers.isNotEmpty) ...[
-                      const SizedBox(height: 20),
-                      Text(
-                        'Pending Invites (${pendingMembers.length})',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      ...pendingMembers.map((member) => _MemberTile(member: member)),
-                    ],
-                  ],
-                ),
-                ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF0F4C81), Color(0xFF3B82F6)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            group.name,
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            group.description ?? 'No group description added yet.',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 13,
-                              color: Colors.white.withValues(alpha: 0.92),
-                              height: 1.4,
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          Wrap(
-                            spacing: 10,
-                            runSpacing: 10,
-                            children: [
-                              _StatPill(label: '${activeMembers.length} active members'),
-                              _StatPill(label: '${_posts.length} projects'),
-                              _StatPill(label: group.isDissolved ? 'Dissolved' : 'Active'),
-                            ],
-                          ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    if (_canUpload)
-                      FilledButton.icon(
-                        onPressed: _openUploadProject,
-                        icon: const Icon(Icons.upload_file_rounded),
-                        label: const Text('Upload Group Project'),
-                      ),
-                    if (_canManage) ...[
-                      const SizedBox(height: 10),
-                      OutlinedButton.icon(
-                        onPressed: _openInviteDialog,
-                        icon: const Icon(Icons.person_add_alt_1_rounded),
-                        label: const Text('Invite Members'),
-                      ),
-                      const SizedBox(height: 10),
-                      OutlinedButton.icon(
-                        onPressed: _openEditGroup,
-                        icon: const Icon(Icons.edit_rounded),
-                        label: const Text('Edit Group Profile'),
-                      ),
-                      const SizedBox(height: 10),
-                      OutlinedButton.icon(
-                        onPressed: _dissolveGroup,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.danger,
-                        ),
-                        icon: const Icon(Icons.delete_outline_rounded),
-                        label: const Text('Dissolve Group'),
+                      ListView(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(18),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [
+                                  Color(0xFF0F4C81),
+                                  Color(0xFF3B82F6),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(
+                                  AppDimensions.radiusLg),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  group.name,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  group.description ??
+                                      'No group description added yet.',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 13,
+                                    color: Colors.white.withValues(alpha: 0.92),
+                                    height: 1.4,
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+                                Wrap(
+                                  spacing: 10,
+                                  runSpacing: 10,
+                                  children: [
+                                    _StatPill(
+                                        label:
+                                            '${activeMembers.length} active members'),
+                                    _StatPill(label: '${_posts.length} projects'),
+                                    _StatPill(
+                                        label: group.isDissolved
+                                            ? 'Dissolved'
+                                            : 'Active'),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          if (_canUpload)
+                            FilledButton.icon(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF10B981),
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: _openUploadProject,
+                              icon: const Icon(Icons.upload_file_rounded),
+                              label: const Text('Upload Group Project'),
+                            ),
+                          if (_canManage) ...[
+                            const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              onPressed: _openInviteDialog,
+                              icon: const Icon(Icons.person_add_alt_1_rounded),
+                              label: const Text('Invite Members'),
+                            ),
+                            const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              onPressed: _openEditGroup,
+                              icon: const Icon(Icons.edit_rounded),
+                              label: const Text('Edit Group Profile'),
+                            ),
+                            const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              onPressed: _dissolveGroup,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.danger,
+                              ),
+                              icon: const Icon(Icons.delete_outline_rounded),
+                              label: const Text('Dissolve Group'),
+                            ),
+                          ],
+                        ],
                       ),
                     ],
-                  ],
+                  ),
                 ),
               ],
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -703,6 +955,33 @@ class _StatPill extends StatelessWidget {
           fontSize: 11,
           fontWeight: FontWeight.w700,
           color: Colors.white,
+        ),
+      ),
+    );
+  }
+}
+
+class _GlowBlob extends StatelessWidget {
+  final double size;
+  final Color color;
+
+  const _GlowBlob({required this.size, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: color,
+              blurRadius: 80,
+              spreadRadius: 25,
+            ),
+          ],
         ),
       ),
     );

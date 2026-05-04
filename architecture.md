@@ -35,8 +35,8 @@ MUST StarTrack is a Flutter application built around a local-first, offline-awar
 
 - Recommendation workflows are hybrid and local-first
 - Local ranking runs first using skills, profile data, search history, engagement, and activity signals
-- Gemini is used as an optional reranking layer and as fallback reasoning for the assistant
-- The assistant prefers local FAQ and project knowledge before Gemini fallback
+- OpenAI is used as an optional reranking layer and as fallback reasoning for the assistant
+- The assistant prefers local FAQ and project knowledge before OpenAI fallback
 
 ## Main Product Modules
 
@@ -81,7 +81,7 @@ MUST StarTrack is a Flutter application built around a local-first, offline-awar
 - Cloud Firestore
 - Firebase Storage
 - Firebase Messaging
-- Gemini API integration
+- OpenAI API integration
 
 ## Notes For Assistant Training
 
@@ -89,6 +89,6 @@ This file is useful as a stable source for the assistant when answering:
 
 - what the app does
 - how the app is structured
-- whether Gemini is used
+- whether OpenAI is used
 - how recommendations work at a high level
 - what lecturers and admins can do

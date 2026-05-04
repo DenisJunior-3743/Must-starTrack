@@ -21,7 +21,7 @@
 
 abstract final class DatabaseSchema {
   static const String databaseName = 'must_startrack.db';
-  static const int databaseVersion = 13;
+  static const int databaseVersion = 14;
 
   // ── Table Names ────────────────────────────────────────────────────────────
   static const String tableUsers = 'users';
@@ -210,6 +210,8 @@ abstract final class DatabaseSchema {
       external_links   TEXT DEFAULT '[]',
       external_link    TEXT,
       github_link      TEXT,
+      ownership_answers TEXT DEFAULT '{}',
+      content_validation_answers TEXT DEFAULT '{}',
       visibility       TEXT NOT NULL DEFAULT 'public',
       status           TEXT NOT NULL DEFAULT 'published',
       suspicion_score  REAL NOT NULL DEFAULT 0.0,
@@ -219,9 +221,18 @@ abstract final class DatabaseSchema {
       share_count      INTEGER NOT NULL DEFAULT 0,
       view_count       INTEGER NOT NULL DEFAULT 0,
       is_cached        INTEGER NOT NULL DEFAULT 1,
+      is_saved_by_me   INTEGER NOT NULL DEFAULT 0,
       is_archived      INTEGER NOT NULL DEFAULT 0,
       moderation_status TEXT DEFAULT 'approved',
       trust_score      INTEGER NOT NULL DEFAULT 100,
+      ai_review_status TEXT,
+      ai_decision      TEXT,
+      ai_confidence    REAL,
+      ai_scores        TEXT DEFAULT '{}',
+      ai_findings      TEXT DEFAULT '[]',
+      ai_evidence      TEXT DEFAULT '[]',
+      ai_final_take    TEXT,
+      ai_reviewed_at   TEXT,
       area_of_expertise TEXT,
       max_participants INTEGER DEFAULT 0,
       join_count       INTEGER NOT NULL DEFAULT 0,
@@ -648,6 +659,7 @@ abstract final class DatabaseSchema {
     'CREATE INDEX IF NOT EXISTS idx_group_members_user ON $tableGroupMembers(user_id)',
     'CREATE INDEX IF NOT EXISTS idx_group_members_status ON $tableGroupMembers(status)',
     'CREATE INDEX IF NOT EXISTS idx_posts_group ON $tablePosts(group_id)',
+    'CREATE INDEX IF NOT EXISTS idx_posts_ai_review ON $tablePosts(ai_review_status)',
     'CREATE INDEX IF NOT EXISTS idx_rec_logs_user ON $tableRecommendationLogs(user_id)',
     'CREATE INDEX IF NOT EXISTS idx_rec_logs_algo ON $tableRecommendationLogs(algorithm)',
     'CREATE INDEX IF NOT EXISTS idx_rec_logs_time ON $tableRecommendationLogs(logged_at DESC)',

@@ -27,6 +27,8 @@
 //  PasswordStrengthBar
 //    â€¢ Feedback: real-time strength visualisation
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -57,6 +59,7 @@ class StTextField extends StatelessWidget {
   final String? initialValue;
   final List<TextInputFormatter> inputFormatters;
   final AutovalidateMode autovalidateMode;
+  final VoidCallback? onTap;
 
   const StTextField({
     super.key,
@@ -79,6 +82,7 @@ class StTextField extends StatelessWidget {
     this.initialValue,
     this.inputFormatters = const [],
     this.autovalidateMode = AutovalidateMode.disabled,
+    this.onTap,
   });
 
   @override
@@ -87,9 +91,8 @@ class StTextField extends StatelessWidget {
     final effectiveMaxLines = obscureText ? 1 : maxLines;
     final shouldUseMultilineKeyboard =
         effectiveMaxLines > 1 && textInputAction == TextInputAction.newline;
-    final effectiveKeyboardType = shouldUseMultilineKeyboard
-        ? TextInputType.multiline
-        : keyboardType;
+    final effectiveKeyboardType =
+        shouldUseMultilineKeyboard ? TextInputType.multiline : keyboardType;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -119,6 +122,7 @@ class StTextField extends StatelessWidget {
           maxLines: effectiveMaxLines,
           enabled: enabled,
           onChanged: onChanged,
+          onTap: onTap,
           onFieldSubmitted: onFieldSubmitted,
           textInputAction: textInputAction,
           focusNode: focusNode,
@@ -193,7 +197,9 @@ class StDropdown<T> extends StatelessWidget {
             style: GoogleFonts.plusJakartaSans(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+              color: isDark
+                  ? AppColors.textPrimaryDark
+                  : AppColors.textPrimaryLight,
             ),
           ),
         ),
@@ -205,19 +211,25 @@ class StDropdown<T> extends StatelessWidget {
           onChanged: enabled ? onChanged : null,
           validator: enabled ? validator : null,
           hint: hint != null
-              ? Text(hint!, style: GoogleFonts.plusJakartaSans(fontSize: 14, color: AppColors.textHintLight))
+              ? Text(hint!,
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 14, color: AppColors.textHintLight))
               : null,
-          icon: const Icon(Icons.expand_more, color: AppColors.textSecondaryLight),
+          icon: const Icon(Icons.expand_more,
+              color: AppColors.textSecondaryLight),
           iconSize: 18,
           style: GoogleFonts.plusJakartaSans(
             fontSize: 14,
-            color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+            color:
+                isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
           ),
           decoration: InputDecoration(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
             helperText: helperText,
           ),
-          dropdownColor: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+          dropdownColor:
+              isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
           borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
         ),
       ],
@@ -235,6 +247,7 @@ class StButton extends StatelessWidget {
   final bool isLoading;
   final IconData? trailingIcon;
   final IconData? leadingIcon;
+  final double? buttonHeight;
 
   const StButton({
     super.key,
@@ -243,14 +256,33 @@ class StButton extends StatelessWidget {
     this.isLoading = false,
     this.trailingIcon,
     this.leadingIcon,
+    this.buttonHeight,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return SizedBox(
       width: double.infinity,
-      height: AppDimensions.touchTargetMin + 8, // 56dp
+      height: buttonHeight ?? (AppDimensions.touchTargetMin + 8),
       child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor:
+              isDark ? const Color(0xFF7EDC84) : const Color(0xFF2E7D32),
+          foregroundColor: Colors.white,
+          disabledBackgroundColor:
+              (isDark ? const Color(0xFF7EDC84) : const Color(0xFF2E7D32))
+                  .withValues(alpha: 0.45),
+          disabledForegroundColor: Colors.white.withValues(alpha: 0.75),
+          textStyle: GoogleFonts.plusJakartaSans(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.1,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+          ),
+        ),
         onPressed: isLoading ? null : onPressed,
         child: isLoading
             ? const SizedBox(
@@ -297,6 +329,7 @@ class StOutlinedButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final IconData? leadingIcon;
   final bool isLoading;
+  final double? buttonHeight;
 
   const StOutlinedButton({
     super.key,
@@ -304,14 +337,31 @@ class StOutlinedButton extends StatelessWidget {
     this.onPressed,
     this.leadingIcon,
     this.isLoading = false,
+    this.buttonHeight,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return SizedBox(
       width: double.infinity,
-      height: 56,
+      height: buttonHeight ?? 56,
       child: OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: isDark ? const Color(0xFF7EDC84) : const Color(0xFF2E7D32),
+          side: BorderSide(
+            color: isDark
+                ? const Color(0xFF7EDC84).withValues(alpha: 0.75)
+                : const Color(0xFF2E7D32).withValues(alpha: 0.7),
+          ),
+          textStyle: GoogleFonts.plusJakartaSans(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+          ),
+        ),
         onPressed: isLoading ? null : onPressed,
         child: isLoading
             ? const SizedBox(
@@ -361,6 +411,13 @@ class GoogleSignInButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final labelTextStyle = GoogleFonts.plusJakartaSans(
+      fontSize: 15,
+      fontWeight: FontWeight.w600,
+      color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+    );
+    final iconSize = (labelTextStyle.fontSize ?? 15) * 1.6;
+
     return SizedBox(
       width: double.infinity,
       height: 56,
@@ -384,8 +441,7 @@ class GoogleSignInButton extends StatelessWidget {
             : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Google G logo â€” built in pure Flutter, no asset needed
-                  _GoogleLogo(),
+                  _GoogleLogo(size: iconSize),
                   const SizedBox(width: 12),
                   Flexible(
                     child: Text(
@@ -394,13 +450,7 @@ class GoogleSignInButton extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       softWrap: false,
                       textAlign: TextAlign.center,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: isDark
-                            ? AppColors.textPrimaryDark
-                            : AppColors.textPrimaryLight,
-                      ),
+                      style: labelTextStyle,
                     ),
                   ),
                 ],
@@ -411,45 +461,64 @@ class GoogleSignInButton extends StatelessWidget {
 }
 
 class _GoogleLogo extends StatelessWidget {
+  final double size;
+
+  const _GoogleLogo({required this.size});
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 20,
-      height: 20,
-      child: CustomPaint(painter: _GoogleLogoPainter()),
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _GoogleGLogoPainter(),
+      ),
     );
   }
 }
 
-class _GoogleLogoPainter extends CustomPainter {
+class _GoogleGLogoPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..style = PaintingStyle.fill;
+    final stroke = size.width * 0.20;
+    final radius = (size.width - stroke) / 2;
+    final center = Offset(size.width / 2, size.height / 2);
+    final rect = Rect.fromCircle(center: center, radius: radius);
 
-    // Simple coloured circle as Google logo placeholder.
-    // In production, use an SVG asset via flutter_svg.
-    final colors = [
-      const Color(0xFF4285F4),
-      const Color(0xFF34A853),
-      const Color(0xFFFBBC05),
-      const Color(0xFFEA4335),
-    ];
-    final sweeps = [90.0, 90.0, 90.0, 90.0];
-    double start = -90;
-    for (int i = 0; i < 4; i++) {
-      paint.color = colors[i];
+    final arcPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.butt;
+
+    void arc(Color color, double startDeg, double sweepDeg) {
+      arcPaint.color = color;
       canvas.drawArc(
-        Rect.fromLTWH(0, 0, size.width, size.height),
-        start * 3.14159 / 180,
-        sweeps[i] * 3.14159 / 180,
-        true,
-        paint,
+        rect,
+        startDeg * math.pi / 180,
+        sweepDeg * math.pi / 180,
+        false,
+        arcPaint,
       );
-      start += sweeps[i];
     }
-    // White centre
-    paint.color = Colors.white;
-    canvas.drawCircle(Offset(size.width / 2, size.height / 2), size.width * 0.28, paint);
+
+    // Canonical Google G ring segments.
+    arc(const Color(0xFFEA4335), 300, 118); // red
+    arc(const Color(0xFFFBBC05), 60, 78); // yellow
+    arc(const Color(0xFF34A853), 140, 92); // green
+    arc(const Color(0xFF4285F4), 234, 118); // blue
+
+    // Strong blue crossbar so the glyph clearly reads as "G".
+    final barPaint = Paint()
+      ..color = const Color(0xFF4285F4)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.butt;
+    final barY = center.dy - stroke * 0.04;
+    canvas.drawLine(
+      Offset(center.dx - stroke * 0.05, barY),
+      Offset(center.dx + radius + stroke / 2, barY),
+      barPaint,
+    );
   }
 
   @override
@@ -504,7 +573,8 @@ class ProgressStepper extends StatelessWidget {
                     color: (isActive || isDone)
                         ? AppColors.primary
                         : AppColors.primary.withValues(alpha: 0.20),
-                    borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+                    borderRadius:
+                        BorderRadius.circular(AppDimensions.radiusFull),
                   ),
                 ),
               );
@@ -584,15 +654,26 @@ class _SkillChipInputState extends State<SkillChipInput> {
   late List<String> _skills;
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
+  final _tooltipKey = GlobalKey<TooltipState>();
+  bool _hasShownTooltip = false;
 
   @override
   void initState() {
     super.initState();
     _skills = List.from(widget.initialSkills);
+    _focusNode.addListener(_onFocusChange);
+  }
+
+  void _onFocusChange() {
+    if (_focusNode.hasFocus && !_hasShownTooltip) {
+      _hasShownTooltip = true;
+      _tooltipKey.currentState?.ensureTooltipVisible();
+    }
   }
 
   @override
   void dispose() {
+    _focusNode.removeListener(_onFocusChange);
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -602,7 +683,7 @@ class _SkillChipInputState extends State<SkillChipInput> {
     final existingLower = _skills.map((s) => s.toLowerCase()).toSet();
     final incoming = value
         .split(RegExp(r'[,;|\n\r]+'))
-        .map((part) => part.trim().replaceAll(RegExp(r'\s+'), ' '))
+        .map((part) => part.trim().replaceAll(RegExp(r'\s+'), '_'))
         .where((part) => part.isNotEmpty)
         .toList();
 
@@ -647,7 +728,9 @@ class _SkillChipInputState extends State<SkillChipInput> {
             style: GoogleFonts.plusJakartaSans(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+              color: isDark
+                  ? AppColors.textPrimaryDark
+                  : AppColors.textPrimaryLight,
             ),
           ),
         ),
@@ -674,8 +757,28 @@ class _SkillChipInputState extends State<SkillChipInput> {
                       label: skill,
                       onRemove: () => _removeSkill(skill),
                     )),
-                // Inline text input
-                SizedBox(
+                // Inline text input with tooltip guidance on focus
+                Tooltip(
+                  key: _tooltipKey,
+                  triggerMode: TooltipTriggerMode.manual,
+                  showDuration: const Duration(seconds: 6),
+                  waitDuration: Duration.zero,
+                  preferBelow: false,
+                  verticalOffset: 20,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  textStyle: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    color: Colors.white,
+                    height: 1.4,
+                  ),
+                  message:
+                      'Skills are added as tags — spaces are not allowed.\n'
+                      'Use underscore instead, e.g. web_programming.\n'
+                      'Press Enter or comma to add each skill.',
+                  child: SizedBox(
                   height: 32,
                   child: TextField(
                     controller: _controller,
@@ -695,11 +798,23 @@ class _SkillChipInputState extends State<SkillChipInput> {
                     ),
                     onSubmitted: _addSkill,
                     onChanged: (v) {
-                      if (v.endsWith(',') || v.endsWith(' ')) {
-                        _addSkill(v.trim());
+                      // Auto-replace spaces with underscores as the user types
+                      if (v.contains(' ')) {
+                        final fixed = v.replaceAll(' ', '_');
+                        _controller.value = _controller.value.copyWith(
+                          text: fixed,
+                          selection: TextSelection.collapsed(
+                              offset: fixed.length),
+                        );
+                        return;
+                      }
+                      // Comma acts as a submit separator
+                      if (v.endsWith(',')) {
+                        _addSkill(v.replaceAll(',', '').trim());
                       }
                     },
                   ),
+                ),
                 ),
               ],
             ),
@@ -707,7 +822,7 @@ class _SkillChipInputState extends State<SkillChipInput> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Press Enter or comma to add â€” up to ${widget.maxSkills} skills',
+          'Press Enter or comma to add up to ${widget.maxSkills} skills',
           style: GoogleFonts.plusJakartaSans(
             fontSize: 11,
             color: AppColors.textSecondaryLight,
@@ -726,6 +841,7 @@ class _SkillChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final displayLabel = label.replaceAll('_', ' ');
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
@@ -736,7 +852,7 @@ class _SkillChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            label,
+            displayLabel,
             style: GoogleFonts.plusJakartaSans(
               fontSize: 12,
               fontWeight: FontWeight.w500,
@@ -786,11 +902,11 @@ class PasswordStrengthBar extends StatelessWidget {
     if (strength == PasswordStrength.empty) return const SizedBox.shrink();
 
     final (color, label, filled) = switch (strength) {
-      PasswordStrength.weak   => (AppColors.danger,  'Weak',   1),
-      PasswordStrength.fair   => (AppColors.warning,  'Fair',   2),
-      PasswordStrength.good   => (AppColors.info,    'Good',   3),
+      PasswordStrength.weak => (AppColors.danger, 'Weak', 1),
+      PasswordStrength.fair => (AppColors.warning, 'Fair', 2),
+      PasswordStrength.good => (AppColors.info, 'Good', 3),
       PasswordStrength.strong => (AppColors.success, 'Strong', 4),
-      _                       => (AppColors.borderLight, '', 0),
+      _ => (AppColors.borderLight, '', 0),
     };
 
     return Column(
@@ -807,7 +923,8 @@ class PasswordStrengthBar extends StatelessWidget {
                   height: 4,
                   decoration: BoxDecoration(
                     color: i < filled ? color : AppColors.borderLight,
-                    borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+                    borderRadius:
+                        BorderRadius.circular(AppDimensions.radiusFull),
                   ),
                 ),
               ),
@@ -829,9 +946,6 @@ class PasswordStrengthBar extends StatelessWidget {
   }
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// OrDivider â€” "â”€â”€ Or â”€â”€" separator between auth options
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class OrDivider extends StatelessWidget {
   const OrDivider({super.key});
@@ -859,9 +973,7 @@ class OrDivider extends StatelessWidget {
   }
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// InfoBanner â€” inline info / warning box (matches HTML prototype error boxes)
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
 
 class InfoBanner extends StatelessWidget {
   final String message;
@@ -915,4 +1027,3 @@ class InfoBanner extends StatelessWidget {
     );
   }
 }
-

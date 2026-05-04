@@ -61,6 +61,7 @@ import '../../data/local/services/faculty_seeder.dart';
 import '../../data/remote/firestore_service.dart';
 import '../../data/remote/fcm_service.dart';
 import '../../data/remote/openai_service.dart';
+import '../../data/remote/project_validation_service.dart';
 import '../../data/remote/recommender_service.dart';
 import '../../data/remote/skill_pattern_service.dart';
 import '../../data/remote/sync_service.dart';
@@ -112,6 +113,7 @@ class InjectionContainer {
       OpenAiService(
         apiKey: openAiApiKey,
         model: OpenAiConfig.model,
+        diagnosticsTag: 'di_bootstrap',
       ),
     );
 
@@ -121,6 +123,10 @@ class InjectionContainer {
 
     sl.registerSingleton<SkillPatternService>(
       SkillPatternService(openAiService: sl<OpenAiService>()),
+    );
+
+    sl.registerSingleton<ProjectValidationService>(
+      ProjectValidationService(openAiService: sl<OpenAiService>()),
     );
   }
 
@@ -246,6 +252,7 @@ class InjectionContainer {
       OpenAiService(
         apiKey: openAiApiKey,
         model: OpenAiConfig.model,
+        diagnosticsTag: 'di_init',
       ),
     );
 
@@ -255,6 +262,10 @@ class InjectionContainer {
 
     sl.registerSingleton<SkillPatternService>(
       SkillPatternService(openAiService: sl<OpenAiService>()),
+    );
+
+    sl.registerSingleton<ProjectValidationService>(
+      ProjectValidationService(openAiService: sl<OpenAiService>()),
     );
 
     sl.registerSingleton<CloudinaryService>(
@@ -388,8 +399,11 @@ class InjectionContainer {
       () => NotificationCubit(
         dao: sl<NotificationDao>(),
         authCubit: sl<AuthCubit>(),
+        groupDao: sl<GroupDao>(),
+        groupMemberDao: sl<GroupMemberDao>(),
         syncQueueDao: sl<SyncQueueDao>(),
         syncService: sl<SyncService>(),
+        userDao: sl<UserDao>(),
       ),
     );
 

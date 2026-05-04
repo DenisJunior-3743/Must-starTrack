@@ -20,6 +20,7 @@ class NotificationPreferences {
 
   static const defaultCategories = <String, bool>{
     'collaboration': true,
+    'group_invite': true,
     'message': true,
     'opportunity': true,
     'achievement': true,
@@ -78,7 +79,8 @@ class NotificationPreferences {
 }
 
 class NotificationPreferencesService {
-  NotificationPreferencesService({required SharedPreferences prefs}) : _prefs = prefs;
+  NotificationPreferencesService({required SharedPreferences prefs})
+      : _prefs = prefs;
 
   final SharedPreferences _prefs;
 
@@ -95,13 +97,15 @@ class NotificationPreferencesService {
     final defaults = NotificationPreferences.defaults();
     final categories = <String, bool>{};
     for (final entry in NotificationPreferences.defaultCategories.entries) {
-      categories[entry.key] = _prefs.getBool('$_categoryPrefix${entry.key}') ?? entry.value;
+      categories[entry.key] =
+          _prefs.getBool('$_categoryPrefix${entry.key}') ?? entry.value;
     }
 
     return NotificationPreferences(
       inAppEnabled: _prefs.getBool(_inAppKey) ?? defaults.inAppEnabled,
       pushEnabled: _prefs.getBool(_pushKey) ?? defaults.pushEnabled,
-      quietHoursEnabled: _prefs.getBool(_quietEnabledKey) ?? defaults.quietHoursEnabled,
+      quietHoursEnabled:
+          _prefs.getBool(_quietEnabledKey) ?? defaults.quietHoursEnabled,
       quietStartHour: _prefs.getInt(_quietStartKey) ?? defaults.quietStartHour,
       quietEndHour: _prefs.getInt(_quietEndKey) ?? defaults.quietEndHour,
       categories: categories,
@@ -141,7 +145,8 @@ class NotificationPreferencesService {
   }
 
   bool wasNotificationDelivered(String notificationId) {
-    final delivered = _prefs.getStringList(_deliveredIdsKey) ?? const <String>[];
+    final delivered =
+        _prefs.getStringList(_deliveredIdsKey) ?? const <String>[];
     return delivered.contains(notificationId);
   }
 

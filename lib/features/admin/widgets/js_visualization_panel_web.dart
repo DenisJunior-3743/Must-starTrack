@@ -1,6 +1,7 @@
 // ignore_for_file: deprecated_member_use, avoid_web_libraries_in_flutter
 
 import 'dart:html' as html;
+import 'dart:math' as math;
 import 'dart:ui_web' as ui_web;
 
 import 'package:flutter/material.dart';
@@ -31,13 +32,34 @@ class JsVisualizationPanel extends StatefulWidget {
 class _JsVisualizationPanelState extends State<JsVisualizationPanel> {
   static final Set<String> _registeredViewTypes = <String>{};
 
-  late final String _viewType;
+  late String _viewType;
 
   @override
   void initState() {
     super.initState();
-    _viewType = 'js-chart-${widget.chartId}-${widget.labels.length}-${widget.values.length}';
+    _viewType = _buildViewType();
     _registerIfNeeded();
+  }
+
+  @override
+  void didUpdateWidget(covariant JsVisualizationPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final nextViewType = _buildViewType();
+    if (nextViewType == _viewType) return;
+    setState(() {
+      _viewType = nextViewType;
+      _registerIfNeeded();
+    });
+  }
+
+  String _buildViewType() {
+    final signature = Object.hashAll([
+      widget.title,
+      widget.color,
+      ...widget.labels,
+      ...widget.values.map((value) => value.toStringAsFixed(4)),
+    ]).abs();
+    return 'js-chart-${widget.chartId}-${widget.labels.length}-${widget.values.length}-$signature';
   }
 
   void _registerIfNeeded() {
@@ -52,18 +74,22 @@ class _JsVisualizationPanelState extends State<JsVisualizationPanel> {
       final root = html.DivElement()
         ..style.width = '100%'
         ..style.height = '${widget.height}px'
-        ..style.padding = '8px 0';
+        ..style.boxSizing = 'border-box'
+        ..style.overflow = 'hidden'
+        ..style.padding = '12px 8px 22px';
 
       final title = html.DivElement()
         ..text = widget.title
         ..style.fontWeight = '700'
         ..style.fontSize = '12px'
-        ..style.marginBottom = '8px';
+        ..style.lineHeight = '16px'
+        ..style.marginBottom = '10px';
 
       final canvas = html.CanvasElement()
         ..id = canvasId
         ..style.width = '100%'
-        ..style.height = '${widget.height - 40}px';
+        ..style.height = '${math.max(90, widget.height - 62)}px'
+        ..style.display = 'block';
 
       root.children.add(title);
       root.children.add(canvas);
@@ -100,9 +126,21 @@ class _JsVisualizationPanelState extends State<JsVisualizationPanel> {
   }
 
   String _toHex(Color color) {
-    final r = (color.r * 255.0).round().clamp(0, 255).toRadixString(16).padLeft(2, '0');
-    final g = (color.g * 255.0).round().clamp(0, 255).toRadixString(16).padLeft(2, '0');
-    final b = (color.b * 255.0).round().clamp(0, 255).toRadixString(16).padLeft(2, '0');
+    final r = (color.r * 255.0)
+        .round()
+        .clamp(0, 255)
+        .toRadixString(16)
+        .padLeft(2, '0');
+    final g = (color.g * 255.0)
+        .round()
+        .clamp(0, 255)
+        .toRadixString(16)
+        .padLeft(2, '0');
+    final b = (color.b * 255.0)
+        .round()
+        .clamp(0, 255)
+        .toRadixString(16)
+        .padLeft(2, '0');
     return '#$r$g$b';
   }
 

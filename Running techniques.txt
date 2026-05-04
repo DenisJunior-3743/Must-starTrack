@@ -1,0 +1,37 @@
+RUNNING MUST STARTRACK WITH LOCAL AI
+
+WEB:
+.\scripts\Run-StarTrackAI.ps1 web
+
+MOBILE / ANDROID:
+.\scripts\Run-StarTrackAI.ps1 android
+
+SPECIFIC PHONE:
+.\scripts\Run-StarTrackAI.ps1 android -Device RFGYC1PEY6
+
+PROXY ONLY:
+.\scripts\Run-StarTrackAI.ps1 proxy
+
+STOP PROXY:
+.\scripts\Run-StarTrackAI.ps1 stop
+
+LOCAL APK TEST:
+.\scripts\Run-StarTrackAI.ps1 apk-local
+
+REAL RELEASE APK:
+.\scripts\Run-StarTrackAI.ps1 release
+
+DEPLOY CLOUD AI FUNCTIONS:
+.\scripts\Run-StarTrackAI.ps1 deploy-cloud
+
+What this does automatically:
+- starts the local OpenAI proxy if it is not already running
+- loads Open API.txt into the proxy, not into the Flutter app
+- uses one URL for all AI features: http://127.0.0.1:8787
+- enables adb reverse for Android, so Wi-Fi/IP changes do not break local AI
+- powers recommendations, chatbot, skill patterns, and project approval
+
+Release mode uses Cloud Functions instead of the local laptop proxy.
+
+Admin password:
+Admin@StarTrack2026!

@@ -45,7 +45,7 @@ void main() {
     await sl.reset();
   });
 
-  testWidgets('renders OpenAI response and follow-up chips', (tester) async {
+  testWidgets('renders OpenAI response without follow-up chips', (tester) async {
     final repository = ChatbotRepository(
       faqs: const [
         ChatbotFaqEntry(
@@ -84,12 +84,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('OpenAI produced this answer.'), findsOneWidget);
-    expect(find.text('Need more details?'), findsOneWidget);
-
-    await tester.tap(find.text('Need more details?'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Need more details?'), findsWidgets);
+    expect(find.text('Need more details?'), findsNothing);
     verifyNever(
       () => firestore.setChatbotInteraction(
         interactionId: any(named: 'interactionId'),

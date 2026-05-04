@@ -34,7 +34,9 @@ Future<String?> loadOpenAiApiKeyFromProjectFileImpl() async {
 }
 
 String? _readEnvValue(String envRaw, String key) {
-  for (final line in envRaw.split(RegExp(r'\r?\n'))) {
+  final lines = envRaw.split(RegExp(r'\r?\n'));
+  for (var index = 0; index < lines.length; index += 1) {
+    final line = lines[index];
     final trimmed = line.trim();
     if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
     final separator = trimmed.indexOf('=');
@@ -44,6 +46,12 @@ String? _readEnvValue(String envRaw, String key) {
     if (k != key) continue;
 
     var value = trimmed.substring(separator + 1).trim();
+    if (value.isEmpty && index + 1 < lines.length) {
+      final next = lines[index + 1].trim();
+      if (next.isNotEmpty && !next.startsWith('#') && !next.contains('=')) {
+        value = next;
+      }
+    }
     if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
       value = value.substring(1, value.length - 1);
     } else if (value.startsWith("'") &&

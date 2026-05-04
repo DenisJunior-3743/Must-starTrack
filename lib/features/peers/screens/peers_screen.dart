@@ -3,18 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'dart:io';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_names.dart';
-import '../../../core/utils/media_path_utils.dart';
 import '../../../data/local/dao/message_dao.dart';
 import '../../auth/bloc/auth_cubit.dart';
 import '../../groups/screens/create_group_screen.dart';
 import '../../groups/screens/groups_overview_tab.dart';
-import '../../shared/screens/offline_video_player_screen.dart';
 import '../../shared/widgets/guest_auth_required_view.dart';
 
 class PeersScreen extends StatefulWidget {
@@ -91,8 +88,6 @@ class _PeersScreenState extends State<PeersScreen> {
     });
   }
 
-
-
   Future<void> _openCreateGroup() async {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const CreateGroupScreen()),
@@ -105,37 +100,108 @@ class _PeersScreenState extends State<PeersScreen> {
     final isGuest = sl<AuthCubit>().currentUser == null;
     final collaborators = List<AcceptedPeerCollaboration>.of(_collaborators);
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final contentTopPadding = MediaQuery.of(context).padding.top +
+        kToolbarHeight +
+        kTextTabBarHeight +
+        16;
+
     if (isGuest) {
       return Scaffold(
-        appBar: AppBar(
-          title: Text(
-            'Peers',
-            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: isDark
+                  ? const [Color(0xFF0B1222), Color(0xFF111D36)]
+                  : const [Color(0xFFF8FBFF), Color(0xFFECF3FF)],
+            ),
           ),
-        ),
-        body: const GuestAuthRequiredView(
-          icon: Icons.group_off_rounded,
-          title: 'Sign in to access Peers',
-          subtitle:
-              'Authentication is required to view collaborators, respond to requests, and manage groups.',
-          fromRoute: RouteNames.peers,
+          child: Stack(
+            children: [
+              const Positioned(
+                top: -80,
+                right: -70,
+                child: _GlowBlob(size: 220, color: Color(0x332563EB)),
+              ),
+              SafeArea(
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 8),
+                          Text(
+                            'Peers',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.3,
+                              color: isDark
+                                  ? AppColors.textPrimaryDark
+                                  : AppColors.textPrimaryLight,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Expanded(
+                      child: GuestAuthRequiredView(
+                        icon: Icons.group_off_rounded,
+                        title: 'Sign in to access Peers',
+                        subtitle:
+                            'Authentication is required to view collaborators, respond to requests, and manage groups.',
+                        fromRoute: RouteNames.peers,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
 
     if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: isDark
+                  ? const [Color(0xFF0B1222), Color(0xFF111D36)]
+                  : const [Color(0xFFF8FBFF), Color(0xFFECF3FF)],
+            ),
+          ),
+          child: const Center(child: CircularProgressIndicator()),
+        ),
       );
     }
 
     return DefaultTabController(
       length: 2,
       child: Scaffold(
+        extendBodyBehindAppBar: true,
         appBar: AppBar(
+          backgroundColor: isDark
+              ? const Color(0xFF0B1222).withValues(alpha: 0.92)
+              : const Color(0xFFF8FBFF).withValues(alpha: 0.92),
+          elevation: 0,
+          scrolledUnderElevation: 0,
           title: Text(
             'Peers',
-            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.3,
+              color: isDark
+                  ? AppColors.textPrimaryDark
+                  : AppColors.textPrimaryLight,
+            ),
           ),
           actions: [
             IconButton(
@@ -144,75 +210,122 @@ class _PeersScreenState extends State<PeersScreen> {
               tooltip: 'Create group',
             ),
           ],
-          bottom: const TabBar(
-            tabs: [
+          bottom: TabBar(
+            labelStyle: GoogleFonts.plusJakartaSans(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+            unselectedLabelStyle: GoogleFonts.plusJakartaSans(
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+            ),
+            tabs: const [
               Tab(text: 'Collaborators'),
               Tab(text: 'Groups'),
             ],
           ),
         ),
-        body: TabBarView(
-          children: [
-            RefreshIndicator(
-              color: AppColors.primary,
-              onRefresh: _load,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: isDark
+                  ? const [Color(0xFF0B1222), Color(0xFF111D36)]
+                  : const [Color(0xFFF8FBFF), Color(0xFFECF3FF)],
+            ),
+          ),
+          child: Stack(
+            children: [
+              const Positioned(
+                top: -80,
+                right: -70,
+                child: _GlowBlob(size: 220, color: Color(0x332563EB)),
+              ),
+              const Positioned(
+                bottom: -90,
+                left: -85,
+                child: _GlowBlob(size: 260, color: Color(0x221152D4)),
+              ),
+              TabBarView(
                 children: [
-
-                  if (collaborators.isEmpty) ...[
-                    const SizedBox(height: 40),
-                    const Icon(
-                      Icons.group_off_rounded,
-                      size: 64,
-                      color: AppColors.primary,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No accepted collaborators yet',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
+                  Column(
+                    children: [
+                      SizedBox(height: contentTopPadding),
+                      if (collaborators.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                          child: _PeersSummary(count: collaborators.length),
+                        ),
+                      Expanded(
+                        child: RefreshIndicator(
+                          color: AppColors.primary,
+                          onRefresh: _load,
+                          child: collaborators.isEmpty
+                              ? ListView(
+                                  physics:
+                                      const AlwaysScrollableScrollPhysics(),
+                                  padding: const EdgeInsets.fromLTRB(
+                                      16, 40, 16, 96),
+                                  children: [
+                                    const Icon(
+                                      Icons.group_off_rounded,
+                                      size: 64,
+                                      color: AppColors.primary,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'No accepted collaborators yet',
+                                      textAlign: TextAlign.center,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Once a collaboration request is accepted, the collaborator and the agreed project will appear here.',
+                                      textAlign: TextAlign.center,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 13,
+                                        color: AppColors.textSecondaryLight,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : ListView.builder(
+                                  physics:
+                                      const AlwaysScrollableScrollPhysics(),
+                                  padding: const EdgeInsets.fromLTRB(
+                                      16, 0, 16, 96),
+                                  itemCount: collaborators.length,
+                                  itemBuilder: (context, index) {
+                                    final item = collaborators[index];
+                                    return KeyedSubtree(
+                                      key: ValueKey<String>(
+                                          'collab_${item.requestId}_$index'),
+                                      child:
+                                          _PeerCollaborationCard(item: item),
+                                    );
+                                  },
+                                ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Once a collaboration request is accepted, the collaborator and the agreed project will appear here.',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 13,
-                        color: AppColors.textSecondaryLight,
-                      ),
-                    ),
-                  ] else ...[
-                    _PeersSummary(count: collaborators.length),
-                    const SizedBox(height: 16),
-                    ...List<Widget>.generate(
-                      collaborators.length,
-                      (index) {
-                        final item = collaborators[index];
-                        return KeyedSubtree(
-                          key: ValueKey<String>(
-                              'collab_${item.requestId}_$index'),
-                          child: _PeerCollaborationCard(item: item),
-                        );
-                      },
-                    ),
-                  ],
+                    ],
+                  ),
+                  GroupsOverviewTab(
+                    topInset: contentTopPadding,
+                    onChanged: () => _load(silentRefresh: true),
+                  ),
                 ],
               ),
-            ),
-            GroupsOverviewTab(onChanged: () => _load(silentRefresh: true)),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
-
-
 
 class _PeersSummary extends StatelessWidget {
   final int count;
@@ -230,6 +343,13 @@ class _PeersSummary extends StatelessWidget {
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1152D4).withValues(alpha: 0.35),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -280,11 +400,16 @@ class _PeerCollaborationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final statusColor = item.peerRole == 'lecturer'
         ? AppColors.roleLecturer
         : item.peerRole == 'admin' || item.peerRole == 'super_admin'
             ? AppColors.roleAdmin
             : AppColors.primary;
+    final secondaryTextColor =
+        isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+    final primaryTextColor =
+        isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -306,6 +431,7 @@ class _PeerCollaborationCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 CircleAvatar(
                   radius: 24,
@@ -352,222 +478,160 @@ class _PeerCollaborationCard extends StatelessWidget {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _formatRelative(item.acceptedAt),
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: secondaryTextColor,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                Text(
-                  _formatRelative(item.acceptedAt),
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 11,
-                    color: AppColors.textSecondaryLight,
-                  ),
+                const SizedBox(width: 12),
+                Column(
+                  children: [
+                    _ActionRailButton(
+                      icon: Icons.visibility_rounded,
+                      tooltip: 'View profile',
+                      onPressed: item.peerId.isEmpty
+                          ? null
+                          : () => context.push(
+                                '/user/${item.peerId}/portfolio',
+                              ),
+                    ),
+                    const SizedBox(height: 8),
+                    _ActionRailButton(
+                      icon: Icons.chat_bubble_outline_rounded,
+                      tooltip: 'Message peer',
+                      onPressed: item.peerId.isEmpty
+                          ? null
+                          : () => context.push(
+                                RouteNames.chatDetail
+                                    .replaceFirst(':threadId', item.peerId),
+                                extra: {
+                                  'peerName': item.peerName,
+                                  'peerPhotoUrl': item.peerPhotoUrl,
+                                  'isPeerLecturer':
+                                      item.peerRole == 'lecturer',
+                                },
+                              ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-          _ProjectPreview(item: item),
+          Divider(
+            height: 1,
+            thickness: 1,
+            color: AppColors.border(context),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-            child: Text(
-              item.postTitle,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.plusJakartaSans(
-                  fontSize: 16, fontWeight: FontWeight.w700),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Project',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  item.postTitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: primaryTextColor,
+                    height: 1.25,
+                  ),
+                ),
+              ],
             ),
           ),
           if ((item.postCategory ?? '').trim().isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-              child: Text(
-                item.postCategory!,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 12,
-                  color: AppColors.textSecondaryLight,
-                ),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _MiniBadge(
+                    label: item.postCategory!,
+                    color: AppColors.primary,
+                  ),
+                ],
               ),
             ),
           if (item.message.trim().isNotEmpty)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child: Text(
-                item.message,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 13,
-                  color: AppColors.textSecondaryLight,
-                  height: 1.4,
-                ),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Details',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                      color: secondaryTextColor,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    item.message,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 13,
+                      color: secondaryTextColor,
+                      height: 1.45,
+                    ),
+                  ),
+                ],
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: item.postId == null
-                        ? null
-                        : () => context.push('/project/${item.postId}'),
-                    icon: const Icon(Icons.folder_open_rounded, size: 18),
-                    label: const Text(
-                      'Project',
-                      maxLines: 1,
-                      overflow: TextOverflow.fade,
-                      softWrap: false,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: item.peerId.isEmpty
-                        ? null
-                        : () => context.push(
-                              RouteNames.chatDetail
-                                  .replaceFirst(':threadId', item.peerId),
-                              extra: {
-                                'peerName': item.peerName,
-                                'peerPhotoUrl': item.peerPhotoUrl,
-                                'isPeerLecturer': item.peerRole == 'lecturer',
-                              },
-                            ),
-                    icon:
-                        const Icon(Icons.chat_bubble_outline_rounded, size: 18),
-                    label: const Text(
-                      'Message',
-                      maxLines: 1,
-                      overflow: TextOverflow.fade,
-                      softWrap: false,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                IconButton(
-                  onPressed: item.peerId.isEmpty
-                      ? null
-                      : () => context.push(RouteNames.profile
-                          .replaceFirst(':userId', item.peerId)),
-                  icon: const Icon(Icons.arrow_forward_rounded),
-                  tooltip: 'Open peer profile',
-                ),
-              ],
-            ),
-          ),
+          const SizedBox(height: 16),
         ],
       ),
     );
   }
 }
 
-class _ProjectPreview extends StatelessWidget {
-  final AcceptedPeerCollaboration item;
+class _ActionRailButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
 
-  const _ProjectPreview({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final previewUrl =
-        item.postMediaUrls.isNotEmpty ? item.postMediaUrls.first : null;
-    final isVideo = previewUrl != null && isVideoMediaPath(previewUrl);
-
-    Widget child;
-    if (previewUrl == null) {
-      child = const _ProjectPreviewFallback();
-    } else if (isVideo) {
-      child = Stack(
-        fit: StackFit.expand,
-        children: [
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF0F172A), Color(0xFF1E3A8A)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-          ),
-          const Center(
-            child: Icon(
-              Icons.play_circle_fill_rounded,
-              size: 56,
-              color: Colors.white,
-            ),
-          ),
-        ],
-      );
-    } else if (isLocalMediaPath(previewUrl)) {
-      child = Image.file(
-        File(previewUrl),
-        fit: BoxFit.cover,
-        width: double.infinity,
-        errorBuilder: (_, __, ___) => const _ProjectPreviewFallback(),
-      );
-    } else {
-      child = CachedNetworkImage(
-        imageUrl: previewUrl,
-        fit: BoxFit.cover,
-        width: double.infinity,
-        errorWidget: (_, __, ___) => const _ProjectPreviewFallback(),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-        child: AspectRatio(
-          aspectRatio: 16 / 9,
-          child: Material(
-            color: AppColors.primaryTint10,
-            child: InkWell(
-              onTap: () {
-                if (previewUrl == null) {
-                  if (item.postId != null) {
-                    context.push('/project/${item.postId}');
-                  }
-                  return;
-                }
-
-                if (isVideo) {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => OfflineVideoPlayerScreen(
-                        source: previewUrl,
-                        title: item.postTitle,
-                      ),
-                    ),
-                  );
-                  return;
-                }
-
-                if (item.postId != null) {
-                  context.push('/project/${item.postId}');
-                }
-              },
-              child: child,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ProjectPreviewFallback extends StatelessWidget {
-  const _ProjectPreviewFallback();
+  const _ActionRailButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: AppColors.primaryTint10,
-      child: const Center(
-        child: Icon(
-          Icons.perm_media_rounded,
-          size: 42,
-          color: AppColors.primary,
-        ),
+      decoration: BoxDecoration(
+        color: AppColors.primaryTint10,
+        borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+      ),
+      child: IconButton(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 18),
+        color: AppColors.primary,
+        tooltip: tooltip,
+        visualDensity: VisualDensity.compact,
       ),
     );
   }
@@ -619,4 +683,32 @@ String _formatRelative(DateTime time) {
   if (diff.inHours >= 1) return '${diff.inHours}h';
   if (diff.inMinutes >= 1) return '${diff.inMinutes}m';
   return 'now';
+}
+
+// ── Glow Blob ────────────────────────────────────────────────────────────────────────────
+class _GlowBlob extends StatelessWidget {
+  final double size;
+  final Color color;
+
+  const _GlowBlob({required this.size, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: color,
+              blurRadius: 80,
+              spreadRadius: 25,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

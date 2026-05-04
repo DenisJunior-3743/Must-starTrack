@@ -52,6 +52,7 @@ import '../../auth/bloc/auth_cubit.dart';
 import '../../notifications/bloc/notification_cubit.dart';
 import '../../shared/widgets/settings_drawer.dart';
 import '../bloc/feed_cubit.dart';
+import '../services/feed_video_playback_coordinator.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -92,10 +93,6 @@ String _postTypeLabel(PostModel post) {
 
 Color _postTypeAccent(PostModel post) {
   return AppColors.mustGoldDark;
-}
-
-Color _postTypeTint(PostModel post) {
-  return AppColors.mustGold.withValues(alpha: 0.2);
 }
 
 List<PostModel> _rankAdvertsForViewerFaculty(
@@ -154,8 +151,8 @@ List<PostModel> _injectAdsIntoStream({
   return injected;
 }
 
-bool _photoRailHintShown = false;
 bool _collabRailHintShown = false;
+bool _collaboratorStripCollapsed = false;
 
 bool _isGroupPost(PostModel post) {
   final groupId = post.groupId?.trim() ?? '';
@@ -241,6 +238,10 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
   FeedCubit? _cubit;
   bool _controlsCollapsed = true;
   final bool _immersiveMode = false;
+  // Tracks whether the Videos tab (index 0) is the visible tab.
+  // This is passed down to _VideoFeedTab so every _VideoPage knows
+  // to pause immediately when the user switches to Photos/Showcase.
+  bool _isVideoTabActive = true;
   final Map<String, _GuestRemotePostStats> _guestRemoteStatsByPostId =
       <String, _GuestRemotePostStats>{};
   bool _guestStatsRefreshInFlight = false;
@@ -330,7 +331,11 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
 
   void _onTabChanged() {
     if (!mounted || _tabCtrl.indexIsChanging || _immersiveMode) return;
-    setState(() => _controlsCollapsed = _tabCtrl.index == 0);
+    final onVideos = _tabCtrl.index == 0;
+    setState(() {
+      _controlsCollapsed = onVideos;
+      _isVideoTabActive = onVideos;
+    });
   }
 
   @override
@@ -549,13 +554,39 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                                   : 4,
                               left: 8,
                               right: 8,
-                              child: _FilterChips(
-                                cubit: cubit,
-                                currentTabIndex: _tabCtrl.index,
-                                tabsCollapsed: _controlsCollapsed,
-                                onToggleTabs: () => setState(
-                                  () =>
-                                      _controlsCollapsed = !_controlsCollapsed,
+                              child: Container(
+                                padding: const EdgeInsets.only(bottom: 6),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context)
+                                      .scaffoldBackgroundColor
+                                      .withValues(alpha: 0.97),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: Theme.of(context).brightness ==
+                                            Brightness.dark
+                                        ? Colors.white.withValues(alpha: 0.08)
+                                        : Colors.black.withValues(alpha: 0.06),
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(
+                                          alpha: Theme.of(context).brightness ==
+                                                  Brightness.dark
+                                              ? 0.22
+                                              : 0.08),
+                                      blurRadius: 14,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: _FilterChips(
+                                  cubit: cubit,
+                                  currentTabIndex: _tabCtrl.index,
+                                  tabsCollapsed: _controlsCollapsed,
+                                  onToggleTabs: () => setState(
+                                    () => _controlsCollapsed =
+                                        !_controlsCollapsed,
+                                  ),
                                 ),
                               ),
                             ),
@@ -578,6 +609,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                                   isGuest: isGuest,
                                   isLoadingMore: state.isLoadingMore,
                                   hasMore: state.hasMore,
+                                  isTabActive: _isVideoTabActive,
                                   onScrollDirectionChanged:
                                       _handleContentScrollDirection,
                                 ),
@@ -610,12 +642,38 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                                 : 4,
                             left: 8,
                             right: 8,
-                            child: _FilterChips(
-                              cubit: cubit,
-                              currentTabIndex: _tabCtrl.index,
-                              tabsCollapsed: _controlsCollapsed,
-                              onToggleTabs: () => setState(
-                                () => _controlsCollapsed = !_controlsCollapsed,
+                            child: Container(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context)
+                                    .scaffoldBackgroundColor
+                                    .withValues(alpha: 0.97),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Colors.white.withValues(alpha: 0.08)
+                                      : Colors.black.withValues(alpha: 0.06),
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(
+                                        alpha: Theme.of(context).brightness ==
+                                                Brightness.dark
+                                            ? 0.22
+                                            : 0.08),
+                                    blurRadius: 14,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: _FilterChips(
+                                cubit: cubit,
+                                currentTabIndex: _tabCtrl.index,
+                                tabsCollapsed: _controlsCollapsed,
+                                onToggleTabs: () => setState(
+                                  () => _controlsCollapsed = !_controlsCollapsed,
+                                ),
                               ),
                             ),
                           ),
@@ -644,31 +702,90 @@ class _ContentTabBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       color: Theme.of(context).scaffoldBackgroundColor,
-      child: TabBar(
-        controller: tabCtrl,
-        labelColor: AppColors.primary,
-        unselectedLabelColor: AppColors.textSecondaryLight,
-        indicatorColor: AppColors.primary,
-        indicatorWeight: 2.5,
-        labelStyle: GoogleFonts.plusJakartaSans(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+      child: Container(
+        height: 46,
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.07)
+              : Colors.black.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(14),
         ),
-        unselectedLabelStyle: GoogleFonts.plusJakartaSans(
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
+        child: TabBar(
+          controller: tabCtrl,
+          indicator: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [AppColors.primary, Color(0xFF2563EB)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(11),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.38),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          indicatorSize: TabBarIndicatorSize.tab,
+          dividerColor: Colors.transparent,
+          labelColor: Colors.white,
+          unselectedLabelColor: AppColors.textSecondaryLight,
+          labelStyle: GoogleFonts.spaceGrotesk(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
+          ),
+          unselectedLabelStyle: GoogleFonts.spaceGrotesk(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+          tabs: const [
+            Tab(
+              child: FittedBox(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.play_circle_rounded, size: 14),
+                    SizedBox(width: 4),
+                    Text('Videos'),
+                  ],
+                ),
+              ),
+            ),
+            Tab(
+              child: FittedBox(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.photo_library_rounded, size: 14),
+                    SizedBox(width: 4),
+                    Text('Photos'),
+                  ],
+                ),
+              ),
+            ),
+            Tab(
+              child: FittedBox(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.auto_awesome_rounded, size: 14),
+                    SizedBox(width: 4),
+                    Text('Showcase'),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
-        tabs: const [
-          Tab(
-              icon: Icon(Icons.play_circle_outline_rounded, size: 18),
-              text: 'Videos'),
-          Tab(
-              icon: Icon(Icons.photo_library_outlined, size: 18),
-              text: 'Photos'),
-          Tab(icon: Icon(Icons.article_outlined, size: 18), text: 'Showcase'),
-        ],
       ),
     );
   }
@@ -684,6 +801,7 @@ class _VideoFeedTab extends StatefulWidget {
   final bool isGuest;
   final bool isLoadingMore;
   final bool hasMore;
+  final bool isTabActive;
   final ValueChanged<ScrollDirection>? onScrollDirectionChanged;
 
   const _VideoFeedTab({
@@ -692,6 +810,7 @@ class _VideoFeedTab extends StatefulWidget {
     required this.isGuest,
     required this.isLoadingMore,
     required this.hasMore,
+    required this.isTabActive,
     this.onScrollDirectionChanged,
   });
 
@@ -702,6 +821,7 @@ class _VideoFeedTab extends StatefulWidget {
 class _VideoFeedTabState extends State<_VideoFeedTab> {
   final _pageCtrl = PageController();
   final Set<String> _prefetchingSources = <String>{};
+  late List<PostModel> _displayPosts;
   int _currentPage = 0;
   int _lastHapticPage = 0;
 
@@ -714,8 +834,8 @@ class _VideoFeedTabState extends State<_VideoFeedTab> {
 
   void _jumpToPageSilently(int page) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_pageCtrl.hasClients || widget.posts.isEmpty) return;
-      final target = _clampPage(page, widget.posts.length);
+      if (!mounted || !_pageCtrl.hasClients || _displayPosts.isEmpty) return;
+      final target = _clampPage(page, _displayPosts.length);
       _pageCtrl.jumpToPage(target);
     });
   }
@@ -724,6 +844,7 @@ class _VideoFeedTabState extends State<_VideoFeedTab> {
     await widget.cubit.refresh();
     if (!mounted) return;
     setState(() {
+      _displayPosts = List<PostModel>.from(widget.posts);
       _currentPage = 0;
       _lastHapticPage = 0;
     });
@@ -735,6 +856,7 @@ class _VideoFeedTabState extends State<_VideoFeedTab> {
   @override
   void initState() {
     super.initState();
+    _displayPosts = List<PostModel>.from(widget.posts);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _prefetchAround(0);
@@ -753,45 +875,80 @@ class _VideoFeedTabState extends State<_VideoFeedTab> {
     if (widget.posts.isEmpty) {
       if (_currentPage != 0) {
         setState(() {
+          _displayPosts = const <PostModel>[];
           _currentPage = 0;
           _lastHapticPage = 0;
         });
+      } else if (_displayPosts.isNotEmpty) {
+        setState(() => _displayPosts = const <PostModel>[]);
       }
       return;
     }
 
-    if (oldWidget.posts.isEmpty) {
-      final clamped = _clampPage(_currentPage, widget.posts.length);
-      if (clamped != _currentPage) {
-        setState(() => _currentPage = clamped);
+    if (_displayPosts.isEmpty || oldWidget.posts.isEmpty) {
+      final nextPosts = List<PostModel>.from(widget.posts);
+      final clamped = _clampPage(_currentPage, nextPosts.length);
+      final shouldJump = clamped != _currentPage;
+      setState(() {
+        _displayPosts = nextPosts;
+        _currentPage = clamped;
+        _lastHapticPage = _clampPage(_lastHapticPage, nextPosts.length);
+      });
+      if (shouldJump) {
         _jumpToPageSilently(clamped);
       }
       _prefetchAround(clamped);
       return;
     }
 
-    final previousIndex = _clampPage(_currentPage, oldWidget.posts.length);
-    final activePostId = oldWidget.posts[previousIndex].id;
-    var nextIndex = widget.posts.indexWhere((post) => post.id == activePostId);
-    if (nextIndex < 0) {
-      nextIndex = _clampPage(previousIndex, widget.posts.length);
+    final previousIndex = _clampPage(_currentPage, _displayPosts.length);
+    final nextPosts = _mergeIncomingPostsAfterActive(
+      previousPosts: _displayPosts,
+      incomingPosts: widget.posts,
+      activeIndex: previousIndex,
+    );
+    setState(() {
+      _displayPosts = nextPosts;
+      _currentPage = _clampPage(_currentPage, nextPosts.length);
+      _lastHapticPage = _clampPage(_lastHapticPage, nextPosts.length);
+    });
+
+    _prefetchAround(_currentPage);
+  }
+
+  List<PostModel> _mergeIncomingPostsAfterActive({
+    required List<PostModel> previousPosts,
+    required List<PostModel> incomingPosts,
+    required int activeIndex,
+  }) {
+    final incomingById = {for (final post in incomingPosts) post.id: post};
+    final merged = <PostModel>[];
+    final seenIds = <String>{};
+    final protectedEnd = _clampPage(activeIndex, previousPosts.length);
+
+    for (var i = 0; i <= protectedEnd; i++) {
+      final previousPost = previousPosts[i];
+      if (seenIds.add(previousPost.id)) {
+        merged.add(incomingById[previousPost.id] ?? previousPost);
+      }
     }
 
-    if (nextIndex != _currentPage) {
-      setState(() => _currentPage = nextIndex);
-      _jumpToPageSilently(nextIndex);
+    for (final incomingPost in incomingPosts) {
+      if (seenIds.add(incomingPost.id)) {
+        merged.add(incomingPost);
+      }
     }
 
-    _prefetchAround(nextIndex);
+    return merged;
   }
 
   void _prefetchAround(int currentIndex) {
     const lookAhead = 2;
     for (var offset = 0; offset <= lookAhead; offset++) {
       final index = currentIndex + offset;
-      if (index < 0 || index >= widget.posts.length) continue;
+      if (index < 0 || index >= _displayPosts.length) continue;
 
-      final post = widget.posts[index];
+      final post = _displayPosts[index];
       final source = _preferredVideoSourceForPost(post);
       if (source == null || !_prefetchingSources.add(source)) continue;
 
@@ -822,7 +979,7 @@ class _VideoFeedTabState extends State<_VideoFeedTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.posts.isEmpty) {
+    if (_displayPosts.isEmpty) {
       return const _EmptyTab(
         icon: Icons.videocam_off_outlined,
         label: 'No videos yet',
@@ -830,9 +987,9 @@ class _VideoFeedTabState extends State<_VideoFeedTab> {
       );
     }
 
-    final total = widget.posts.length +
+    final total = _displayPosts.length +
         (widget.isLoadingMore ? 1 : 0) +
-        (!widget.hasMore && widget.posts.isNotEmpty ? 1 : 0);
+        (!widget.hasMore && _displayPosts.isNotEmpty ? 1 : 0);
 
     return Stack(
       children: [
@@ -862,12 +1019,12 @@ class _VideoFeedTabState extends State<_VideoFeedTab> {
                   HapticFeedback.selectionClick();
                   _lastHapticPage = page;
                 }
-                if (page >= widget.posts.length - 3 && widget.hasMore) {
+                if (page >= _displayPosts.length - 3 && widget.hasMore) {
                   widget.cubit.loadMore();
                 }
               },
               itemBuilder: (ctx, i) {
-                if (i == widget.posts.length) {
+                if (i == _displayPosts.length) {
                   if (widget.isLoadingMore) {
                     return const Center(
                         child: CircularProgressIndicator(
@@ -875,13 +1032,13 @@ class _VideoFeedTabState extends State<_VideoFeedTab> {
                   }
                   return const _EndOfFeed();
                 }
-                final post = widget.posts[i];
+                final post = _displayPosts[i];
                 return AnimatedBuilder(
                   animation: _pageCtrl,
                   child: _VideoPage(
                     key: ValueKey(post.id),
                     post: post,
-                    isActive: i == _currentPage,
+                    isActive: i == _currentPage && widget.isTabActive,
                     isGuest: widget.isGuest,
                     cubit: widget.cubit,
                   ),
@@ -961,14 +1118,15 @@ class _VideoPageState extends State<_VideoPage>
   VideoPlayerController? _ctrl;
   ModalRoute<dynamic>? _modalRoute;
   Timer? _disposeTimer;
-  String _cachedLocation = '/';
   Timer? _viewRecordTimer;
   bool _ready = false;
   bool _error = false;
   final bool _isMuted = false;
   bool _resumeOnForeground = false;
   bool _viewRecorded = false;
-  double? _downloadProgress; // null = not downloading; 0-1 = in progress
+  double? _downloadProgress;
+  bool _savingOffline = false;
+  bool _offlineReady = false;
   bool _showSeekPreview = false;
   bool _clearDisplay = false;
   bool _autoScroll = true;
@@ -976,6 +1134,17 @@ class _VideoPageState extends State<_VideoPage>
   bool _isFullscreenMode = false;
   double _previewDx = 0;
   Duration _previewPosition = Duration.zero;
+
+  /// True only while this screen's route is the top-most route.
+  /// Flipped to false immediately in [didPushNext] / [didPop] so playback
+  /// stops the instant the user navigates away — regardless of tab state.
+  bool _isScreenActive = true;
+
+  bool get _isCurrentRoute {
+    final route = _modalRoute;
+    if (route == null) return _isScreenActive;
+    return route.isCurrent && _isScreenActive;
+  }
 
   String? get _videoUrl {
     for (final u in widget.post.mediaUrls) {
@@ -992,11 +1161,18 @@ class _VideoPageState extends State<_VideoPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    FeedVideoPlaybackCoordinator.registerPauseCallback(
+      _pauseFromPlaybackCoordinator,
+    );
+    FeedVideoPlaybackCoordinator.playbackAllowed.addListener(
+      _onPlaybackPermissionChanged,
+    );
     _viewRecorded = widget.post.isViewedByMe;
     if (widget.isActive) {
       _cancelDeferredDispose();
       _initController();
     }
+    unawaited(_refreshOfflineSaveState());
   }
 
   @override
@@ -1010,8 +1186,7 @@ class _VideoPageState extends State<_VideoPage>
       _modalRoute = route;
       appRouteObserver.subscribe(this, route);
     }
-    
-    _cachedLocation = GoRouterState.of(context).matchedLocation;
+
     _syncPlayback();
   }
 
@@ -1028,6 +1203,7 @@ class _VideoPageState extends State<_VideoPage>
       if (widget.isActive) {
         _initController();
       }
+      unawaited(_refreshOfflineSaveState());
       return;
     }
 
@@ -1055,55 +1231,70 @@ class _VideoPageState extends State<_VideoPage>
     _syncPlayback();
   }
 
-  bool get _isCurrentRoute {
-    if (!mounted) return false;
-    final route = ModalRoute.of(context);
-    final isModalCurrent = route?.isCurrent ?? true;
-    final isHomeRoute = _cachedLocation == '/' || _cachedLocation.startsWith('/home');
-    return isModalCurrent && isHomeRoute;
+  bool get _isFeedPlaybackAllowed =>
+      FeedVideoPlaybackCoordinator.playbackAllowed.value;
+
+  bool get _shouldPlay =>
+      widget.isActive && _isScreenActive && _isFeedPlaybackAllowed;
+
+  void _pauseFromPlaybackCoordinator() {
+    _ctrl?.pause();
+    _syncViewTracking();
+  }
+
+  void _onPlaybackPermissionChanged() {
+    if (!mounted) return;
+    if (!_isFeedPlaybackAllowed) {
+      _pauseFromPlaybackCoordinator();
+      return;
+    }
+    _syncPlayback();
   }
 
   void _syncPlayback() {
     final ctrl = _ctrl;
     if (!_ready || ctrl == null) {
-      if (widget.isActive && _ctrl == null && !_error) {
+      if (_shouldPlay && _ctrl == null && !_error) {
         _initController();
       }
       _syncViewTracking();
       return;
     }
 
-    final shouldPlay = widget.isActive && _isCurrentRoute;
-    if (shouldPlay) {
-      if (!ctrl.value.isPlaying) {
-        ctrl.play();
-      }
+    if (_shouldPlay) {
+      if (!ctrl.value.isPlaying) ctrl.play();
     } else {
-      if (ctrl.value.isPlaying) {
-        ctrl.pause();
-      }
+      if (ctrl.value.isPlaying) ctrl.pause();
     }
     _syncViewTracking();
   }
 
   @override
   void didPush() {
+    // This route just became visible (initial push or came back into view).
+    _isScreenActive = true;
     _syncPlayback();
   }
 
   @override
   void didPushNext() {
+    // Another route was pushed on top — pause immediately, no conditions.
+    _isScreenActive = false;
     _ctrl?.pause();
     _syncViewTracking();
   }
 
   @override
   void didPopNext() {
+    // The route on top was popped and we're visible again — resume.
+    _isScreenActive = true;
     _syncPlayback();
   }
 
   @override
   void didPop() {
+    // This route is being popped — pause.
+    _isScreenActive = false;
     _ctrl?.pause();
     _syncViewTracking();
   }
@@ -1122,8 +1313,9 @@ class _VideoPageState extends State<_VideoPage>
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
-      _resumeOnForeground =
-          widget.isActive && (_ctrl?.value.isPlaying ?? false);
+      // Remember whether we were playing so we can resume when foregrounded —
+      // but only if we should be playing (tab + screen both active).
+      _resumeOnForeground = _shouldPlay && (_ctrl?.value.isPlaying ?? false);
       _ctrl?.pause();
       _syncViewTracking();
     }
@@ -1255,7 +1447,10 @@ class _VideoPageState extends State<_VideoPage>
 
   Future<void> _recordViewIfEligible() async {
     _viewRecordTimer = null;
-    if (!mounted || _viewRecorded || widget.post.isViewedByMe || widget.isGuest) {
+    if (!mounted ||
+        _viewRecorded ||
+        widget.post.isViewedByMe ||
+        widget.isGuest) {
       return;
     }
 
@@ -1297,6 +1492,99 @@ class _VideoPageState extends State<_VideoPage>
       debugPrint('[VideoPage] background download failed: $e');
       if (mounted) setState(() => _downloadProgress = null);
     }
+  }
+
+  Future<void> _refreshOfflineSaveState() async {
+    final rawUrl = _videoUrl;
+    if (rawUrl == null) {
+      if (mounted) setState(() => _offlineReady = false);
+      return;
+    }
+
+    for (final url in getPlaybackSourceCandidates(rawUrl)) {
+      if (isLocalMediaPath(url)) {
+        if (mounted) setState(() => _offlineReady = true);
+        return;
+      }
+      final cachedFile = await getCachedVideoFile(url);
+      final hasCache = cachedFile != null &&
+          await cachedFile.exists() &&
+          await cachedFile.length() > 1024;
+      if (hasCache) {
+        if (mounted) setState(() => _offlineReady = true);
+        return;
+      }
+    }
+
+    if (mounted) setState(() => _offlineReady = false);
+  }
+
+  Future<void> _savePostForOffline() async {
+    if (_savingOffline) return;
+    if (widget.isGuest) {
+      _promptLogin(context);
+      return;
+    }
+
+    final wasAlreadySaved = widget.post.isSavedByMe;
+    if (wasAlreadySaved && _offlineReady) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Already saved for offline viewing.')),
+      );
+      return;
+    }
+
+    final rawUrl = _videoUrl;
+    if (rawUrl == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No downloadable video found.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _savingOffline = true;
+      _downloadProgress = 0;
+    });
+
+    Object? lastError;
+    for (final url in getPlaybackSourceCandidates(rawUrl)) {
+      try {
+        await resolveVideoFile(
+          url,
+          onProgress: (received, total) {
+            if (!mounted || total <= 0) return;
+            setState(() => _downloadProgress = received / total);
+          },
+        );
+        if (!wasAlreadySaved) {
+          await widget.cubit.toggleSavePost(widget.post.id);
+        }
+        if (!mounted) return;
+        setState(() {
+          _savingOffline = false;
+          _offlineReady = true;
+          _downloadProgress = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Saved for offline viewing.')),
+        );
+        return;
+      } catch (error) {
+        lastError = error;
+        debugPrint('[VideoPage] offline save failed for source=$url: $error');
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _savingOffline = false;
+      _downloadProgress = null;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Could not save video offline: $lastError')),
+    );
   }
 
   String _formatDuration(Duration d) {
@@ -1369,8 +1657,11 @@ class _VideoPageState extends State<_VideoPage>
                 children: [
                   _menuTile(
                     Icons.download_rounded,
-                    'Download',
-                    () => Navigator.pop(sheetCtx),
+                    _offlineReady ? 'Saved offline' : 'Save for offline',
+                    () {
+                      Navigator.pop(sheetCtx);
+                      unawaited(_savePostForOffline());
+                    },
                     iconColor: onSurfaceColor,
                     textColor: onSurfaceColor,
                   ),
@@ -1608,6 +1899,12 @@ class _VideoPageState extends State<_VideoPage>
   void dispose() {
     _cancelDeferredDispose();
     _cancelViewRecordTimer();
+    FeedVideoPlaybackCoordinator.playbackAllowed.removeListener(
+      _onPlaybackPermissionChanged,
+    );
+    FeedVideoPlaybackCoordinator.unregisterPauseCallback(
+      _pauseFromPlaybackCoordinator,
+    );
     WidgetsBinding.instance.removeObserver(this);
     if (_modalRoute is PageRoute<dynamic>) {
       appRouteObserver.unsubscribe(this);
@@ -1634,7 +1931,10 @@ class _VideoPageState extends State<_VideoPage>
       onTap: () {
         // Toggle play/pause on tap
         if (_ctrl == null) return;
-        if (!_isCurrentRoute || !widget.isActive) return;
+        if (!_isCurrentRoute || !widget.isActive || !_isFeedPlaybackAllowed) {
+          _ctrl!.pause();
+          return;
+        }
         if (_ctrl!.value.isPlaying) {
           _ctrl!.pause();
         } else {
@@ -1686,8 +1986,26 @@ class _VideoPageState extends State<_VideoPage>
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  stops: [0.45, 1.0],
-                  colors: [Colors.transparent, Colors.black87],
+                  stops: [0.0, 0.35, 0.7, 1.0],
+                  colors: [
+                    Colors.transparent,
+                    Colors.transparent,
+                    Color(0x88000000),
+                    Color(0xDD000000),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // ── Top gradient for status bar readability ───────────────────────
+          const Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  stops: [0.0, 0.15],
+                  colors: [Color(0x55000000), Colors.transparent],
                 ),
               ),
             ),
@@ -1735,10 +2053,11 @@ class _VideoPageState extends State<_VideoPage>
                           Flexible(
                             child: Text(
                               post.authorName ?? 'Unknown',
-                              style: GoogleFonts.plusJakartaSans(
+                              style: GoogleFonts.spaceGrotesk(
                                 color: Colors.white,
-                                fontWeight: FontWeight.w700,
+                                fontWeight: FontWeight.w800,
                                 fontSize: 14,
+                                letterSpacing: 0.1,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -1773,10 +2092,12 @@ class _VideoPageState extends State<_VideoPage>
                         Expanded(
                           child: Text(
                             post.title,
-                            style: GoogleFonts.plusJakartaSans(
+                            style: GoogleFonts.spaceGrotesk(
                               color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 17,
+                              letterSpacing: -0.2,
+                              height: 1.25,
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -1837,7 +2158,7 @@ class _VideoPageState extends State<_VideoPage>
               top: 96,
               bottom: 28,
               child: SizedBox(
-                width: 48,
+                width: 62,
                 child: SingleChildScrollView(
                   reverse: true,
                   physics: const BouncingScrollPhysics(),
@@ -1891,26 +2212,34 @@ class _VideoPageState extends State<_VideoPage>
                                   : null,
                             ),
                             const SizedBox(height: 3),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 1.5),
-                              decoration: BoxDecoration(
-                                color: post.isFollowingAuthor
-                                    ? Colors.white24
-                                    : AppColors.danger,
-                                borderRadius: BorderRadius.circular(
-                                    AppDimensions.radiusFull),
-                              ),
-                              child: Text(
-                                isOwnPost
-                                    ? 'You'
-                                    : (post.isFollowingAuthor
-                                        ? 'Following'
-                                        : 'Follow'),
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
+                            Transform.translate(
+                              offset: const Offset(-4, 0),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: isOwnPost
+                                      ? Colors.white24
+                                      : (post.isFollowingAuthor
+                                          ? const Color(0xFF1D4ED8)
+                                          : const Color(0xFF2563EB)),
+                                  borderRadius: BorderRadius.circular(
+                                      AppDimensions.radiusFull),
+                                ),
+                                child: Text(
+                                  isOwnPost
+                                      ? 'You'
+                                      : (post.isFollowingAuthor
+                                          ? 'Following'
+                                          : 'Follow'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.visible,
+                                  softWrap: false,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
                             ),
@@ -1959,23 +2288,21 @@ class _VideoPageState extends State<_VideoPage>
                         },
                       ),
                       const SizedBox(height: 12),
-                      _VideoActionBtn(
-                        icon: post.isSavedByMe
-                            ? Icons.bookmark_rounded
-                            : Icons.bookmark_border_rounded,
-                        label: post.isSavedByMe ? 'Saved' : 'Save',
-                        color: post.isSavedByMe
+                        _VideoActionBtn(
+                        icon: post.isSavedByMe || _offlineReady
+                          ? Icons.bookmark_rounded
+                          : Icons.bookmark_border_rounded,
+                        label: _savingOffline
+                          ? 'Saving'
+                          : (post.isSavedByMe || _offlineReady)
+                            ? 'Saved'
+                            : 'Save',
+                        color: post.isSavedByMe || _offlineReady
                             ? AppColors.primary
                             : Colors.white.withValues(alpha: 0.9),
-                        enabled: true,
+                        enabled: !_savingOffline,
                         iconSize: 21,
-                        onTap: () {
-                          if (widget.isGuest) {
-                            _promptLogin(context);
-                          } else {
-                            widget.cubit.toggleSavePost(post.id);
-                          }
-                        },
+                        onTap: _savePostForOffline,
                       ),
                       const SizedBox(height: 12),
                       _VideoActionBtn(
@@ -2067,12 +2394,12 @@ class _VideoPageState extends State<_VideoPage>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PHOTO TAB — Instagram / Facebook style
+// PHOTO TAB — Instagram-style exclusive redesign
 // ─────────────────────────────────────────────────────────────────────────────
 
-enum _PhotoDisplayStyle { mixed, grid }
+// ── Top-level photo feed tab ─────────────────────────────────────────────────
 
-class _PhotoFeedTab extends StatefulWidget {
+class _PhotoFeedTab extends StatelessWidget {
   final List<PostModel> posts;
   final FeedCubit cubit;
   final bool isGuest;
@@ -2092,169 +2419,8 @@ class _PhotoFeedTab extends StatefulWidget {
   });
 
   @override
-  State<_PhotoFeedTab> createState() => _PhotoFeedTabState();
-}
-
-class _PhotoFeedTabState extends State<_PhotoFeedTab> {
-  _PhotoDisplayStyle _displayStyle = _PhotoDisplayStyle.mixed;
-
-  List<PostModel> get _recentFirst {
-    final sorted = [...widget.posts];
-    sorted.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    return sorted;
-  }
-
-  Widget _buildToolbar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'Photos · Most recent first',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textSecondaryLight,
-              ),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Mixed display',
-            onPressed: () =>
-                setState(() => _displayStyle = _PhotoDisplayStyle.mixed),
-            icon: Icon(
-              Icons.view_stream_rounded,
-              size: 20,
-              color: _displayStyle == _PhotoDisplayStyle.mixed
-                  ? AppColors.primary
-                  : AppColors.textSecondaryLight,
-            ),
-          ),
-          IconButton(
-            tooltip: 'Grid display',
-            onPressed: () =>
-                setState(() => _displayStyle = _PhotoDisplayStyle.grid),
-            icon: Icon(
-              Icons.grid_view_rounded,
-              size: 20,
-              color: _displayStyle == _PhotoDisplayStyle.grid
-                  ? AppColors.primary
-                  : AppColors.textSecondaryLight,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFooter() {
-    if (widget.isLoadingMore) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
-        child: Center(child: CircularProgressIndicator()),
-      );
-    }
-    return widget.hasMore ? const SizedBox(height: 80) : const _EndOfFeed();
-  }
-
-  Widget _buildGrid(List<PostModel> posts) {
-    final children = <Widget>[
-      const SizedBox(height: 92),
-      _buildToolbar(),
-    ];
-
-    children.add(
-      _FeaturedPhotoCard(
-          post: posts.first, cubit: widget.cubit, isGuest: widget.isGuest),
-    );
-
-    for (var i = 1; i < posts.length; i += 2) {
-      final left = posts[i];
-      final right = (i + 1 < posts.length) ? posts[i + 1] : null;
-      children.add(
-        _PhotoGridRow(
-          left: left,
-          right: right,
-          cubit: widget.cubit,
-          isGuest: widget.isGuest,
-        ),
-      );
-    }
-
-    children.add(_buildFooter());
-
-    return NotificationListener<UserScrollNotification>(
-      onNotification: (n) {
-        widget.onScrollDirectionChanged?.call(n.direction);
-        return false;
-      },
-      child: ListView(
-        controller: widget.scrollCtrl,
-        physics: const BouncingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics(),
-        ),
-        padding: const EdgeInsets.only(bottom: 24),
-        children: children,
-      ),
-    );
-  }
-
-  Widget _buildMixed(List<PostModel> posts) {
-    final grouped = <String, List<PostModel>>{};
-    for (final p in posts) {
-      grouped.putIfAbsent(p.authorId, () => <PostModel>[]).add(p);
-    }
-
-    final renderedRailAuthors = <String>{};
-    final sections = <Widget>[
-      const SizedBox(height: 92),
-      _buildToolbar(),
-    ];
-
-    for (final post in posts) {
-      final authorPosts = grouped[post.authorId] ?? const <PostModel>[];
-      if (authorPosts.length > 1) {
-        if (renderedRailAuthors.add(post.authorId)) {
-          sections.add(
-            _AuthorPhotoRail(posts: authorPosts),
-          );
-        }
-      } else {
-        sections.add(
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
-            child: _SinglePhotoPostCard(
-              post: post,
-              cubit: widget.cubit,
-              isGuest: widget.isGuest,
-            ),
-          ),
-        );
-      }
-    }
-
-    sections.add(_buildFooter());
-
-    return NotificationListener<UserScrollNotification>(
-      onNotification: (n) {
-        widget.onScrollDirectionChanged?.call(n.direction);
-        return false;
-      },
-      child: ListView(
-        controller: widget.scrollCtrl,
-        physics: const BouncingScrollPhysics(
-          parent: AlwaysScrollableScrollPhysics(),
-        ),
-        padding: const EdgeInsets.only(bottom: 24),
-        children: sections,
-      ),
-    );
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (widget.posts.isEmpty) {
+    if (posts.isEmpty) {
       return const _EmptyTab(
         icon: Icons.hide_image_outlined,
         label: 'No photo posts yet',
@@ -2262,444 +2428,613 @@ class _PhotoFeedTabState extends State<_PhotoFeedTab> {
       );
     }
 
-    final posts = _recentFirst;
-    if (_displayStyle == _PhotoDisplayStyle.grid) return _buildGrid(posts);
-    return _buildMixed(posts);
-  }
-}
+    // Sort most-recent first
+    final sorted = [...posts]
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-class _AuthorPhotoRail extends StatefulWidget {
-  final List<PostModel> posts;
-
-  const _AuthorPhotoRail({
-    required this.posts,
-  });
-
-  @override
-  State<_AuthorPhotoRail> createState() => _AuthorPhotoRailState();
-}
-
-class _AuthorPhotoRailState extends State<_AuthorPhotoRail> {
-  late final PageController _pageCtrl;
-  int _currentIndex = 0;
-  bool _showSwipeHint = false;
-  Timer? _hintTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _pageCtrl = PageController(viewportFraction: 0.86);
-    if (widget.posts.length > 1 && !_photoRailHintShown) {
-      _photoRailHintShown = true;
-      _showSwipeHint = true;
-      _hintTimer = Timer(const Duration(seconds: 2), () {
-        if (mounted) setState(() => _showSwipeHint = false);
-      });
+    // Unique authors for the collaborator strip (preserve insertion order)
+    final seen = <String>{};
+    final stripAuthors = <PostModel>[];
+    for (final p in sorted) {
+      if (seen.add(p.authorId)) stripAuthors.add(p);
     }
-  }
 
-  @override
-  void dispose() {
-    _hintTimer?.cancel();
-    _pageCtrl.dispose();
-    super.dispose();
+    // Total list items: strip header + posts + footer
+    final itemCount = 1 + sorted.length + 1;
+
+    return NotificationListener<UserScrollNotification>(
+      onNotification: (n) {
+        onScrollDirectionChanged?.call(n.direction);
+        return false;
+      },
+      child: ListView.builder(
+        controller: scrollCtrl,
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
+        padding: const EdgeInsets.only(top: 138, bottom: 24),
+        itemCount: itemCount,
+        itemBuilder: (ctx, i) {
+          // ── Collaborator strip ──────────────────────────────────────────
+          if (i == 0) {
+            return _PhotoCollabStrip(authors: stripAuthors);
+          }
+
+          // ── Footer ─────────────────────────────────────────────────────
+          final postIndex = i - 1;
+          if (postIndex == sorted.length) {
+            if (isLoadingMore) {
+              return const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            return hasMore ? const SizedBox(height: 80) : const _EndOfFeed();
+          }
+
+          // ── Post card ──────────────────────────────────────────────────
+          final post = sorted[postIndex];
+          return _InstaPhotoCard(
+            key: ValueKey(post.id),
+            post: post,
+            cubit: cubit,
+            isGuest: isGuest,
+          );
+        },
+      ),
+    );
   }
+}
+
+// ── Collaborator strip ────────────────────────────────────────────────────────
+
+class _PhotoCollabStrip extends StatelessWidget {
+  final List<PostModel> authors;
+  const _PhotoCollabStrip({required this.authors});
 
   @override
   Widget build(BuildContext context) {
-    final authorName = widget.posts.first.authorName ?? 'Unknown';
-    final authorId = widget.posts.first.authorId;
+    if (authors.isEmpty) return const SizedBox.shrink();
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 2),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+          child: Row(
             children: [
-              InkWell(
-                onTap: () => context.push(
-                  RouteNames.profile.replaceFirst(':userId', authorId),
-                ),
-                borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Text(
-                    authorName,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
+              const Icon(Icons.people_outline_rounded,
+                  size: 14, color: AppColors.textSecondaryLight),
+              const SizedBox(width: 5),
               Text(
-                '${widget.posts.length} photo${widget.posts.length == 1 ? '' : 's'}',
+                'Potential Collaborators',
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 11,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.textSecondaryLight,
-                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.3,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 244,
-            child: Stack(
-              children: [
-                PageView.builder(
-                  controller: _pageCtrl,
-                  dragStartBehavior: DragStartBehavior.down,
-                  physics: const BouncingScrollPhysics(),
-                  padEnds: false,
-                  itemCount: widget.posts.length,
-                  onPageChanged: (i) => setState(() => _currentIndex = i),
-                  itemBuilder: (context, i) {
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 10),
-                      child: _AuthorPhotoCard(post: widget.posts[i]),
-                    );
-                  },
-                ),
-                Positioned(
-                  right: 14,
-                  top: 10,
-                  child: IgnorePointer(
-                    child: AnimatedOpacity(
-                      opacity: _showSwipeHint ? 1 : 0,
-                      duration: const Duration(milliseconds: 260),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: Colors.black87,
-                          borderRadius: BorderRadius.circular(
-                            AppDimensions.radiusFull,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.swipe_left_alt_rounded,
-                              color: Colors.white,
-                              size: 14,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Swipe',
-                              style: GoogleFonts.plusJakartaSans(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+        ),
+        SizedBox(
+          height: 90,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            itemCount: authors.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 14),
+            itemBuilder: (ctx, i) => _CollabBubble(post: authors[i]),
           ),
-          if (widget.posts.length > 1)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(
-                  widget.posts.length,
-                  (i) => AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    width: i == _currentIndex ? 14 : 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: i == _currentIndex
-                          ? AppColors.primary
-                          : AppColors.borderLight,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  ),
+        ),
+        const SizedBox(height: 10),
+        const Divider(height: 1),
+      ],
+    );
+  }
+}
+
+class _CollabBubble extends StatelessWidget {
+  final PostModel post;
+  const _CollabBubble({required this.post});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return GestureDetector(
+      onTap: () => context.push(
+        RouteNames.authorPortfolio.replaceFirst(':userId', post.authorId),
+      ),
+      child: SizedBox(
+        width: 62,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Gradient ring around avatar
+            Container(
+              padding: const EdgeInsets.all(2.5),
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [
+                    Color(0xFF2563EB),
+                    Color(0xFF7C3AED),
+                    Color(0xFFDB2777),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                ),
+                child: CircleAvatar(
+                  radius: 24,
+                  backgroundColor: AppColors.primaryTint10,
+                  backgroundImage: post.authorPhotoUrl != null
+                      ? CachedNetworkImageProvider(post.authorPhotoUrl!)
+                      : null,
+                  child: post.authorPhotoUrl == null
+                      ? Text(
+                          (post.authorName ?? '?')[0].toUpperCase(),
+                          style: const TextStyle(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                          ),
+                        )
+                      : null,
                 ),
               ),
             ),
-        ],
+            const SizedBox(height: 5),
+            Text(
+              (post.authorName ?? 'User').split(' ').first,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _AuthorPhotoCard extends StatelessWidget {
-  final PostModel post;
+// ── Instagram-style feed card ─────────────────────────────────────────────────
 
-  const _AuthorPhotoCard({
+class _InstaPhotoCard extends StatefulWidget {
+  final PostModel post;
+  final FeedCubit cubit;
+  final bool isGuest;
+
+  const _InstaPhotoCard({
+    super.key,
     required this.post,
+    required this.cubit,
+    required this.isGuest,
   });
 
-  String? get _photoUrl {
-    for (final u in post.mediaUrls) {
-      if (!_isVideoUrl(u)) return u;
+  @override
+  State<_InstaPhotoCard> createState() => _InstaPhotoCardState();
+}
+
+class _InstaPhotoCardState extends State<_InstaPhotoCard>
+    with SingleTickerProviderStateMixin {
+  int _carouselIndex = 0;
+  final _carouselCtrl = PageController();
+
+  late final AnimationController _heartCtrl;
+  late final Animation<double> _heartScale;
+  late final Animation<double> _heartOpacity;
+  bool _showHeart = false;
+  Offset _heartOffset = Offset.zero;
+
+  List<String> get _imageUrls =>
+      widget.post.mediaUrls.where((u) => !_isVideoUrl(u)).toList();
+
+  @override
+  void initState() {
+    super.initState();
+    _heartCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+    _heartScale = TweenSequence<double>([
+      TweenSequenceItem(
+          tween: Tween(begin: 0.0, end: 1.3)
+              .chain(CurveTween(curve: Curves.elasticOut)),
+          weight: 50),
+      TweenSequenceItem(
+          tween: Tween(begin: 1.3, end: 1.0)
+              .chain(CurveTween(curve: Curves.easeOut)),
+          weight: 30),
+      TweenSequenceItem(
+          tween: Tween(begin: 1.0, end: 0.0)
+              .chain(CurveTween(curve: Curves.easeIn)),
+          weight: 20),
+    ]).animate(_heartCtrl);
+    _heartOpacity = TweenSequence<double>([
+      TweenSequenceItem(tween: ConstantTween(1.0), weight: 80),
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0), weight: 20),
+    ]).animate(_heartCtrl);
+    _heartCtrl.addStatusListener((s) {
+      if (s == AnimationStatus.completed && mounted) {
+        setState(() => _showHeart = false);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _heartCtrl.dispose();
+    _carouselCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onDoubleTap(Offset localPos) {
+    if (!widget.isGuest &&
+        widget.post.authorId != (sl<AuthCubit>().currentUser?.id ?? '')) {
+      widget.cubit.likePost(widget.post.id);
     }
-    return null;
+    setState(() {
+      _heartOffset = localPos;
+      _showHeart = true;
+    });
+    _heartCtrl.forward(from: 0);
+    HapticFeedback.lightImpact();
+  }
+
+  static Color _badgeColor(String type) {
+    switch (type) {
+      case 'opportunity':
+        return const Color(0xFF7C3AED);
+      case 'advert':
+        return AppColors.mustGoldDark;
+      default:
+        return AppColors.institutionalGreen;
+    }
+  }
+
+  static String _badgeLabel(String type) {
+    switch (type) {
+      case 'opportunity':
+        return 'Opportunity';
+      case 'advert':
+        return 'Advert';
+      default:
+        return 'Project';
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => _openPostDetails(context, post, context.read<FeedCubit>()),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-          border: Border.all(color: AppColors.borderLight),
-        ),
+    final post = widget.post;
+    final imageUrls = _imageUrls;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final badgeColor = _badgeColor(post.type);
+    final badgeLabel = _badgeLabel(post.type);
+
+    // Card container — clear visual separation between posts
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 10, 12, 2),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF111827) : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.35)
+                : Colors.black.withValues(alpha: 0.09),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(AppDimensions.radiusMd),
-              ),
-              child: SizedBox(
-                height: 128,
-                width: double.infinity,
-                child: _PhotoWidget(url: _photoUrl, radius: 0),
-              ),
-            ),
+            // ── Author row with badge on the right ───────────────────────
             Padding(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 2),
-              child: Text(
-                post.title,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (post.description != null && post.description!.trim().isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 0, 10, 2),
-                child: Text(
-                  post.description!,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 11,
-                    color: AppColors.textSecondaryLight,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            const Spacer(),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const Icon(
-                    Icons.favorite_border_rounded,
-                    size: 14,
-                    color: AppColors.textSecondaryLight,
+                  // Avatar
+                  GestureDetector(
+                    onTap: () => context.push(
+                      RouteNames.profile.replaceFirst(':userId', post.authorId),
+                    ),
+                    child: CircleAvatar(
+                      radius: 20,
+                      backgroundColor: AppColors.primaryTint10,
+                      backgroundImage: post.authorPhotoUrl != null
+                          ? CachedNetworkImageProvider(post.authorPhotoUrl!)
+                          : null,
+                      child: post.authorPhotoUrl == null
+                          ? Text(
+                              (post.authorName ?? '?')[0].toUpperCase(),
+                              style: const TextStyle(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                              ),
+                            )
+                          : null,
+                    ),
                   ),
-                  const SizedBox(width: 3),
-                  Text(
-                    _compact(post.likeCount),
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 11,
-                      color: AppColors.textSecondaryLight,
+                  const SizedBox(width: 10),
+                  // Name + faculty + time
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => context.push(
+                        RouteNames.profile
+                            .replaceFirst(':userId', post.authorId),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            post.authorName ?? 'Unknown',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Row(
+                            children: [
+                              if (post.faculty != null &&
+                                  post.faculty!.trim().isNotEmpty)
+                                Flexible(
+                                  child: Text(
+                                    post.faculty!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 10,
+                                      color: AppColors.textSecondaryLight,
+                                    ),
+                                  ),
+                                ),
+                              if (post.faculty != null &&
+                                  post.faculty!.trim().isNotEmpty)
+                                Text(
+                                  '  ·  ',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 10,
+                                    color: AppColors.textHintLight,
+                                  ),
+                                ),
+                              Text(
+                                timeago.format(post.createdAt),
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 10,
+                                  color: AppColors.textHintLight,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Icon(
-                    Icons.chat_bubble_outline_rounded,
-                    size: 14,
-                    color: AppColors.textSecondaryLight,
-                  ),
-                  const SizedBox(width: 3),
-                  Text(
-                    _compact(post.commentCount),
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 11,
-                      color: AppColors.textSecondaryLight,
+                  // Post-type badge (top right — where follow used to be)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: badgeColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                      border:
+                          Border.all(color: badgeColor.withValues(alpha: 0.4)),
                     ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    timeago.format(post.createdAt),
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 10,
-                      color: AppColors.textHintLight,
+                    child: Text(
+                      badgeLabel,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: badgeColor,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
-class _SinglePhotoPostCard extends StatelessWidget {
-  final PostModel post;
-  final FeedCubit cubit;
-  final bool isGuest;
-
-  const _SinglePhotoPostCard({
-    required this.post,
-    required this.cubit,
-    required this.isGuest,
-  });
-
-  String? get _photoUrl {
-    for (final u in post.mediaUrls) {
-      if (!_isVideoUrl(u)) return u;
-    }
-    return null;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => _openPostDetails(context, post, context.read<FeedCubit>()),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-          border: Border.all(color: AppColors.borderLight),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-              child: _AuthorRow(post: post, cubit: cubit, isGuest: isGuest),
-            ),
-            SizedBox(
-              height: 220,
-              width: double.infinity,
-              child: _PhotoWidget(url: _photoUrl, radius: 0),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-              child: Text(
-                post.title,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (post.description != null && post.description!.trim().isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-                child: Text(
-                  post.description!,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12,
-                    color: AppColors.textSecondaryLight,
-                  ),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            _PostActionBar(post: post, cubit: cubit, isGuest: isGuest),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FeaturedPhotoCard extends StatelessWidget {
-  final PostModel post;
-  final FeedCubit cubit;
-  final bool isGuest;
-
-  const _FeaturedPhotoCard({
-    required this.post,
-    required this.cubit,
-    required this.isGuest,
-  });
-
-  String? get _photoUrl {
-    for (final u in post.mediaUrls) {
-      if (!_isVideoUrl(u)) return u;
-    }
-    return null;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final url = _photoUrl;
-    return GestureDetector(
-      onTap: () => _openPostDetails(context, post, context.read<FeedCubit>()),
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(0, 0, 0, 2),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Author row
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-              child: _AuthorRow(post: post, cubit: cubit, isGuest: isGuest),
-            ),
-            // Full-width image
-            SizedBox(
-              height: 320,
-              width: double.infinity,
-              child: _PhotoWidget(url: url, radius: 0),
-            ),
-            // Title + description
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            // ── Image / carousel ─────────────────────────────────────────
+            GestureDetector(
+              onDoubleTapDown: (d) => _heartOffset = d.localPosition,
+              onDoubleTap: () => _onDoubleTap(_heartOffset),
+              onTap: () => _openPostDetails(context, post, widget.cubit),
+              child: Stack(
                 children: [
-                  Text(
-                    post.title,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                  AspectRatio(
+                    aspectRatio: 4 / 5,
+                    child: imageUrls.isEmpty
+                        ? Container(
+                            color: AppColors.primaryTint10,
+                            child: const Center(
+                              child: Icon(Icons.image_outlined,
+                                  color: AppColors.primary, size: 40),
+                            ),
+                          )
+                        : imageUrls.length == 1
+                            ? _PhotoWidget(url: imageUrls.first, radius: 0)
+                            : PageView.builder(
+                                controller: _carouselCtrl,
+                                physics: const BouncingScrollPhysics(),
+                                itemCount: imageUrls.length,
+                                onPageChanged: (i) =>
+                                    setState(() => _carouselIndex = i),
+                                itemBuilder: (_, i) =>
+                                    _PhotoWidget(url: imageUrls[i], radius: 0),
+                              ),
                   ),
-                  if (post.description != null &&
-                      post.description!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      post.description!,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 13,
-                        color: AppColors.textSecondaryLight,
+                  // Multi-image counter
+                  if (imageUrls.length > 1)
+                    Positioned(
+                      top: 10,
+                      right: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          '${_carouselIndex + 1}/${imageUrls.length}',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
-                      maxLines: 3,
+                    ),
+                  // Heart burst
+                  if (_showHeart)
+                    Positioned(
+                      left: _heartOffset.dx - 44,
+                      top: _heartOffset.dy - 44,
+                      child: IgnorePointer(
+                        child: AnimatedBuilder(
+                          animation: _heartCtrl,
+                          builder: (_, __) => Opacity(
+                            opacity: _heartOpacity.value,
+                            child: Transform.scale(
+                              scale: _heartScale.value,
+                              child: const Icon(
+                                Icons.favorite_rounded,
+                                color: Colors.white,
+                                size: 88,
+                                shadows: [
+                                  Shadow(color: Colors.black45, blurRadius: 12),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+            // ── Carousel dots ─────────────────────────────────────────────
+            if (imageUrls.length > 1)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(imageUrls.length, (i) {
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      width: i == _carouselIndex ? 16 : 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: i == _carouselIndex
+                            ? AppColors.primary
+                            : AppColors.borderLight,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+
+            // ── Caption: title + description + tags ───────────────────────
+            GestureDetector(
+              onTap: () => _openPostDetails(context, post, widget.cubit),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Bold author + project title inline (IG-style)
+                    RichText(
+                      text: TextSpan(
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                        children: [
+                          TextSpan(
+                            text: '${post.authorName ?? 'Unknown'}  ',
+                            style: GoogleFonts.spaceGrotesk(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                              color: isDark ? Colors.white : Colors.black87,
+                            ),
+                          ),
+                          TextSpan(
+                            text: post.title,
+                            style: const TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    // Description
+                    if (post.description != null &&
+                        post.description!.trim().isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          post.description!,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            color: AppColors.textSecondaryLight,
+                            height: 1.45,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    // Tags
+                    if (post.category != null || post.tags.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            if (post.category != null)
+                              _TagChip(post.category!,
+                                  color: AppColors.primary, dark: false),
+                            ...post.tags.take(3).map(
+                                  (t) => _TagChip(t,
+                                      color: AppColors.textSecondaryLight,
+                                      dark: false),
+                                ),
+                          ],
+                        ),
+                      ),
                   ],
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 6,
-                    children: [
-                      if (post.category != null)
-                        _TagChip(post.category!,
-                            color: AppColors.primary, dark: false),
-                    ],
-                  ),
-                ],
+                ),
               ),
             ),
-            // Action bar
-            _PostActionBar(post: post, cubit: cubit, isGuest: isGuest),
-            const Divider(height: 1),
+
+            // ── Unified action bar ────────────────────────────────────────
+            _InstaActionBar(
+                post: post, cubit: widget.cubit, isGuest: widget.isGuest),
+
+            const SizedBox(height: 4),
           ],
         ),
       ),
@@ -2707,139 +3042,282 @@ class _FeaturedPhotoCard extends StatelessWidget {
   }
 }
 
-class _PhotoGridRow extends StatelessWidget {
-  final PostModel left;
-  final PostModel? right;
-  final FeedCubit cubit;
-  final bool isGuest;
+// ── Unified action bar — icons + counts horizontally aligned ──────────────────
 
-  const _PhotoGridRow({
-    required this.left,
-    required this.right,
-    required this.cubit,
-    required this.isGuest,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-                child:
-                    _PhotoGridCell(post: left, cubit: cubit, isGuest: isGuest)),
-            const SizedBox(width: 6),
-            Expanded(
-              child: right != null
-                  ? _PhotoGridCell(post: right!, cubit: cubit, isGuest: isGuest)
-                  : const SizedBox.shrink(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PhotoGridCell extends StatelessWidget {
+class _InstaActionBar extends StatefulWidget {
   final PostModel post;
   final FeedCubit cubit;
   final bool isGuest;
 
-  const _PhotoGridCell({
+  const _InstaActionBar({
     required this.post,
     required this.cubit,
     required this.isGuest,
   });
 
-  String? get _photoUrl {
-    for (final u in post.mediaUrls) {
-      if (!_isVideoUrl(u)) return u;
+  @override
+  State<_InstaActionBar> createState() => _InstaActionBarState();
+}
+
+class _InstaActionBarState extends State<_InstaActionBar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _likeAnim;
+  late final Animation<double> _likeScale;
+
+  @override
+  void initState() {
+    super.initState();
+    _likeAnim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+    );
+    _likeScale = TweenSequence<double>([
+      TweenSequenceItem(
+          tween: Tween(begin: 1.0, end: 1.65)
+              .chain(CurveTween(curve: Curves.easeOut)),
+          weight: 35),
+      TweenSequenceItem(
+          tween: Tween(begin: 1.65, end: 0.85)
+              .chain(CurveTween(curve: Curves.easeIn)),
+          weight: 25),
+      TweenSequenceItem(
+          tween: Tween(begin: 0.85, end: 1.0)
+              .chain(CurveTween(curve: Curves.elasticOut)),
+          weight: 40),
+    ]).animate(_likeAnim);
+  }
+
+  @override
+  void dispose() {
+    _likeAnim.dispose();
+    super.dispose();
+  }
+
+  void _handleLike() {
+    if (widget.isGuest) {
+      _promptLogin(context);
+      return;
     }
-    return null;
+    final isOwn =
+        widget.post.authorId == (sl<AuthCubit>().currentUser?.id ?? '');
+    if (isOwn) return;
+    widget.cubit.likePost(widget.post.id);
+    _likeAnim.forward(from: 0);
+    HapticFeedback.lightImpact();
+  }
+
+  // ── Helper: one icon + label column ──────────────────────────────────────
+  Widget _btn({
+    required Widget icon,
+    required String label,
+    required VoidCallback? onTap,
+    Color? labelColor,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final defaultColor = isDark ? Colors.white60 : AppColors.textSecondaryLight;
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 9),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              icon,
+              const SizedBox(height: 4),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: labelColor ?? defaultColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => _openPostDetails(context, post, context.read<FeedCubit>()),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).cardColor,
-          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(AppDimensions.radiusMd)),
-              child: SizedBox(
-                height: 160,
-                width: double.infinity,
-                child: _PhotoWidget(url: _photoUrl, radius: 0),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
-              child: Text(
-                post.title,
-                style: GoogleFonts.plusJakartaSans(
-                    fontSize: 13, fontWeight: FontWeight.w700),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (post.category != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
-                child: Text(
-                  post.category!,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 11,
-                    color: AppColors.textSecondaryLight,
+    final post = widget.post;
+    final isOwn = post.authorId == (sl<AuthCubit>().currentUser?.id ?? '');
+    final isFollowing = post.isFollowingAuthor;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final dividerColor = isDark
+        ? Colors.white.withValues(alpha: 0.07)
+        : Colors.black.withValues(alpha: 0.05);
+    final iconColor = isDark ? Colors.white70 : AppColors.textSecondaryLight;
+
+    return Column(
+      children: [
+        Divider(height: 1, color: dividerColor),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Like ────────────────────────────────────────────────
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: isOwn ? null : _handleLike,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 9),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ScaleTransition(
+                          scale: _likeScale,
+                          child: Icon(
+                            post.isLikedByMe
+                                ? Icons.favorite_rounded
+                                : Icons.favorite_border_rounded,
+                            size: 23,
+                            color:
+                                post.isLikedByMe ? Colors.redAccent : iconColor,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          post.likeCount > 0
+                              ? _compact(post.likeCount)
+                              : 'Like',
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color:
+                                post.isLikedByMe ? Colors.redAccent : iconColor,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
-              child: Row(
-                children: [
-                  const Icon(Icons.favorite_border_rounded,
-                      size: 14, color: AppColors.textSecondaryLight),
-                  const SizedBox(width: 3),
-                  Text(
-                    _compact(post.likeCount),
-                    style: GoogleFonts.plusJakartaSans(
-                        fontSize: 11, color: AppColors.textSecondaryLight),
-                  ),
-                  const SizedBox(width: 10),
-                  const Icon(Icons.chat_bubble_outline_rounded,
-                      size: 14, color: AppColors.textSecondaryLight),
-                  const SizedBox(width: 3),
-                  Text(
-                    _compact(post.commentCount),
-                    style: GoogleFonts.plusJakartaSans(
-                        fontSize: 11, color: AppColors.textSecondaryLight),
-                  ),
-                ],
+
+              // ── Comment ─────────────────────────────────────────────
+              _btn(
+                icon:
+                    Icon(Icons.chat_bubble_rounded, size: 22, color: iconColor),
+                label: post.commentCount > 0
+                    ? _compact(post.commentCount)
+                    : 'Comment',
+                onTap: () => widget.isGuest
+                    ? _promptLogin(context)
+                    : _showCommentSheet(context, post, widget.cubit),
               ),
-            ),
-          ],
+
+              // ── Share ───────────────────────────────────────────────
+              _btn(
+                icon: Icon(Icons.send_rounded, size: 21, color: iconColor),
+                label: 'Share',
+                onTap: () => Share.share(
+                  '${post.title}\n\n${post.description ?? ''}\n\nShared from MUST StarTrack',
+                  subject: post.title,
+                ),
+              ),
+
+              // ── More ────────────────────────────────────────────────
+              _btn(
+                icon:
+                    Icon(Icons.more_horiz_rounded, size: 22, color: iconColor),
+                label: 'More',
+                onTap: () =>
+                    _showMoreSheet(context, post, widget.cubit, widget.isGuest),
+              ),
+
+              // ── Bookmark ────────────────────────────────────────────
+              _btn(
+                icon: Icon(
+                  post.isSavedByMe
+                      ? Icons.bookmark_rounded
+                      : Icons.bookmark_border_rounded,
+                  size: 22,
+                  color: post.isSavedByMe ? AppColors.primary : iconColor,
+                ),
+                label: post.isSavedByMe ? 'Saved' : 'Save',
+                labelColor: post.isSavedByMe ? AppColors.primary : null,
+                onTap: () => widget.isGuest
+                    ? _promptLogin(context)
+                    : widget.cubit.toggleSavePost(post.id),
+              ),
+
+              // ── Follow ──────────────────────────────────────────────
+              if (!isOwn)
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: isFollowing
+                        ? null
+                        : () {
+                            if (widget.isGuest) {
+                              _promptLogin(context);
+                              return;
+                            }
+                            _showFollowSheet(context, post, () {
+                              widget.cubit.followAuthor(post.id);
+                            });
+                          },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 11, vertical: 5),
+                            decoration: BoxDecoration(
+                              gradient: isFollowing
+                                  ? null
+                                  : const LinearGradient(
+                                      colors: [
+                                        AppColors.primary,
+                                        Color(0xFF2563EB)
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                              color:
+                                  isFollowing ? AppColors.primaryTint10 : null,
+                              borderRadius: BorderRadius.circular(999),
+                              boxShadow: isFollowing
+                                  ? null
+                                  : [
+                                      BoxShadow(
+                                        color: AppColors.primary
+                                            .withValues(alpha: 0.3),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                            ),
+                            child: Text(
+                              isFollowing ? '✓ Following' : '+ Follow',
+                              style: GoogleFonts.spaceGrotesk(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: isFollowing
+                                    ? AppColors.primary
+                                    : Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
-      ),
+      ],
     );
   }
 }
@@ -2890,7 +3368,7 @@ class _ShowcaseFeedTab extends StatelessWidget {
         physics: const BouncingScrollPhysics(
           parent: AlwaysScrollableScrollPhysics(),
         ),
-        padding: const EdgeInsets.fromLTRB(12, 98, 12, 24),
+        padding: const EdgeInsets.fromLTRB(12, 138, 12, 24),
         itemCount: itemCount,
         itemBuilder: (ctx, i) {
           if (i == ctaAt) {
@@ -2954,95 +3432,124 @@ class _ShowcaseCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final accent = _accentFor(post.category);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF1A1D26) : Colors.white;
+    final subtleAccentBg = accent.withValues(alpha: isDark ? 0.08 : 0.04);
 
     return GestureDetector(
       onTap: () => _openPostDetails(context, post, context.read<FeedCubit>()),
       child: Container(
         decoration: BoxDecoration(
-          color: isDark ? AppColors.surfaceDark : Colors.white,
-          borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+          color: cardBg,
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
+              color: isDark
+                  ? Colors.black.withValues(alpha: 0.3)
+                  : Colors.black.withValues(alpha: 0.07),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+            BoxShadow(
+              color: accent.withValues(alpha: isDark ? 0.12 : 0.06),
+              blurRadius: 20,
+              offset: const Offset(0, 6),
             ),
           ],
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.06)
+                : accent.withValues(alpha: 0.08),
+            width: 1,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Coloured accent top bar + type badge
+            // ── Gradient accent top bar ───────────────────────────────────
             Container(
-              height: 5,
+              height: 4,
               decoration: BoxDecoration(
-                color: accent,
+                gradient: LinearGradient(
+                  colors: [accent, accent.withValues(alpha: 0.5)],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
                 borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(AppDimensions.radiusLg)),
+                  top: Radius.circular(16),
+                ),
               ),
             ),
+            // ── Subtle tinted background for header area ──────────────────
+            Container(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              decoration: BoxDecoration(color: subtleAccentBg),
+              child: Row(
+                children: [
+                  Expanded(
+                    child:
+                        _AuthorRow(post: post, cubit: cubit, isGuest: isGuest),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: accent.withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      _postTypeLabel(post),
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: accent,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // ── Content area ─────────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Author row + type badge
-                  Row(
-                    children: [
-                      Expanded(
-                          child: _AuthorRow(
-                              post: post, cubit: cubit, isGuest: isGuest)),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: _postTypeTint(post),
-                          borderRadius:
-                              BorderRadius.circular(AppDimensions.radiusFull),
-                        ),
-                        child: Text(
-                          _postTypeLabel(post),
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: _postTypeAccent(post),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  // Title
                   Text(
                     post.title,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 16,
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 17,
                       fontWeight: FontWeight.w800,
-                      height: 1.3,
+                      height: 1.25,
+                      letterSpacing: -0.3,
                     ),
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                   ),
                   if (post.description != null &&
                       post.description!.isNotEmpty) ...[
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 7),
                     Text(
                       post.description!,
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 13,
                         color: AppColors.textSecondaryLight,
-                        height: 1.45,
+                        height: 1.5,
                       ),
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
                   const SizedBox(height: 10),
-                  // Skills/tags chips
                   if (post.skillsUsed.isNotEmpty || post.tags.isNotEmpty)
                     Wrap(
                       spacing: 6,
-                      runSpacing: 4,
+                      runSpacing: 5,
                       children: [
                         ...post.skillsUsed.take(3).map(
                             (s) => _TagChip(s, color: accent, dark: false)),
@@ -3052,23 +3559,37 @@ class _ShowcaseCard extends StatelessWidget {
                       ],
                     ),
                   if (post.opportunityDeadline != null) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Icon(Icons.schedule_rounded,
-                            size: 13, color: AppColors.textSecondaryLight),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${post.type == 'advert' ? 'Runs until' : 'Deadline'}: ${_formatDate(post.opportunityDeadline!)}',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 11,
-                            color: AppColors.textSecondaryLight,
-                          ),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.warning.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: AppColors.warning.withValues(alpha: 0.3),
+                          width: 1,
                         ),
-                      ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.access_time_rounded,
+                              size: 13, color: AppColors.warning),
+                          const SizedBox(width: 5),
+                          Text(
+                            '${post.type == 'advert' ? 'Runs until' : 'Deadline'}: ${_formatDate(post.opportunityDeadline!)}',
+                            style: GoogleFonts.spaceGrotesk(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.warning,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 8),
                   Text(
                     timeago.format(post.createdAt),
                     style: GoogleFonts.plusJakartaSans(
@@ -3092,7 +3613,7 @@ class _ShowcaseCard extends StatelessWidget {
 // Shared widgets
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Author row: avatar, name, time ago, optional follow button
+/// Author row: avatar + name + time (no follow button — that lives in the action bar)
 class _AuthorRow extends StatelessWidget {
   final PostModel post;
   final FeedCubit cubit;
@@ -3133,9 +3654,10 @@ class _AuthorRow extends StatelessWidget {
               children: [
                 Text(
                   post.authorName ?? 'Unknown',
-                  style: GoogleFonts.plusJakartaSans(
+                  style: GoogleFonts.spaceGrotesk(
                     fontSize: 13,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.1,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -3150,7 +3672,6 @@ class _AuthorRow extends StatelessWidget {
               ],
             ),
           ),
-          _SmallFollowButton(post: post, isGuest: isGuest),
         ],
       ),
     );
@@ -3180,7 +3701,7 @@ class _PostActionBarState extends State<_PostActionBar> {
     final isOwnPost = currentUserId == widget.post.authorId;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(6, 4, 6, 8),
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
       child: Row(
         children: [
           _ActionBarBtn(
@@ -3203,7 +3724,7 @@ class _PostActionBarState extends State<_PostActionBar> {
               }
             },
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 2),
           // Like
           _ActionBarBtn(
             icon: widget.post.isLikedByMe
@@ -3222,10 +3743,10 @@ class _PostActionBarState extends State<_PostActionBar> {
               }
             },
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 2),
           // Comment
           _ActionBarBtn(
-            icon: Icons.chat_bubble_outline_rounded,
+            icon: Icons.chat_bubble_rounded,
             label: _compact(widget.post.commentCount),
             color: AppColors.textSecondaryLight,
             enabled: true,
@@ -3233,10 +3754,10 @@ class _PostActionBarState extends State<_PostActionBar> {
                 ? _promptLogin(context)
                 : _showCommentSheet(context, widget.post, widget.cubit),
           ),
-          const SizedBox(width: 4),
-          // Share
+          const SizedBox(width: 2),
+          // Share — same icon as video/showcase tabs
           _ActionBarBtn(
-            icon: Icons.share_rounded,
+            icon: Icons.send_rounded,
             label: 'Share',
             color: AppColors.textSecondaryLight,
             enabled: true,
@@ -3250,7 +3771,7 @@ class _PostActionBarState extends State<_PostActionBar> {
           IconButton(
             iconSize: 20,
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+            constraints: const BoxConstraints.tightFor(width: 32, height: 36),
             icon: const Icon(Icons.more_horiz_rounded,
                 color: AppColors.textSecondaryLight),
             onPressed: () => _showMoreSheet(
@@ -3296,16 +3817,34 @@ class _SmallFollowButtonState extends State<_SmallFollowButton> {
               });
             },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
         decoration: BoxDecoration(
-          color: isFollowing ? Colors.white24 : Colors.white,
+          gradient: isFollowing
+              ? null
+              : const LinearGradient(
+                  colors: [Color(0xFFFFFFFF), Color(0xFFF0F4FF)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+          color: isFollowing ? Colors.white24 : null,
           borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+          border:
+              isFollowing ? Border.all(color: Colors.white38, width: 1) : null,
+          boxShadow: isFollowing
+              ? null
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
         ),
         child: Text(
-          isFollowing ? 'Following' : '+ Follow',
-          style: GoogleFonts.plusJakartaSans(
+          isFollowing ? '✓ Following' : '+ Follow',
+          style: GoogleFonts.spaceGrotesk(
             fontSize: 11,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w800,
             color: isFollowing ? Colors.white : AppColors.primary,
           ),
         ),
@@ -3363,7 +3902,7 @@ class _PhotoWidget extends StatelessWidget {
   }
 }
 
-/// Small colour tag chip
+/// Small colour tag chip — modern pill style
 class _TagChip extends StatelessWidget {
   final String label;
   final Color color;
@@ -3375,25 +3914,34 @@ class _TagChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: dark ? Colors.white24 : color.withValues(alpha: 0.12),
+        color: dark
+            ? Colors.white.withValues(alpha: 0.15)
+            : color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+        border: Border.all(
+          color: dark
+              ? Colors.white.withValues(alpha: 0.2)
+              : color.withValues(alpha: 0.25),
+          width: 0.8,
+        ),
       ),
       child: Text(
         label,
-        style: GoogleFonts.plusJakartaSans(
+        style: GoogleFonts.spaceGrotesk(
           fontSize: 10,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
           color: dark ? Colors.white : color,
+          letterSpacing: 0.2,
         ),
       ),
     );
   }
 }
 
-/// Action bar icon+label button
-class _ActionBarBtn extends StatelessWidget {
+/// Action bar icon+label button — modern pill style
+class _ActionBarBtn extends StatefulWidget {
   final IconData icon;
   final String label;
   final Color color;
@@ -3409,34 +3957,75 @@ class _ActionBarBtn extends StatelessWidget {
   });
 
   @override
+  State<_ActionBarBtn> createState() => _ActionBarBtnState();
+}
+
+class _ActionBarBtnState extends State<_ActionBarBtn>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 100));
+    _scale = Tween(begin: 1.0, end: 0.88)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final effectiveColor = enabled ? color : Colors.grey;
-    return InkWell(
-      onTap: enabled ? onTap : null,
-      borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 18, color: effectiveColor),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: GoogleFonts.plusJakartaSans(
+    final effectiveColor = widget.enabled ? widget.color : Colors.grey;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = effectiveColor.withValues(alpha: isDark ? 0.14 : 0.09);
+
+    return GestureDetector(
+      onTapDown: widget.enabled ? (_) => _ctrl.forward() : null,
+      onTapUp: widget.enabled
+          ? (_) {
+              _ctrl.reverse();
+              widget.onTap();
+            }
+          : null,
+      onTapCancel: () => _ctrl.reverse(),
+      child: ScaleTransition(
+        scale: _scale,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
+          decoration: BoxDecoration(
+            color: widget.enabled ? bg : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(widget.icon, size: 17, color: effectiveColor),
+              const SizedBox(width: 5),
+              Text(
+                widget.label,
+                style: GoogleFonts.spaceGrotesk(
                   fontSize: 12,
                   color: effectiveColor,
-                  fontWeight: FontWeight.w600),
-            ),
-          ],
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Video overlay action button (icon + caption)
-class _VideoActionBtn extends StatelessWidget {
+/// Video overlay action button (icon + caption) — glassy modern style
+class _VideoActionBtn extends StatefulWidget {
   final IconData icon;
   final String label;
   final Color color;
@@ -3454,30 +4043,91 @@ class _VideoActionBtn extends StatelessWidget {
   });
 
   @override
+  State<_VideoActionBtn> createState() => _VideoActionBtnState();
+}
+
+class _VideoActionBtnState extends State<_VideoActionBtn>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pressCtrl;
+  late final Animation<double> _pressScale;
+
+  @override
+  void initState() {
+    super.initState();
+    _pressCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 120),
+      reverseDuration: const Duration(milliseconds: 200),
+    );
+    _pressScale = Tween<double>(begin: 1.0, end: 0.85).animate(
+      CurvedAnimation(parent: _pressCtrl, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pressCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final effectiveColor = enabled ? color : Colors.grey;
+    final effectiveColor = widget.enabled ? widget.color : Colors.grey;
+    final isLiked = widget.color == Colors.redAccent ||
+        widget.color == Colors.red ||
+        widget.color == AppColors.primary;
 
     return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: const BoxDecoration(
-              color: Colors.black38,
-              shape: BoxShape.circle,
+      onTapDown: widget.enabled ? (_) => _pressCtrl.forward() : null,
+      onTapUp: widget.enabled
+          ? (_) {
+              _pressCtrl.reverse();
+              widget.onTap?.call();
+            }
+          : null,
+      onTapCancel: () => _pressCtrl.reverse(),
+      child: ScaleTransition(
+        scale: _pressScale,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.45),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  width: 1,
+                ),
+                boxShadow: widget.enabled && isLiked
+                    ? [
+                        BoxShadow(
+                          color: effectiveColor.withValues(alpha: 0.35),
+                          blurRadius: 12,
+                          spreadRadius: 1,
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Icon(widget.icon,
+                  color: effectiveColor, size: widget.iconSize + 2),
             ),
-            child: Icon(icon, color: effectiveColor, size: iconSize),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style:
-                GoogleFonts.plusJakartaSans(color: effectiveColor, fontSize: 9),
-          ),
-        ],
+            const SizedBox(height: 4),
+            Text(
+              widget.label,
+              style: GoogleFonts.spaceGrotesk(
+                color: Colors.white.withValues(alpha: 0.9),
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                shadows: const [
+                  Shadow(color: Colors.black54, blurRadius: 6),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -5955,18 +6605,11 @@ class _FilterChipsState extends State<_FilterChips> {
                 ? _FeedTopFilterMode.search
                 : _FeedTopFilterMode.faculty);
 
-        // Video tab (0) = dark background → white text; others = light → dark text
-        final onDark = widget.currentTabIndex == 0;
+        // Filter controls now sit on a solid surface; use theme-driven contrast.
+        final onDark = Theme.of(context).brightness == Brightness.dark;
         final activeColor = onDark ? Colors.white : Colors.black87;
         final inactiveColor = onDark ? Colors.white70 : Colors.black54;
-        final textShadows = onDark
-            ? const <Shadow>[
-                Shadow(color: Colors.black54, blurRadius: 6),
-                Shadow(color: Colors.black26, blurRadius: 12),
-              ]
-            : const <Shadow>[
-                Shadow(color: Colors.white70, blurRadius: 4),
-              ];
+        const textShadows = <Shadow>[];
 
         return Column(
           children: [
@@ -5993,6 +6636,7 @@ class _FilterChipsState extends State<_FilterChips> {
                                 current.copyWith(
                                   clearFollowingOnly: true,
                                   clearSearchedUser: true,
+                                  clearSavedOnly: true,
                                 ),
                               );
                             },
@@ -6011,6 +6655,7 @@ class _FilterChipsState extends State<_FilterChips> {
                                 clearFaculty: true,
                                 clearSearchedUser: true,
                                 groupsOnly: false,
+                                clearSavedOnly: true,
                               ),
                             ),
                             compact: true,
@@ -6099,49 +6744,85 @@ class _FilterChipsState extends State<_FilterChips> {
                   children: [
                     _Chip(
                       label: 'All',
-                      active: current.type == null && !current.groupsOnly,
+                      active: current.type == null &&
+                          !current.groupsOnly &&
+                          !current.savedOnly,
                       onDark: onDark,
                       onTap: () => widget.cubit.applyFilter(
                         current.copyWith(
                           clearType: true,
                           clearGroupsOnly: true,
+                          clearSavedOnly: true,
                         ),
                       ),
                     ),
                     _Chip(
                       label: 'Projects',
-                      active: current.type == 'project' && !current.groupsOnly,
+                      active: current.type == 'project' &&
+                          !current.groupsOnly &&
+                          !current.savedOnly,
                       onDark: onDark,
                       onTap: () => widget.cubit.applyFilter(
-                        current.copyWith(type: 'project', groupsOnly: false),
+                        current.copyWith(
+                          type: 'project',
+                          groupsOnly: false,
+                          clearSavedOnly: true,
+                        ),
                       ),
                     ),
                     _Chip(
                       label: 'Opportunities',
-                      active:
-                          current.type == 'opportunity' && !current.groupsOnly,
+                      active: current.type == 'opportunity' &&
+                          !current.groupsOnly &&
+                          !current.savedOnly,
                       onDark: onDark,
                       onTap: () => widget.cubit.applyFilter(
                         current.copyWith(
-                            type: 'opportunity', groupsOnly: false),
+                          type: 'opportunity',
+                          groupsOnly: false,
+                          clearSavedOnly: true,
+                        ),
                       ),
                     ),
                     _Chip(
                       label: 'Adverts',
-                      active: current.type == 'advert' && !current.groupsOnly,
+                      active: current.type == 'advert' &&
+                          !current.groupsOnly &&
+                          !current.savedOnly,
                       onDark: onDark,
                       onTap: () => widget.cubit.applyFilter(
-                        current.copyWith(type: 'advert', groupsOnly: false),
+                        current.copyWith(
+                          type: 'advert',
+                          groupsOnly: false,
+                          clearSavedOnly: true,
+                        ),
                       ),
                     ),
                     _Chip(
                       label: 'Groups',
-                      active: current.groupsOnly,
+                      active: current.groupsOnly && !current.savedOnly,
                       onDark: onDark,
                       onTap: () => widget.cubit.applyFilter(
                         current.copyWith(
                           type: 'project',
                           groupsOnly: true,
+                          clearSavedOnly: true,
+                        ),
+                      ),
+                    ),
+                    _Chip(
+                      label: 'Saved',
+                      active: current.savedOnly,
+                      onDark: onDark,
+                      onTap: () => widget.cubit.applyFilter(
+                        current.copyWith(
+                          savedOnly: true,
+                          clearFaculty: true,
+                          clearCategory: true,
+                          clearType: true,
+                          clearGroupsOnly: true,
+                          clearFollowingOnly: true,
+                          clearSearchedUser: true,
                         ),
                       ),
                     ),
@@ -6164,6 +6845,7 @@ class _FilterChipsState extends State<_FilterChips> {
                               clearFaculty: true,
                               clearFollowingOnly: true,
                               groupsOnly: false,
+                              clearSavedOnly: true,
                             ),
                           );
                         },
@@ -6180,6 +6862,7 @@ class _FilterChipsState extends State<_FilterChips> {
                                   faculty: faculty,
                                   clearType: true,
                                   groupsOnly: false,
+                                  clearSavedOnly: true,
                                   clearFollowingOnly: true,
                                   clearSearchedUser: true,
                                 ),
@@ -6248,10 +6931,10 @@ class _FacultyDropdown extends StatelessWidget {
         hasSelection && options.contains(selected) ? selected : null;
 
     final bgColor = onDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.black.withValues(alpha: 0.05);
+      ? Colors.white.withValues(alpha: 0.12)
+      : Colors.white;
     final textColor = onDark ? Colors.white : Colors.black87;
-    final hintColor = onDark ? Colors.white60 : Colors.black45;
+    final hintColor = onDark ? Colors.white70 : Colors.black54;
     final dropBg = onDark ? const Color(0xFF1A1A2E) : Colors.white;
     final iconColor = onDark ? Colors.white70 : Colors.black54;
 
@@ -6260,6 +6943,11 @@ class _FacultyDropdown extends StatelessWidget {
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+        border: Border.all(
+          color: onDark
+              ? Colors.white.withValues(alpha: 0.18)
+              : Colors.black.withValues(alpha: 0.08),
+        ),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
@@ -6320,40 +7008,43 @@ class _TopModeChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final aColor = activeColor ?? Colors.white;
     final iColor = inactiveColor ?? Colors.white70;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (compact) {
       return InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 15,
-                  fontWeight: active ? FontWeight.w800 : FontWeight.w600,
-                  color: active ? aColor : iColor,
-                  shadows: shadows,
-                ),
-              ),
-              const SizedBox(height: 3),
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOutCubic,
-                width: active ? 26 : 0,
-                height: 2,
-                decoration: BoxDecoration(
-                  color: aColor,
-                  borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
-                  boxShadow: shadows != null
-                      ? [BoxShadow(color: shadows!.first.color, blurRadius: 4)]
-                      : null,
-                ),
-              ),
-            ],
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: active
+                ? (isDark
+                    ? Colors.white.withValues(alpha: 0.16)
+                    : const Color(0xFFE2E8F0))
+                : (isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : const Color(0xFFF8FAFC)),
+            borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+            border: Border.all(
+              color: active
+                  ? (isDark
+                      ? Colors.white.withValues(alpha: 0.28)
+                      : const Color(0xFFCBD5E1))
+                  : (isDark
+                      ? Colors.white.withValues(alpha: 0.14)
+                      : const Color(0xFFE2E8F0)),
+            ),
+          ),
+          child: Text(
+            label,
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 14,
+              fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+              color: active ? aColor : iColor,
+              shadows: shadows,
+            ),
           ),
         ),
       );
@@ -6570,13 +7261,13 @@ class _Chip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bgActive = onDark
-        ? Colors.white.withValues(alpha: 0.18)
-        : Colors.black.withValues(alpha: 0.10);
+      ? const Color(0xFF1D4ED8).withValues(alpha: 0.35)
+      : const Color(0xFFDBEAFE);
     final bgInactive = onDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.black.withValues(alpha: 0.05);
-    final textActive = onDark ? Colors.white : Colors.black87;
-    final textInactive = onDark ? Colors.white70 : Colors.black54;
+      ? Colors.white.withValues(alpha: 0.12)
+      : const Color(0xFFF1F5F9);
+    final textActive = onDark ? Colors.white : const Color(0xFF1E3A8A);
+    final textInactive = onDark ? Colors.white : const Color(0xFF334155);
 
     return Padding(
       padding: const EdgeInsets.only(right: 6),
@@ -6587,6 +7278,15 @@ class _Chip extends StatelessWidget {
           decoration: BoxDecoration(
             color: active ? bgActive : bgInactive,
             borderRadius: BorderRadius.circular(AppDimensions.radiusFull),
+            border: Border.all(
+              color: active
+                  ? (onDark
+                      ? Colors.white.withValues(alpha: 0.28)
+                      : const Color(0xFF93C5FD))
+                  : (onDark
+                      ? Colors.white.withValues(alpha: 0.18)
+                      : const Color(0xFFE2E8F0)),
+            ),
           ),
           child: Text(
             label,
@@ -6618,7 +7318,7 @@ class _CollaboratorStripState extends State<_CollaboratorStrip> {
   PageController? _pageCtrl;
   int _currentIndex = 0;
   bool _showSwipeHint = false;
-  bool _collapsed = false;
+  bool _collapsed = _collaboratorStripCollapsed;
   Timer? _hintTimer;
 
   @override
@@ -6716,8 +7416,10 @@ class _CollaboratorStripState extends State<_CollaboratorStrip> {
                         tooltip: _collapsed
                             ? 'Show suggestions'
                             : 'Hide suggestions',
-                        onPressed: () =>
-                            setState(() => _collapsed = !_collapsed),
+                        onPressed: () => setState(() {
+                          _collapsed = !_collapsed;
+                          _collaboratorStripCollapsed = _collapsed;
+                        }),
                         icon: Icon(
                           _collapsed
                               ? Icons.expand_more_rounded
@@ -7150,34 +7852,61 @@ class _ErrorView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(24),
       physics: const AlwaysScrollableScrollPhysics(),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 360),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.wifi_off_rounded,
-                  size: 56, color: AppColors.danger),
-              const SizedBox(height: 16),
-              Text('Could not load feed',
-                  style:
-                      GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 4),
-              Text(
-                message,
-                style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12, color: AppColors.textSecondaryLight),
-                textAlign: TextAlign.center,
+          child: Container(
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: AppColors.danger.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: AppColors.danger.withValues(alpha: 0.2),
+                width: 1,
               ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('Retry'),
-              ),
-            ],
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.danger.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.wifi_off_rounded,
+                      size: 36, color: AppColors.danger),
+                ),
+                const SizedBox(height: 16),
+                Text('Could not load feed',
+                    style: GoogleFonts.spaceGrotesk(
+                        fontWeight: FontWeight.w800, fontSize: 16)),
+                const SizedBox(height: 6),
+                Text(
+                  message,
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 12, color: AppColors.textSecondaryLight),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: Text('Try Again',
+                      style: GoogleFonts.spaceGrotesk(
+                          fontWeight: FontWeight.w700)),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.danger,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -7193,10 +7922,46 @@ class _EndOfFeed extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.all(32),
       child: Center(
-        child: Text(
-          "You're all caught up! ✨",
-          style: GoogleFonts.plusJakartaSans(
-              fontSize: 14, color: AppColors.textSecondaryLight),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFFFD700), Color(0xFFFF9500)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFFFD700).withValues(alpha: 0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: const Icon(Icons.auto_awesome_rounded,
+                  color: Colors.white, size: 28),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              "You're all caught up!",
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Come back later for more',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12,
+                color: AppColors.textSecondaryLight,
+              ),
+            ),
+          ],
         ),
       ),
     );

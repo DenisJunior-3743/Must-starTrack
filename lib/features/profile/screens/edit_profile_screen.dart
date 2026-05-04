@@ -1,15 +1,8 @@
-﻿// lib/features/profile/screens/edit_profile_screen.dart
+// lib/features/profile/screens/edit_profile_screen.dart
 //
-// MUST StarTrack — Edit Profile Screen
-//
-// WhatsApp-style profile editing:
-//   - Tappable avatar with camera overlay → image_picker → image_cropper (1:1)
-//   - Cropped photo is uploaded to Cloudinary immediately on save
-//   - All fields are pre-populated from SQLite (ProfileCubit / UserDao)
-//   - Faculty / Programme / Year cascading dropdowns
-//   - Skills chip input, GitHub + LinkedIn URLs
-//   - Profile visibility toggle
-//   - Save calls ProfileCubit.updateProfile() → writes SQLite + Firestore
+// MUST StarTrack — Edit Profile Screen (Phase 5 — Glow Redesign)
+// Light: #F8FBFF -> #ECF3FF  |  Dark: #061845 -> #030D27
+// PlusJakartaSans, pill buttons, frosted-glass form cards, glow blobs
 
 import 'dart:async';
 import 'dart:io';
@@ -32,6 +25,35 @@ import '../../auth/bloc/auth_cubit.dart';
 import '../bloc/profile_cubit.dart';
 import '../../shared/hci_components/st_form_widgets.dart';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Glow blob helper
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _GlowBlob extends StatelessWidget {
+  const _GlowBlob({required this.color});
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: 220,
+        height: 220,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(color: color, blurRadius: 80, spreadRadius: 24),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Screen
+// ─────────────────────────────────────────────────────────────────────────────
+
 class EditProfileScreen extends StatefulWidget {
   final String? targetUserId;
 
@@ -45,6 +67,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _bioCtrl = TextEditingController();
+  final _departmentCtrl = TextEditingController();
   final _githubCtrl = TextEditingController();
   final _linkedinCtrl = TextEditingController();
 
@@ -53,13 +76,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   int _year = 1;
   List<String> _skills = [];
   String _visibility = 'public';
+  bool _isLecturerProfile = false;
 
-  File? _newPhoto; // picked + cropped local file
-  String? _existingPhotoUrl; // current Cloudinary URL from DB
+  File? _newPhoto;
+  String? _existingPhotoUrl;
   bool _saving = false;
   bool _dirty = false;
-  bool _seeded = false; // true once fields are populated from cubit
-  bool _avatarPressed = false; // drives zoom-on-press animation
+  bool _seeded = false;
+  bool _avatarPressed = false;
 
   final _picker = ImagePicker();
   final _facultyDao = sl<FacultyDao>();
@@ -79,6 +103,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void dispose() {
     _nameCtrl.dispose();
     _bioCtrl.dispose();
+    _departmentCtrl.dispose();
     _githubCtrl.dispose();
     _linkedinCtrl.dispose();
     super.dispose();
@@ -135,39 +160,37 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     });
   }
 
-  // Populate form fields once the cubit emits ProfileLoaded
   void _seedFromState(ProfileLoaded loaded) {
     if (_seeded) return;
     _seeded = true;
     final user = loaded.user;
     final profile = user.profile;
+    _isLecturerProfile = user.isLecturer;
 
-    // Use displayName, fallback to email prefix if empty
     String displayName = user.displayName ?? '';
     if (displayName.isEmpty && user.email.isNotEmpty) {
       displayName = user.email.split('@').first;
     }
     _nameCtrl.text = displayName;
-
-    // Bio can be null, use empty string
     _bioCtrl.text = profile?.bio ?? '';
+    _departmentCtrl.text = _isLecturerProfile
+        ? _formatDepartmentLabel(
+            profile?.department ?? profile?.programName ?? '',
+          )
+        : (profile?.department ?? '');
     _existingPhotoUrl = user.photoUrl;
 
     final links = profile?.portfolioLinks ?? {};
     _githubCtrl.text = links['github'] ?? '';
     _linkedinCtrl.text = links['linkedin'] ?? '';
 
-    // Handle missing or incomplete profile data gracefully
     if (profile != null) {
-      // Faculty
       if (profile.faculty != null && profile.faculty!.isNotEmpty) {
         _faculty = profile.faculty!;
       }
-      // Programme
       if (profile.programName != null && profile.programName!.isNotEmpty) {
         _programme = profile.programName!;
       }
-      // Year of study
       if (profile.yearOfStudy != null) {
         _year = profile.yearOfStudy!;
       }
@@ -183,36 +206,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   void _markDirty() => setState(() => _dirty = true);
 
-  // ── Photo pick + crop ─────────────────────────────────────────────────────
-
   Future<void> _pickPhoto() async {
-    debugPrint('📸 [EditProfile] Avatar tapped — opening photo picker');
+    debugPrint('[EditProfile] Avatar tapped - opening photo picker');
     try {
       final choice = await showModalBottomSheet<ImageSource>(
         context: context,
-        shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+        backgroundColor: Colors.transparent,
         builder: (_) => _PhotoSourceSheet(),
       );
-      if (choice == null || !mounted) {
-        debugPrint(
-            '📸 [EditProfile] Photo picker cancelled — no source chosen');
-        return;
-      }
-      debugPrint('📸 [EditProfile] Source chosen: $choice');
+      if (choice == null || !mounted) return;
 
       final picked = await _picker.pickImage(
         source: choice,
         imageQuality: 90,
         maxWidth: 1024,
       );
-      if (picked == null || !mounted) {
-        debugPrint('📸 [EditProfile] No image picked from source');
-        return;
-      }
-      debugPrint('📸 [EditProfile] Image picked: ${picked.path}');
+      if (picked == null || !mounted) return;
 
-      // Crop to 1:1 square — WhatsApp style
       final cropped = await ImageCropper().cropImage(
         sourcePath: picked.path,
         aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
@@ -234,7 +244,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ],
       );
       if (cropped != null && mounted) {
-        debugPrint('📸 [EditProfile] Crop done → ${cropped.path}');
         setState(() {
           _newPhoto = File(cropped.path);
           _dirty = true;
@@ -250,8 +259,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }
     }
   }
-
-  // ── Save ──────────────────────────────────────────────────────────────────
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
@@ -269,11 +276,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final cubit = context.read<ProfileCubit>();
     await cubit.updateProfile(
       displayName: _nameCtrl.text.trim(),
-      bio: _bioCtrl.text.trim().isEmpty ? null : _bioCtrl.text.trim(),
+      bio: _isLecturerProfile
+          ? null
+          : (_bioCtrl.text.trim().isEmpty ? null : _bioCtrl.text.trim()),
       faculty: _faculty,
-      programme: _programme,
-      yearOfStudy: _year,
-      skills: _skills,
+      programme: _isLecturerProfile ? null : _programme,
+      department: _isLecturerProfile
+        ? _formatDepartmentLabel(_departmentCtrl.text)
+        : null,
+      yearOfStudy: _isLecturerProfile ? null : _year,
+      skills: _isLecturerProfile ? const [] : _skills,
       portfolioLinks: links,
       visibility: _visibility,
       photo: _newPhoto,
@@ -282,7 +294,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (!mounted) return;
     setState(() => _saving = false);
 
-    // Navigate back on success; on error the cubit emits ProfileError
     final newState = cubit.state;
     if (newState is ProfileLoaded) {
       ScaffoldMessenger.of(context)
@@ -296,6 +307,37 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgTop = isDark ? const Color(0xFF061845) : const Color(0xFFF8FBFF);
+    final bgBottom = isDark ? const Color(0xFF030D27) : const Color(0xFFECF3FF);
+    final fgPrimary = isDark ? Colors.white : const Color(0xFF0F172A);
+    final pillBg = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.white.withValues(alpha: 0.80);
+    final pillBorder = isDark
+        ? Colors.white.withValues(alpha: 0.12)
+        : const Color(0xFFE2E8F0);
+
+    final gradient = BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [bgTop, bgBottom],
+      ),
+    );
+
+    final lecturerDepartments = _courses
+        .map((course) => _formatDepartmentLabel(course.name))
+        .where((name) => name.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+
+    final lecturerDepartmentValue = lecturerDepartments.contains(
+      _departmentCtrl.text.trim(),
+    )
+        ? _departmentCtrl.text.trim()
+        : null;
+
     return BlocConsumer<ProfileCubit, ProfileState>(
       listener: (context, state) {
         if (state is ProfileLoaded && !_seeded) {
@@ -304,417 +346,570 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       },
       builder: (context, state) {
         if (state is ProfileLoading || state is ProfileInitial) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
+          return Scaffold(
+            backgroundColor: Colors.transparent,
+            body: Stack(
+              children: [
+                Positioned.fill(child: DecoratedBox(decoration: gradient)),
+                const Center(child: CircularProgressIndicator()),
+              ],
+            ),
           );
         }
 
-        // Seed once on first loaded state
         if (state is ProfileLoaded && !_seeded) {
           _seedFromState(state);
         }
 
         return Scaffold(
+          backgroundColor: Colors.transparent,
+          extendBodyBehindAppBar: true,
           appBar: AppBar(
-            title: Text(
-              _isAdminEditor ? 'Edit Student Profile' : 'Edit Profile',
-            ),
+            backgroundColor: pillBg,
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            scrolledUnderElevation: 0,
             leading: IconButton(
-              icon: const Icon(Icons.close_rounded),
+              icon: Icon(Icons.close_rounded, color: fgPrimary),
               onPressed: () => _dirty ? _confirmDiscard() : context.pop(),
             ),
+            title: Text(
+              _isAdminEditor
+                  ? (_isLecturerProfile
+                      ? 'Edit Lecturer Profile'
+                      : 'Edit Student Profile')
+                  : 'Edit Profile',
+              style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.w700, color: fgPrimary),
+            ),
+            centerTitle: true,
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(1),
+              child: Container(height: 1, color: pillBorder),
+            ),
           ),
-          body: Form(
-            key: _formKey,
-            onChanged: _markDirty,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.only(bottom: 100),
-              child: Column(
-                children: [
-                  // ── Avatar ──────────────────────────────────────────────
-                  const SizedBox(height: 28),
-                  Center(
+          body: Stack(
+            children: [
+              Positioned.fill(child: DecoratedBox(decoration: gradient)),
+              const Positioned(
+                  top: -60,
+                  right: -50,
+                  child: _GlowBlob(color: Color(0x332563EB))),
+              const Positioned(
+                  bottom: 200,
+                  left: -80,
+                  child: _GlowBlob(color: Color(0x221152D4))),
+              SafeArea(
+                child: Form(
+                  key: _formKey,
+                  onChanged: _markDirty,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.only(bottom: 120),
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Semantics(
-                          label: 'Change profile photo',
-                          button: true,
-                          child: AnimatedScale(
-                            scale: _avatarPressed ? 1.08 : 1.0,
-                            duration: const Duration(milliseconds: 150),
-                            curve: Curves.easeOut,
-                            child: Stack(
-                              clipBehavior: Clip.none,
-                              alignment: Alignment.bottomRight,
-                              children: [
-                                // The whole circle is one Material button with ripple
-                                Material(
-                                  shape: const CircleBorder(),
-                                  clipBehavior: Clip.antiAlias,
-                                  color: Colors.transparent,
-                                  child: Ink(
-                                    width: 112,
-                                    height: 112,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: AppColors.primary,
-                                        width: 2,
-                                      ),
-                                      image: _newPhoto != null
-                                          ? DecorationImage(
-                                              image: FileImage(_newPhoto!),
-                                              fit: BoxFit.cover,
-                                            )
-                                          : _existingPhotoUrl != null
-                                              ? DecorationImage(
-                                                  image:
-                                                      CachedNetworkImageProvider(
-                                                          _existingPhotoUrl!),
-                                                  fit: BoxFit.cover,
-                                                )
-                                              : null,
-                                      color: AppColors.primaryTint10,
-                                    ),
-                                    child: InkWell(
-                                      onTap: _pickPhoto,
-                                      onTapDown: (_) =>
-                                          setState(() => _avatarPressed = true),
-                                      onTapUp: (_) => setState(
-                                          () => _avatarPressed = false),
-                                      onTapCancel: () => setState(
-                                          () => _avatarPressed = false),
-                                      splashColor: AppColors.primary
-                                          .withValues(alpha: 0.25),
-                                      highlightColor: AppColors.primary
-                                          .withValues(alpha: 0.1),
-                                      child: Stack(
-                                        fit: StackFit.expand,
-                                        children: [
-                                          // Placeholder icon when no photo
-                                          if (_newPhoto == null &&
-                                              _existingPhotoUrl == null)
-                                            const Icon(Icons.person_rounded,
-                                                size: 52,
-                                                color: AppColors.primary),
-                                          // Always-visible bottom edit strip
-                                          Positioned(
-                                            left: 0,
-                                            right: 0,
-                                            bottom: 0,
-                                            child: Container(
-                                              height: 36,
-                                              decoration: BoxDecoration(
-                                                gradient: LinearGradient(
-                                                  begin: Alignment.topCenter,
-                                                  end: Alignment.bottomCenter,
-                                                  colors: [
-                                                    Colors.transparent,
-                                                    Colors.black.withValues(
-                                                        alpha: 0.62),
-                                                  ],
-                                                ),
-                                              ),
-                                              alignment: Alignment.center,
-                                              child: const Text(
-                                                'EDIT',
-                                                style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.w800,
-                                                  letterSpacing: 1.2,
-                                                ),
+                        // ── Avatar ────────────────────────────────────────
+                        const SizedBox(height: 28),
+                        Center(
+                          child: Column(
+                            children: [
+                              Semantics(
+                                label: 'Change profile photo',
+                                button: true,
+                                child: AnimatedScale(
+                                  scale: _avatarPressed ? 1.08 : 1.0,
+                                  duration: const Duration(milliseconds: 150),
+                                  curve: Curves.easeOut,
+                                  child: Stack(
+                                    clipBehavior: Clip.none,
+                                    alignment: Alignment.bottomRight,
+                                    children: [
+                                      // Glow ring
+                                      Container(
+                                        width: 116,
+                                        height: 116,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: AppColors.primary
+                                                  .withValues(alpha: 0.28),
+                                              blurRadius: 24,
+                                              spreadRadius: 4,
+                                            ),
+                                          ],
+                                          border: Border.all(
+                                            color: AppColors.primary
+                                                .withValues(alpha: 0.50),
+                                            width: 2.5,
+                                          ),
+                                        ),
+                                        child: Material(
+                                          shape: const CircleBorder(),
+                                          clipBehavior: Clip.antiAlias,
+                                          color: AppColors.primaryTint10,
+                                          child: Ink(
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              image: _newPhoto != null
+                                                  ? DecorationImage(
+                                                      image: FileImage(_newPhoto!),
+                                                      fit: BoxFit.cover,
+                                                    )
+                                                  : _existingPhotoUrl != null
+                                                      ? DecorationImage(
+                                                          image: CachedNetworkImageProvider(
+                                                              _existingPhotoUrl!),
+                                                          fit: BoxFit.cover,
+                                                        )
+                                                      : null,
+                                            ),
+                                            child: InkWell(
+                                              onTap: _pickPhoto,
+                                              onTapDown: (_) => setState(
+                                                  () => _avatarPressed = true),
+                                              onTapUp: (_) => setState(
+                                                  () => _avatarPressed = false),
+                                              onTapCancel: () => setState(
+                                                  () => _avatarPressed = false),
+                                              splashColor: AppColors.primary
+                                                  .withValues(alpha: 0.25),
+                                              child: Stack(
+                                                fit: StackFit.expand,
+                                                children: [
+                                                  if (_newPhoto == null &&
+                                                      _existingPhotoUrl == null)
+                                                    const Icon(
+                                                        Icons.person_rounded,
+                                                        size: 52,
+                                                        color: AppColors.primary),
+                                                  Positioned(
+                                                    left: 0,
+                                                    right: 0,
+                                                    bottom: 0,
+                                                    child: Container(
+                                                      height: 36,
+                                                      decoration: BoxDecoration(
+                                                        gradient: LinearGradient(
+                                                          begin: Alignment.topCenter,
+                                                          end: Alignment.bottomCenter,
+                                                          colors: [
+                                                            Colors.transparent,
+                                                            Colors.black
+                                                                .withValues(
+                                                                    alpha: 0.62),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                      alignment: Alignment.center,
+                                                      child: const Text(
+                                                        'EDIT',
+                                                        style: TextStyle(
+                                                          color: Colors.white,
+                                                          fontSize: 10,
+                                                          fontWeight:
+                                                              FontWeight.w800,
+                                                          letterSpacing: 1.2,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ),
                                           ),
-                                        ],
+                                        ),
                                       ),
-                                    ),
+                                      // Edit badge
+                                      Positioned(
+                                        bottom: 2,
+                                        right: 2,
+                                        child: IgnorePointer(
+                                          child: Container(
+                                            width: 30,
+                                            height: 30,
+                                            decoration: BoxDecoration(
+                                              gradient: const LinearGradient(
+                                                colors: [
+                                                  Color(0xFF2563EB),
+                                                  Color(0xFF1152D4)
+                                                ],
+                                              ),
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                  color: isDark
+                                                      ? const Color(0xFF061845)
+                                                      : Colors.white,
+                                                  width: 2),
+                                            ),
+                                            child: const Icon(Icons.camera_alt_rounded,
+                                                size: 15, color: Colors.white),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                // Edit pencil badge — bottom-right
-                                Positioned(
-                                  bottom: 2,
-                                  right: 2,
-                                  child: IgnorePointer(
-                                    child: Container(
-                                      width: 30,
-                                      height: 30,
-                                      decoration: BoxDecoration(
-                                        color: AppColors.primary,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                            color: Colors.white, width: 2),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black
-                                                .withValues(alpha: 0.18),
-                                            blurRadius: 4,
-                                            offset: const Offset(0, 2),
-                                          ),
-                                        ],
-                                      ),
-                                      child: const Icon(Icons.edit_rounded,
-                                          size: 14, color: Colors.white),
-                                    ),
-                                  ),
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                'Tap photo to change',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 12,
+                                  color: isDark
+                                      ? Colors.white54
+                                      : const Color(0xFF64748B),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // ── Personal Info ─────────────────────────────────
+                        const SizedBox(height: 8),
+                        _SectionHeader(
+                            'Personal Info', isDark: isDark, pillBg: pillBg,
+                            pillBorder: pillBorder),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Column(
+                            children: [
+                              StTextField(
+                                label: 'Display Name',
+                                controller: _nameCtrl,
+                                validator: (v) => v == null || v.trim().isEmpty
+                                    ? 'Name is required.'
+                                    : null,
+                              ),
+                              if (!_isLecturerProfile) ...[
+                                const SizedBox(
+                                    height: AppDimensions.spacingMd),
+                                StTextField(
+                                  label: 'Bio',
+                                  hint: 'Tell the community about yourself...',
+                                  controller: _bioCtrl,
+                                  maxLines: 4,
                                 ),
                               ],
-                            ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 10),
-                        Text(
-                          'Tap photo to change',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 12,
-                            color: AppColors.textSecondaryLight,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
 
-                  // ── Personal Info ───────────────────────────────────────
-                  const SizedBox(height: 8),
-                  const _SectionHeader('Personal Info'),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Column(
-                      children: [
-                        StTextField(
-                          label: 'Display Name',
-                          controller: _nameCtrl,
-                          validator: (v) => v == null || v.trim().isEmpty
-                              ? 'Name is required.'
-                              : null,
-                        ),
-                        const SizedBox(height: AppDimensions.spacingMd),
-                        StTextField(
-                          label: 'Bio',
-                          hint: 'Tell the community about yourself...',
-                          controller: _bioCtrl,
-                          maxLines: 4,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // ── Academic Info ───────────────────────────────────────
-                  const _SectionHeader('Academic Info'),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Column(
-                      children: [
-                        if (_isAdminEditor)
-                          DropdownButtonFormField<String>(
-                            initialValue: _faculties
-                                    .any((faculty) => faculty.name == _faculty)
-                                ? _faculty
-                                : null,
-                            decoration: const InputDecoration(
-                              labelText: 'Faculty',
-                              border: OutlineInputBorder(),
-                              helperText:
-                                  'Admins can reassign a student to a faculty.',
-                            ),
-                            items: _faculties
-                                .map(
-                                  (faculty) => DropdownMenuItem<String>(
-                                    value: faculty.name,
-                                    child: Text(faculty.name),
+                        // ── Academic Info ─────────────────────────────────
+                        _SectionHeader(
+                            'Academic Info', isDark: isDark, pillBg: pillBg,
+                            pillBorder: pillBorder),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Column(
+                            children: [
+                              if (_isLecturerProfile || _isAdminEditor)
+                                DropdownButtonFormField<String>(
+                                  isExpanded: true,
+                                  initialValue: _faculties.any(
+                                          (f) => f.name == _faculty)
+                                      ? _faculty
+                                      : null,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Faculty',
+                                    border: OutlineInputBorder(),
                                   ),
+                                  items: _faculties
+                                      .map((f) => DropdownMenuItem<String>(
+                                            value: f.name,
+                                            child: Text(
+                                              f.name,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ))
+                                      .toList(growable: false),
+                                  onChanged: _loadingAcademicData
+                                      ? null
+                                      : (value) async {
+                                          if (value == null ||
+                                              value == _faculty) {
+                                            return;
+                                          }
+                                          setState(() {
+                                            _faculty = value;
+                                            _dirty = true;
+                                            if (!_isLecturerProfile) {
+                                              _programme = '';
+                                            }
+                                          });
+                                          if (!_isLecturerProfile) {
+                                            await _loadCoursesForFacultyName(
+                                                value);
+                                          }
+                                        },
                                 )
-                                .toList(growable: false),
-                            onChanged: _loadingAcademicData
-                                ? null
-                                : (value) async {
-                                    if (value == null || value == _faculty) {
-                                      return;
+                              else
+                                StTextField(
+                                  label: 'Faculty',
+                                  initialValue: _faculty,
+                                  enabled: false,
+                                  helperText:
+                                      'University information cannot be changed.',
+                                ),
+                              const SizedBox(height: AppDimensions.spacingMd),
+                              if (_isLecturerProfile)
+                                DropdownButtonFormField<String>(
+                                  isExpanded: true,
+                                  initialValue: lecturerDepartmentValue,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Department',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  hint: const Text('Select Department'),
+                                  items: lecturerDepartments
+                                      .map(
+                                        (name) => DropdownMenuItem<String>(
+                                          value: name,
+                                          child: Text(
+                                            name,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      )
+                                      .toList(growable: false),
+                                  onChanged: _loadingAcademicData ||
+                                          lecturerDepartments.isEmpty
+                                      ? null
+                                      : (value) {
+                                          setState(() {
+                                            _departmentCtrl.text = value ?? '';
+                                            _dirty = true;
+                                          });
+                                        },
+                                  validator: (value) {
+                                    if ((value ?? '').trim().isEmpty) {
+                                      return 'Department is required.';
                                     }
-                                    setState(() {
-                                      _faculty = value;
-                                      _dirty = true;
-                                      _programme = '';
-                                    });
-                                    await _loadCoursesForFacultyName(value);
+                                    return null;
                                   },
-                          )
-                        else
-                          StTextField(
-                            label: 'Faculty',
-                            initialValue: _faculty,
-                            enabled: false,
-                            helperText:
-                                'University information cannot be changed.',
-                          ),
-                        const SizedBox(height: AppDimensions.spacingMd),
-                        if (_isAdminEditor)
-                          DropdownButtonFormField<String>(
-                            initialValue: _courses
-                                    .any((course) => course.name == _programme)
-                                ? _programme
-                                : null,
-                            decoration: const InputDecoration(
-                              labelText: 'Programme',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: _courses
-                                .map(
-                                  (course) => DropdownMenuItem<String>(
-                                    value: course.name,
-                                    child: Text(course.name),
-                                  ),
                                 )
-                                .toList(growable: false),
-                            onChanged: _loadingAcademicData || _courses.isEmpty
-                                ? null
-                                : (value) {
-                                    if (value == null) return;
-                                    setState(() {
-                                      _programme = value;
-                                      _dirty = true;
-                                    });
-                                  },
-                          )
-                        else
-                          StTextField(
-                            label: 'Programme',
-                            initialValue: _programme,
-                            enabled: false,
+                              else ...[
+                                if (_isAdminEditor)
+                                  DropdownButtonFormField<String>(
+                                    isExpanded: true,
+                                    initialValue: _courses.any(
+                                            (c) => c.name == _programme)
+                                        ? _programme
+                                        : null,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Programme',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    items: _courses
+                                        .map((c) => DropdownMenuItem<String>(
+                                              value: c.name,
+                                              child: Text(
+                                                c.name,
+                                                maxLines: 1,
+                                                overflow:
+                                                    TextOverflow.ellipsis,
+                                              ),
+                                            ))
+                                        .toList(growable: false),
+                                    onChanged: _loadingAcademicData ||
+                                            _courses.isEmpty
+                                        ? null
+                                        : (value) {
+                                            if (value == null) return;
+                                            setState(() {
+                                              _programme = value;
+                                              _dirty = true;
+                                            });
+                                          },
+                                  )
+                                else
+                                  StTextField(
+                                    label: 'Programme',
+                                    initialValue: _programme,
+                                    enabled: false,
+                                  ),
+                                const SizedBox(height: AppDimensions.spacingMd),
+                                if (_isAdminEditor)
+                                  DropdownButtonFormField<int>(
+                                    initialValue: _year,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Year of Study',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    items: List.generate(
+                                        5,
+                                        (i) => DropdownMenuItem<int>(
+                                              value: i + 1,
+                                          child: Text('Year ${i + 1}'),
+                                            )),
+                                    onChanged: (value) {
+                                      if (value == null) {
+                                        return;
+                                      }
+                                      setState(() {
+                                        _year = value;
+                                        _dirty = true;
+                                      });
+                                    },
+                                  )
+                                else
+                                  StTextField(
+                                    label: 'Year of Study',
+                                    initialValue: 'Year $_year',
+                                    enabled: false,
+                                  ),
+                              ],
+                            ],
                           ),
-                        const SizedBox(height: AppDimensions.spacingMd),
-                        if (_isAdminEditor)
-                          DropdownButtonFormField<int>(
-                            initialValue: _year,
-                            decoration: const InputDecoration(
-                              labelText: 'Year of Study',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: List.generate(
-                              7,
-                              (index) => DropdownMenuItem<int>(
-                                value: index + 1,
-                                child: Text('Year ${index + 1}'),
-                              ),
-                            ),
-                            onChanged: (value) {
-                              if (value == null) return;
-                              setState(() {
-                                _year = value;
+                        ),
+
+                        // ── Skills ────────────────────────────────────────
+                        if (!_isLecturerProfile) ...[
+                          _SectionHeader(
+                              'Skills', isDark: isDark, pillBg: pillBg,
+                              pillBorder: pillBorder),
+                          Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 16),
+                            child: SkillChipInput(
+                              label: '',
+                              initialSkills: _skills,
+                              onChanged: (s) => setState(() {
+                                _skills = s;
                                 _dirty = true;
-                              });
-                            },
-                          )
-                        else
-                          StTextField(
-                            label: 'Year of Study',
-                            initialValue: 'Year $_year',
-                            enabled: false,
+                              }),
+                            ),
                           ),
+                        ],
+
+                        // ── Portfolio Links ───────────────────────────────
+                        _SectionHeader(
+                            'Portfolio Links', isDark: isDark, pillBg: pillBg,
+                            pillBorder: pillBorder),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Column(
+                            children: [
+                              StTextField(
+                                label: 'GitHub URL',
+                                hint: 'https://github.com/username',
+                                controller: _githubCtrl,
+                                textInputAction: TextInputAction.next,
+                                prefixIcon: const Icon(Icons.code_rounded),
+                              ),
+                              const SizedBox(height: AppDimensions.spacingMd),
+                              StTextField(
+                                label: 'LinkedIn URL',
+                                hint: 'https://linkedin.com/in/username',
+                                controller: _linkedinCtrl,
+                                prefixIcon: const Icon(Icons.link_rounded),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // ── Privacy ───────────────────────────────────────
+                        _SectionHeader(
+                            'Privacy', isDark: isDark, pillBg: pillBg,
+                            pillBorder: pillBorder),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Column(
+                            children: [
+                              _VisibilityOption(
+                                icon: Icons.public_rounded,
+                                label: 'Public',
+                                desc: 'Anyone can view your profile',
+                                value: 'public',
+                                groupValue: _visibility,
+                                isDark: isDark,
+                                pillBg: pillBg,
+                                pillBorder: pillBorder,
+                                onChanged: (v) => setState(() {
+                                  _visibility = v!;
+                                  _dirty = true;
+                                }),
+                              ),
+                              _VisibilityOption(
+                                icon: Icons.group_rounded,
+                                label: 'Followers Only',
+                                desc: 'Only your followers can view',
+                                value: 'followers',
+                                groupValue: _visibility,
+                                isDark: isDark,
+                                pillBg: pillBg,
+                                pillBorder: pillBorder,
+                                onChanged: (v) => setState(() {
+                                  _visibility = v!;
+                                  _dirty = true;
+                                }),
+                              ),
+                              _VisibilityOption(
+                                icon: Icons.lock_outline_rounded,
+                                label: 'Private',
+                                desc: 'Only you can view',
+                                value: 'private',
+                                groupValue: _visibility,
+                                isDark: isDark,
+                                pillBg: pillBg,
+                                pillBorder: pillBorder,
+                                onChanged: (v) => setState(() {
+                                  _visibility = v!;
+                                  _dirty = true;
+                                }),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
                       ],
                     ),
                   ),
-
-                  // ── Skills ──────────────────────────────────────────────
-                  const _SectionHeader('Skills'),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: SkillChipInput(
-                      label: '',
-                      initialSkills: _skills,
-                      onChanged: (s) => setState(() {
-                        _skills = s;
-                        _dirty = true;
-                      }),
-                    ),
-                  ),
-
-                  // ── Portfolio Links ─────────────────────────────────────
-                  const _SectionHeader('Portfolio Links'),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Column(
-                      children: [
-                        StTextField(
-                          label: 'GitHub URL',
-                          hint: 'https://github.com/username',
-                          controller: _githubCtrl,
-                          textInputAction: TextInputAction.next,
-                          prefixIcon: const Icon(Icons.code_rounded),
-                        ),
-                        const SizedBox(height: AppDimensions.spacingMd),
-                        StTextField(
-                          label: 'LinkedIn URL',
-                          hint: 'https://linkedin.com/in/username',
-                          controller: _linkedinCtrl,
-                          prefixIcon: const Icon(Icons.link_rounded),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // ── Privacy ─────────────────────────────────────────────
-                  const _SectionHeader('Privacy'),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Column(
-                      children: [
-                        _VisibilityOption(
-                          icon: Icons.public_rounded,
-                          label: 'Public',
-                          desc: 'Anyone can view your profile',
-                          value: 'public',
-                          groupValue: _visibility,
-                          onChanged: (v) => setState(() {
-                            _visibility = v!;
-                            _dirty = true;
-                          }),
-                        ),
-                        _VisibilityOption(
-                          icon: Icons.group_rounded,
-                          label: 'Followers Only',
-                          desc: 'Only your followers can view',
-                          value: 'followers',
-                          groupValue: _visibility,
-                          onChanged: (v) => setState(() {
-                            _visibility = v!;
-                            _dirty = true;
-                          }),
-                        ),
-                        _VisibilityOption(
-                          icon: Icons.lock_outline_rounded,
-                          label: 'Private',
-                          desc: 'Only you can view',
-                          value: 'private',
-                          groupValue: _visibility,
-                          onChanged: (v) => setState(() {
-                            _visibility = v!;
-                            _dirty = true;
-                          }),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
           bottomNavigationBar: Container(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
             decoration: BoxDecoration(
-                color: Theme.of(context).scaffoldBackgroundColor,
-                border: const Border(
-                    top: BorderSide(color: AppColors.borderLight))),
+              color: pillBg,
+              border: Border(top: BorderSide(color: pillBorder)),
+            ),
             child: SafeArea(
               top: false,
-              child: StButton(
-                label: 'Save Changes',
-                isLoading: _saving || state is ProfileUpdating,
-                onPressed: (_dirty && !_saving && state is! ProfileUpdating)
-                    ? _save
-                    : null,
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: (_dirty && !_saving && state is! ProfileUpdating)
+                      ? _save
+                      : null,
+                  icon: (_saving || state is ProfileUpdating)
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.check_rounded, size: 18),
+                  label: Text(
+                    _saving || state is ProfileUpdating
+                        ? 'Saving...'
+                        : 'Save',
+                    style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.mustGreen,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(AppDimensions.radiusFull),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -727,42 +922,104 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Discard changes?'),
-        content: const Text('Your unsaved changes will be lost.'),
+        title: Text('Discard changes?',
+            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
+        content: Text('Your unsaved changes will be lost.',
+            style: GoogleFonts.plusJakartaSans()),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Keep Editing')),
-          ElevatedButton(
+              child: Text('Keep Editing',
+                  style: GoogleFonts.plusJakartaSans())),
+          FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Discard')),
+              child: Text('Discard',
+                  style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w700))),
         ],
       ),
     );
     if (confirmed == true && mounted) context.pop();
   }
+
+  String _formatDepartmentLabel(String input) {
+    final value = input.trim();
+    if (value.isEmpty) return '';
+
+    final lower = value.toLowerCase();
+    if (lower.startsWith('department of ')) {
+      return value;
+    }
+    if (lower.startsWith('bachelor of ')) {
+      final core = value.substring('Bachelor of '.length).trim();
+      return core.isEmpty ? 'Department' : 'Department of $core';
+    }
+    return 'Department of $value';
+  }
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Section header with frosted pill
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _SectionHeader extends StatelessWidget {
   final String title;
-  const _SectionHeader(this.title);
+  final bool isDark;
+  final Color pillBg;
+  final Color pillBorder;
+
+  const _SectionHeader(
+    this.title, {
+    required this.isDark,
+    required this.pillBg,
+    required this.pillBorder,
+  });
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Text(title.toUpperCase(),
-              style: GoogleFonts.plusJakartaSans(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textSecondaryLight,
-                  letterSpacing: 0.1)),
-        ),
-      );
+  Widget build(BuildContext context) {
+    final fgSecondary = isDark ? Colors.white60 : const Color(0xFF64748B);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 28, 16, 10),
+      child: Row(
+        children: [
+          Container(
+            width: 3,
+            height: 16,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF2563EB), Color(0xFF1152D4)],
+              ),
+              borderRadius: BorderRadius.circular(99),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            title.toUpperCase(),
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: fgSecondary,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Container(
+              height: 1,
+              color: pillBorder,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Visibility option card
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _VisibilityOption extends StatelessWidget {
   final IconData icon;
@@ -771,6 +1028,9 @@ class _VisibilityOption extends StatelessWidget {
   final String value;
   final String groupValue;
   final ValueChanged<String?> onChanged;
+  final bool isDark;
+  final Color pillBg;
+  final Color pillBorder;
 
   const _VisibilityOption({
     required this.icon,
@@ -779,27 +1039,49 @@ class _VisibilityOption extends StatelessWidget {
     required this.value,
     required this.groupValue,
     required this.onChanged,
+    required this.isDark,
+    required this.pillBg,
+    required this.pillBorder,
   });
 
   @override
   Widget build(BuildContext context) {
     final active = groupValue == value;
+    final fgPrimary = isDark ? Colors.white : const Color(0xFF0F172A);
+    final fgSecondary = isDark ? Colors.white60 : const Color(0xFF64748B);
+
     return GestureDetector(
       onTap: () => onChanged(value),
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-            color: Theme.of(context).cardColor,
-            borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
-            border: Border.all(
-                color: active ? AppColors.primary : AppColors.borderLight,
-                width: active ? 1.5 : 0.8)),
+          color: active
+              ? AppColors.primary.withValues(alpha: 0.08)
+              : pillBg,
+          borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
+          border: Border.all(
+            color: active ? AppColors.primary : pillBorder,
+            width: active ? 1.5 : 1.0,
+          ),
+        ),
         child: Row(
           children: [
-            Icon(icon,
-                color:
-                    active ? AppColors.primary : AppColors.textSecondaryLight),
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: active
+                    ? AppColors.primary.withValues(alpha: 0.15)
+                    : (isDark
+                        ? Colors.white.withValues(alpha: 0.06)
+                        : const Color(0xFFEFF4FF)),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon,
+                  size: 18,
+                  color: active ? AppColors.primary : fgSecondary),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -807,10 +1089,13 @@ class _VisibilityOption extends StatelessWidget {
                 children: [
                   Text(label,
                       style: GoogleFonts.plusJakartaSans(
-                          fontSize: 14, fontWeight: FontWeight.w600)),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: active ? AppColors.primary : fgPrimary)),
+                  const SizedBox(height: 2),
                   Text(desc,
                       style: GoogleFonts.plusJakartaSans(
-                          fontSize: 11, color: AppColors.textSecondaryLight)),
+                          fontSize: 11, color: fgSecondary)),
                 ],
               ),
             ),
@@ -818,7 +1103,7 @@ class _VisibilityOption extends StatelessWidget {
               active
                   ? Icons.radio_button_checked_rounded
                   : Icons.radio_button_unchecked_rounded,
-              color: active ? AppColors.primary : AppColors.textSecondaryLight,
+              color: active ? AppColors.primary : fgSecondary,
             ),
           ],
         ),
@@ -827,36 +1112,85 @@ class _VisibilityOption extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Photo source bottom sheet
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _PhotoSourceSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.camera_alt_rounded,
-                  color: AppColors.primary),
-              title: const Text('Take Photo'),
-              onTap: () => Navigator.pop(context, ImageSource.camera),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_rounded,
-                  color: AppColors.primary),
-              title: const Text('Choose from Gallery'),
-              onTap: () => Navigator.pop(context, ImageSource.gallery),
-            ),
-          ],
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final sheetBg = isDark ? const Color(0xFF0C1E54) : Colors.white;
+    final fgPrimary = isDark ? Colors.white : const Color(0xFF0F172A);
+    final divColor = isDark
+        ? Colors.white.withValues(alpha: 0.10)
+        : const Color(0xFFE2E8F0);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: sheetBg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Drag handle
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.20)
+                        : Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2)),
+              ),
+              const SizedBox(height: 20),
+              Text('Choose Photo',
+                  style: GoogleFonts.plusJakartaSans(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: fgPrimary)),
+              const SizedBox(height: 16),
+              Divider(height: 1, color: divColor),
+              ListTile(
+                leading: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.camera_alt_rounded,
+                      color: AppColors.primary, size: 20),
+                ),
+                title: Text('Take Photo',
+                    style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w600, color: fgPrimary)),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+              Divider(height: 1, color: divColor, indent: 16, endIndent: 16),
+              ListTile(
+                leading: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.photo_library_rounded,
+                      color: AppColors.primary, size: 20),
+                ),
+                title: Text('Choose from Gallery',
+                    style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w600, color: fgPrimary)),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+              const SizedBox(height: 4),
+            ],
+          ),
         ),
       ),
     );

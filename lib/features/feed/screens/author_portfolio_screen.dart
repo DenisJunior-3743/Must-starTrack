@@ -24,6 +24,7 @@ import 'dart:async';
 import 'dart:io';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_dimensions.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../core/router/route_guards.dart';
 import '../../../core/router/route_names.dart';
@@ -50,6 +51,10 @@ class AuthorPortfolioScreen extends StatefulWidget {
 class _AuthorPortfolioScreenState extends State<AuthorPortfolioScreen> {
   UserModel? _user;
   List<PostModel> _posts = const [];
+  int _postCount = 0;
+  int _followersCount = 0;
+  int _followingCount = 0;
+  int _collabsCount = 0;
   bool _loading = true;
   String? _error;
 
@@ -80,14 +85,34 @@ class _AuthorPortfolioScreenState extends State<AuthorPortfolioScreen> {
 
   Future<void> _load() async {
     try {
-      // 1. Load user from local DB, fallback to Firestore
-      UserModel? user = await _userDao.getUserById(widget.authorId);
-      user ??= await sl<FirestoreService>().getUser(widget.authorId);
+      // 1. Load fresher user data first, fallback to local cache when offline.
+      UserModel? user = await sl<FirestoreService>().getUser(widget.authorId);
+      user ??= await _userDao.getUserById(widget.authorId);
 
       // 2. Load their posts
       final posts = await _postDao.getPostsByAuthor(
         widget.authorId,
         pageSize: 100,
+      );
+
+      // 2.5 Compute reliable counters from local tables.
+      final localStats = await _loadLocalStats();
+      final profile = user?.profile;
+      final postCount = _bestCount(
+        preferred: profile?.totalPosts,
+        fallbacks: [localStats.posts, posts.length],
+      );
+      final followersCount = _bestCount(
+        preferred: profile?.totalFollowers,
+        fallbacks: [localStats.followers],
+      );
+      final followingCount = _bestCount(
+        preferred: profile?.totalFollowing,
+        fallbacks: [localStats.following],
+      );
+      final collabsCount = _bestCount(
+        preferred: profile?.totalCollabs,
+        fallbacks: [localStats.collabs],
       );
 
       // 3. Check follow status
@@ -109,6 +134,10 @@ class _AuthorPortfolioScreenState extends State<AuthorPortfolioScreen> {
         setState(() {
           _user = user;
           _posts = posts;
+          _postCount = postCount;
+          _followersCount = followersCount;
+          _followingCount = followingCount;
+          _collabsCount = collabsCount;
           _isFollowing = isFollowing;
           _loading = false;
         });
@@ -121,6 +150,55 @@ class _AuthorPortfolioScreenState extends State<AuthorPortfolioScreen> {
         });
       }
     }
+  }
+
+  Future<_LocalPortfolioStats> _loadLocalStats() async {
+    final db = await DatabaseHelper.instance.database;
+
+    final postsRes = await db.rawQuery(
+      'SELECT COUNT(*) AS count FROM ${DatabaseSchema.tablePosts} WHERE author_id = ?',
+      [widget.authorId],
+    );
+    final followersRes = await db.rawQuery(
+      'SELECT COUNT(*) AS count FROM ${DatabaseSchema.tableFollows} WHERE followee_id = ?',
+      [widget.authorId],
+    );
+    final followingRes = await db.rawQuery(
+      'SELECT COUNT(*) AS count FROM ${DatabaseSchema.tableFollows} WHERE follower_id = ?',
+      [widget.authorId],
+    );
+    final collabsRes = await db.rawQuery(
+      '''
+      SELECT COUNT(*) AS count
+      FROM ${DatabaseSchema.tableCollabRequests}
+      WHERE (sender_id = ? OR receiver_id = ?)
+        AND LOWER(COALESCE(status, '')) IN ('accepted', 'completed')
+      ''',
+      [widget.authorId, widget.authorId],
+    );
+
+    return _LocalPortfolioStats(
+      posts: _readCount(postsRes),
+      followers: _readCount(followersRes),
+      following: _readCount(followingRes),
+      collabs: _readCount(collabsRes),
+    );
+  }
+
+  int _bestCount({int? preferred, required List<int> fallbacks}) {
+    var best = preferred ?? 0;
+    for (final value in fallbacks) {
+      if (value > best) best = value;
+    }
+    return best;
+  }
+
+  int _readCount(List<Map<String, Object?>> rows) {
+    if (rows.isEmpty) return 0;
+    final value = rows.first['count'];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '0') ?? 0;
   }
 
   // ── Follow / Unfollow ──────────────────────────────────────────────────────
@@ -164,7 +242,12 @@ class _AuthorPortfolioScreenState extends State<AuthorPortfolioScreen> {
           entityType: DatabaseSchema.tableUsers,
           entityId: widget.authorId,
         );
-        if (mounted) setState(() => _isFollowing = true);
+        if (mounted) {
+          setState(() {
+            _isFollowing = true;
+            _followersCount += 1;
+          });
+        }
       } else {
         await db.delete(
           DatabaseSchema.tableFollows,
@@ -177,7 +260,13 @@ class _AuthorPortfolioScreenState extends State<AuthorPortfolioScreen> {
           entityId: '${uid}_${widget.authorId}',
           payload: {'follower_id': uid, 'following_id': widget.authorId},
         );
-        if (mounted) setState(() => _isFollowing = false);
+        if (mounted) {
+          setState(() {
+            _isFollowing = false;
+            _followersCount =
+                (_followersCount - 1).clamp(0, 1 << 30).toInt();
+          });
+        }
       }
     } finally {
       if (mounted) setState(() => _followLoading = false);
@@ -189,60 +278,102 @@ class _AuthorPortfolioScreenState extends State<AuthorPortfolioScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? AppColors.backgroundDark : AppColors.backgroundLight;
 
-    return Scaffold(
-      backgroundColor: bg,
-      appBar: AppBar(
-        backgroundColor: bg,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          onPressed: () => context.pop(),
-        ),
-        title: _user != null
-            ? Text(
-                _user!.displayName ?? 'Portfolio',
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 17,
-                  color: AppColors.textPrimary(context),
-                ),
-              )
-            : const SizedBox.shrink(),
-      ),
-      body: _loading
-          ? _buildSkeleton()
-          : _error != null
-              ? _buildError()
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  color: AppColors.primary,
-                  child: CustomScrollView(
-                    slivers: [
-                      SliverToBoxAdapter(child: _buildProfileHeader(context, isDark)),
-                      const SliverToBoxAdapter(child: SizedBox(height: 8)),
-                      _buildProjectsHeader(context),
-                      _posts.isEmpty
-                          ? SliverToBoxAdapter(child: _buildEmptyProjects(context))
-                          : SliverList(
-                              delegate: SliverChildBuilderDelegate(
-                                (ctx, i) => _ProjectCard(
-                                  post: _posts[i],
-                                  onTap: () => context.push(
-                                    RouteNames.projectDetail.replaceFirst(
-                                        ':postId', _posts[i].id),
-                                  ),
-                                ),
-                                childCount: _posts.length,
-                              ),
-                            ),
-                      const SliverToBoxAdapter(child: SizedBox(height: 32)),
-                    ],
+      return Scaffold(
+        extendBodyBehindAppBar: true,
+        appBar: AppBar(
+          backgroundColor: isDark
+              ? const Color(0xFF0B1222).withValues(alpha: 0.92)
+              : const Color(0xFFF8FBFF).withValues(alpha: 0.92),
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded),
+            onPressed: () => context.pop(),
+          ),
+          title: _user != null
+              ? Text(
+                  _user!.displayName ?? 'Portfolio',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 20,
+                    letterSpacing: -0.3,
+                    color: isDark
+                        ? AppColors.textPrimaryDark
+                        : AppColors.textPrimaryLight,
                   ),
-                ),
-    );
+                )
+              : const SizedBox.shrink(),
+        ),
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: isDark
+                  ? const [Color(0xFF0B1222), Color(0xFF111D36)]
+                  : const [Color(0xFFF8FBFF), Color(0xFFECF3FF)],
+            ),
+          ),
+          child: Stack(
+            children: [
+              const Positioned(
+                top: -80,
+                right: -70,
+                child: _GlowBlob(size: 220, color: Color(0x332563EB)),
+              ),
+              const Positioned(
+                bottom: -90,
+                left: -85,
+                child: _GlowBlob(size: 260, color: Color(0x221152D4)),
+              ),
+              _loading
+                  ? _buildSkeleton()
+                  : _error != null
+                      ? _buildError()
+                      : RefreshIndicator(
+                          onRefresh: _load,
+                          color: AppColors.primary,
+                          child: CustomScrollView(
+                            slivers: [
+                              SliverToBoxAdapter(
+                                child: SizedBox(
+                                  height: MediaQuery.of(context).padding.top +
+                                      kToolbarHeight +
+                                      8,
+                                ),
+                              ),
+                              SliverToBoxAdapter(
+                                  child: _buildProfileHeader(context, isDark)),
+                              const SliverToBoxAdapter(
+                                  child: SizedBox(height: 8)),
+                              _buildProjectsHeader(context),
+                              _posts.isEmpty
+                                  ? SliverToBoxAdapter(
+                                      child: _buildEmptyProjects(context))
+                                  : SliverList(
+                                      delegate: SliverChildBuilderDelegate(
+                                        (ctx, i) => _ProjectCard(
+                                          post: _posts[i],
+                                          onTap: () => context.push(
+                                            RouteNames.projectDetail
+                                                .replaceFirst(
+                                                    ':postId', _posts[i].id),
+                                          ),
+                                        ),
+                                        childCount: _posts.length,
+                                      ),
+                                    ),
+                              const SliverToBoxAdapter(
+                                  child: SizedBox(height: 96)),
+                            ],
+                          ),
+                        ),
+            ],
+          ),
+        ),
+      );
   }
 
   // ── Profile Header ─────────────────────────────────────────────────────────
@@ -251,196 +382,250 @@ class _AuthorPortfolioScreenState extends State<AuthorPortfolioScreen> {
     final user = _user!;
     final profile = user.profile;
     final isOwnProfile = _currentUserId == user.id;
-    final surface = isDark ? AppColors.surfaceDark : AppColors.surfaceLight;
-    final border = isDark ? AppColors.borderDark : AppColors.borderLight;
 
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      decoration: BoxDecoration(
-        color: surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Avatar + name row ──────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _Avatar(photoUrl: user.photoUrl, radius: 36),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        user.displayName ?? 'Unknown User',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textPrimary(context),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      _RoleBadge(role: user.role),
-                      if (profile?.programName != null ||
-                          profile?.faculty != null) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          [
-                            if (profile?.programName != null)
-                              profile!.programName!,
-                            if (profile?.faculty != null) profile!.faculty!,
-                          ].join(' • '),
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 12,
-                            color: AppColors.textSecondary(context),
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                      if (profile?.yearOfStudy != null &&
-                          user.role == UserRole.student) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          'Year ${profile!.yearOfStudy}',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 12,
-                            color: AppColors.textSecondary(context),
-                          ),
-                        ),
-                      ],
-                    ],
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+        child: Column(
+          children: [
+            // ── Gradient hero banner ─────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1152D4), Color(0xFF3B82F6)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF1152D4).withValues(alpha: 0.35),
+                    blurRadius: 20,
+                    offset: const Offset(0, 6),
                   ),
-                ),
-              ],
-            ),
-          ),
-
-          // ── Bio ────────────────────────────────────────────────────────────
-          if (profile?.bio != null && profile!.bio!.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Text(
-                profile.bio!,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 13.5,
-                  color: AppColors.textPrimary(context),
-                  height: 1.5,
-                ),
-                maxLines: 4,
-                overflow: TextOverflow.ellipsis,
+                ],
               ),
-            ),
-
-          // ── Stats row ──────────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _StatChip(
-                  label: 'Posts',
-                  value: profile?.totalPosts ?? _posts.length,
-                ),
-                _vDivider(),
-                _StatChip(
-                  label: 'Followers',
-                  value: profile?.totalFollowers ?? 0,
-                ),
-                _vDivider(),
-                _StatChip(
-                  label: 'Following',
-                  value: profile?.totalFollowing ?? 0,
-                ),
-                _vDivider(),
-                _StatChip(
-                  label: 'Collabs',
-                  value: profile?.totalCollabs ?? 0,
-                ),
-              ],
-            ),
-          ),
-
-          // ── Skills ─────────────────────────────────────────────────────────
-          if (profile != null && profile.skills.isNotEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-              child: Text(
-                'Skills',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textSecondary(context),
-                  letterSpacing: 0.4,
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: profile.skills
-                    .take(12)
-                    .map((s) => _SkillChip(label: s))
-                    .toList(),
-              ),
-            ),
-          ],
-
-          // ── Action buttons ─────────────────────────────────────────────────
-          if (!isOwnProfile)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: _FollowButton(
-                      isFollowing: _isFollowing,
-                      loading: _followLoading,
-                      onTap: _toggleFollow,
+                  Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.5), width: 2),
                     ),
+                    child: _Avatar(photoUrl: user.photoUrl, radius: 32),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 14),
                   Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => context.push(
-                        RouteNames.chatDetail.replaceFirst(
-                            ':threadId', widget.authorId),
-                        extra: {
-                          'peerName': user.displayName ?? '',
-                          'peerPhotoUrl': user.photoUrl,
-                          'isPeerLecturer':
-                              user.role == UserRole.lecturer,
-                        },
-                      ),
-                      icon: const Icon(Icons.chat_bubble_outline_rounded,
-                          size: 16),
-                      label: Text(
-                        'Message',
-                        style: GoogleFonts.plusJakartaSans(
-                            fontWeight: FontWeight.w600),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.primary,
-                        side: const BorderSide(color: AppColors.primary),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          user.displayName ?? 'Unknown User',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        _RoleBadge(role: user.role),
+                        if (profile?.programName != null ||
+                            profile?.faculty != null) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            [
+                              if (profile?.programName != null)
+                                profile!.programName!,
+                              if (profile?.faculty != null) profile!.faculty!,
+                            ].join(' • '),
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12,
+                              color: Colors.white.withValues(alpha: 0.85),
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                        if (profile?.yearOfStudy != null &&
+                            user.role == UserRole.student) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            'Year ${profile!.yearOfStudy}',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12,
+                              color: Colors.white.withValues(alpha: 0.75),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-        ],
-      ),
-    );
+
+            const SizedBox(height: 12),
+
+            // ── Stats / bio / skills / actions card ──────────────────────────
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.surface(context),
+                borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+                border: Border.all(color: AppColors.border(context)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Stats row ────────────────────────────────────────────
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _StatChip(
+                          label: 'Posts',
+                          value: _postCount,
+                        ),
+                        _vDivider(),
+                        _StatChip(
+                          label: 'Followers',
+                          value: _followersCount,
+                        ),
+                        _vDivider(),
+                        _StatChip(
+                          label: 'Following',
+                          value: _followingCount,
+                        ),
+                        _vDivider(),
+                        _StatChip(
+                          label: 'Collabs',
+                          value: _collabsCount,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // ── Bio ──────────────────────────────────────────────────
+                  if (profile?.bio != null && profile!.bio!.isNotEmpty) ...[
+                    Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: AppColors.border(context)),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                      child: Text(
+                        profile.bio!,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13.5,
+                          color: AppColors.textPrimary(context),
+                          height: 1.5,
+                        ),
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+
+                  // ── Skills ───────────────────────────────────────────────
+                  if (profile != null && profile.skills.isNotEmpty) ...[
+                    Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: AppColors.border(context)),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                      child: Text(
+                        'SKILLS',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: profile.skills
+                            .take(12)
+                            .map((s) => _SkillChip(label: s))
+                            .toList(),
+                      ),
+                    ),
+                  ],
+
+                  // ── Action buttons ───────────────────────────────────────
+                  if (!isOwnProfile) ...[
+                    Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: AppColors.border(context)),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _FollowButton(
+                              isFollowing: _isFollowing,
+                              loading: _followLoading,
+                              onTap: _toggleFollow,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => context.push(
+                                RouteNames.chatDetail.replaceFirst(
+                                    ':threadId', widget.authorId),
+                                extra: {
+                                  'peerName': user.displayName ?? '',
+                                  'peerPhotoUrl': user.photoUrl,
+                                  'isPeerLecturer':
+                                      user.role == UserRole.lecturer,
+                                },
+                              ),
+                              icon: const Icon(
+                                  Icons.chat_bubble_outline_rounded,
+                                  size: 16),
+                              label: Text(
+                                'Message',
+                                style: GoogleFonts.plusJakartaSans(
+                                    fontWeight: FontWeight.w600),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.primary,
+                                side:
+                                    const BorderSide(color: AppColors.primary),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                        AppDimensions.radiusLg)),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 10),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
   }
 
   // ── Projects section header ────────────────────────────────────────────────
@@ -454,9 +639,10 @@ class _AuthorPortfolioScreenState extends State<AuthorPortfolioScreen> {
             Text(
               'Projects',
               style: GoogleFonts.plusJakartaSans(
-                fontSize: 17,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary(context),
+                 fontSize: 13,
+                 fontWeight: FontWeight.w700,
+                 color: AppColors.primary,
+                 letterSpacing: 0.5,
               ),
             ),
             const SizedBox(width: 8),
@@ -468,7 +654,7 @@ class _AuthorPortfolioScreenState extends State<AuthorPortfolioScreen> {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
-                '${_posts.length}',
+                '$_postCount',
                 style: GoogleFonts.plusJakartaSans(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
@@ -569,8 +755,22 @@ class _AuthorPortfolioScreenState extends State<AuthorPortfolioScreen> {
   Widget _vDivider() => Container(
         width: 1,
         height: 28,
-        color: AppColors.borderLight,
+      color: AppColors.border(context),
       );
+}
+
+class _LocalPortfolioStats {
+  final int posts;
+  final int followers;
+  final int following;
+  final int collabs;
+
+  const _LocalPortfolioStats({
+    required this.posts,
+    required this.followers,
+    required this.following,
+    required this.collabs,
+  });
 }
 
 // ── Project Card ──────────────────────────────────────────────────────────────
@@ -592,25 +792,45 @@ class _ProjectCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
         decoration: BoxDecoration(
           color: surface,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
           border: Border.all(color: border),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.06),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Accent strip for visual hierarchy
+            Container(
+              height: 4,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF1152D4), Color(0xFF3B82F6)],
+                ),
+                borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(AppDimensions.radiusLg),
+                ),
+              ),
+            ),
+
             // ── Thumbnail ────────────────────────────────────────────────────
             if (thumbUrl != null)
               ClipRRect(
                 borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(13)),
+                    top: Radius.circular(0)),
                 child: _buildThumbnail(thumbUrl),
               ),
 
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -678,12 +898,11 @@ class _ProjectCard extends StatelessWidget {
                   ],
 
                   // ── Stats row ──────────────────────────────────────────
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   _StatsRow(post: post),
                 ],
               ),
             ),
-            const SizedBox(height: 4),
           ],
         ),
       ),
@@ -972,7 +1191,8 @@ class _FollowButton extends StatelessWidget {
               width: 14,
               height: 14,
               child: CircularProgressIndicator(
-                  strokeWidth: 2, color: Colors.white))
+                  strokeWidth: 2, color: Colors.white),
+            )
           : Icon(
               isFollowing
                   ? Icons.person_remove_rounded
@@ -980,15 +1200,45 @@ class _FollowButton extends StatelessWidget {
               size: 16,
             ),
       label: Text(
-        isFollowing ? 'Unfollow' : 'Follow',
+        isFollowing ? 'Following' : 'Follow',
         style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
       ),
       style: ElevatedButton.styleFrom(
-        backgroundColor: isFollowing ? AppColors.borderLight : AppColors.primary,
-        foregroundColor: isFollowing ? AppColors.textPrimaryLight : Colors.white,
+        backgroundColor:
+            isFollowing ? AppColors.primaryTint10 : AppColors.primary,
+        foregroundColor: isFollowing ? AppColors.primary : Colors.white,
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppDimensions.radiusLg)),
         padding: const EdgeInsets.symmetric(vertical: 10),
+      ),
+    );
+  }
+}
+
+// ── Glow Blob ────────────────────────────────────────────────────────────────
+class _GlowBlob extends StatelessWidget {
+  final double size;
+  final Color color;
+
+  const _GlowBlob({required this.size, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: color,
+              blurRadius: 80,
+              spreadRadius: 25,
+            ),
+          ],
+        ),
       ),
     );
   }
