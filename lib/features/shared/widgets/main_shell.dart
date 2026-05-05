@@ -25,7 +25,7 @@ import '../../../core/di/injection_container.dart';
 import '../../../core/network/connectivity_service.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/router/route_guards.dart';
-import '../../auth/bloc/auth_cubit.dart';
+import '../../feed/screens/home_feed_screen.dart';
 import '../../messaging/bloc/message_cubit.dart';
 import 'lecturer_bottom_nav.dart';
 import 'startrack_bottom_nav.dart';
@@ -45,7 +45,6 @@ class _MainShellState extends State<MainShell> {
   bool _isOnline = true;
   bool _showOnlineBanner = false;
   int _lastUnreadCount = 0;
-  String? _lastUnreadUserId;
 
   void _setStateAfterPointerFrame(VoidCallback update) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -214,13 +213,13 @@ class _MainShellState extends State<MainShell> {
   }
 
   LecturerNavTab _lecturerCurrentTab(String location) {
-    if (location.startsWith(RouteNames.lecturerLeaderboard) ||
-        location.startsWith(RouteNames.lecturerRanking)) {
-      return LecturerNavTab.leaderboard;
-    }
     if (location.startsWith(RouteNames.lecturerDashboard) ||
-        location.startsWith(RouteNames.lecturerApplicants)) {
+        location.startsWith(RouteNames.lecturerApplicants) ||
+        location.startsWith(RouteNames.lecturerRanking)) {
       return LecturerNavTab.dashboard;
+    }
+    if (location.startsWith(RouteNames.lecturerSearch)) {
+      return LecturerNavTab.search;
     }
     if (location.startsWith(RouteNames.inbox)) return LecturerNavTab.inbox;
     if (location.startsWith(RouteNames.home) ||
@@ -331,40 +330,25 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
     final role = sl<RouteGuards>().currentRole;
-    final currentUserId = sl<AuthCubit>().currentUser?.id;
-
-    if (_lastUnreadUserId != currentUserId) {
-      _lastUnreadUserId = currentUserId;
-      _lastUnreadCount = 0;
-    }
 
     final unreadCount = () {
       final msgState = context.watch<MessageCubit>().state;
       if (msgState is ConversationsLoaded) {
-        _lastUnreadCount = msgState.conversations.fold<int>(
-          0,
-          (total, convo) => total + convo.unreadCount,
-        );
-      } else if (msgState is MessageInitial ||
-          msgState is ConversationsLoading ||
-          msgState is MessageError ||
-          currentUserId == null ||
-          currentUserId.isEmpty) {
-        _lastUnreadCount = 0;
+        return msgState.conversations.fold<int>(0, (sum, c) => sum + c.unreadCount);
       }
       return _lastUnreadCount;
     }();
 
     // Lecturers get their own nav bar with role-specific destinations.
     if (role == UserRole.lecturer) {
-      final scaffold = Scaffold(
-        body: widget.child,
+      return Scaffold(
+        body: child,
         bottomNavigationBar: LecturerBottomNav(
           activeTab: _lecturerCurrentTab(location),
           onFeedTap: () => context.go(RouteNames.home),
           onDashboardTap: () => context.go(RouteNames.lecturerDashboard),
           onAddTap: () => _handleAddTap(context),
-          onLeaderboardTap: () => context.go(RouteNames.lecturerLeaderboard),
+          onSearchTap: () => context.go(RouteNames.lecturerSearch),
           onInboxTap: () => context.go(RouteNames.inbox),
           unreadMessageCount: unreadCount,
         ),
@@ -374,15 +358,15 @@ class _MainShellState extends State<MainShell> {
 
     // Students, admins, super-admins — standard student nav.
     final currentTab = _currentTab(location);
-    final scaffold = Scaffold(
-      body: widget.child,
+    return Scaffold(
+      body: child,
       bottomNavigationBar: StarTrackBottomNav(
         activeTab: currentTab,
         onHomeTap: () => context.go(RouteNames.home),
         onPeersTap: () => context.go(RouteNames.peers),
         onAddTap: () => _handleAddTap(context),
         onInboxTap: () => context.go(RouteNames.inbox),
-        onLeaderboardTap: () => context.go(RouteNames.globalRanks),
+        onProjectsTap: () => context.go(RouteNames.projects),
         unreadMessageCount: unreadCount,
       ),
     );

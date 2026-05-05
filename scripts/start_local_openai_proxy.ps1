@@ -1,6 +1,6 @@
 param(
   [int]$Port = 8787,
-  [string]$ProjectRoot = "D:\start_track\must_startrack"
+  [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot)
 )
 
 $ErrorActionPreference = "Stop"
@@ -49,5 +49,6 @@ if ([string]::IsNullOrWhiteSpace($env:OPENAI_API_KEY)) {
   throw "No OpenAI API key was found in Open API.txt"
 }
 
+$env:OPENAI_PROXY_PORT = "$Port"
 Set-Location (Join-Path $ProjectRoot "functions")
 node .\local-proxy.js

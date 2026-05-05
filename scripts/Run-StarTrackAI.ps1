@@ -1,5 +1,5 @@
 param(
-  [ValidateSet('web', 'android', 'apk-debug', 'debug', 'apk-local', 'release', 'apk-cloud', 'deploy-cloud', 'proxy', 'prepare-android', 'stop')]
+  [ValidateSet('web', 'android', 'apk-debug', 'debug', 'apk-local', 'release-local', 'proxy', 'prepare-android', 'stop', 'test-ai')]
   [string]$Mode = 'web',
   [string]$Device = '',
   [int]$Port = 8787,
@@ -77,7 +77,7 @@ function Ensure-Proxy {
     ) `
     -WindowStyle Hidden | Out-Null
 
-  for ($i = 0; $i -lt 30; $i++) {
+  for ($i = 0; $i -lt 40; $i++) {
     Start-Sleep -Milliseconds 500
     if (Test-ProxyReady) {
       Write-Step "Local AI proxy ready at $(Get-ProxyBaseUrl)"
@@ -145,7 +145,7 @@ function Enable-AndroidReverse {
   }
 
   if ($deviceIds.Count -eq 0) {
-    Write-Step "No adb device is online yet. Flutter may wait for one."
+    Write-Step "No adb device is online yet. Debug APKs still use local proxy URL; run prepare-android after connecting a device."
     return
   }
 
@@ -160,15 +160,57 @@ function Invoke-Flutter([string[]]$FlutterArgs) {
   & flutter @FlutterArgs
 }
 
+function Invoke-ProxyPost([string]$Path, [hashtable]$Payload) {
+  $json = $Payload | ConvertTo-Json -Depth 12
+  return Invoke-RestMethod -Method Post -Uri "$(Get-ProxyBaseUrl)/$Path" -ContentType 'application/json' -Body $json -TimeoutSec 120
+}
+
+function Test-AiEndpoints {
+  Ensure-Proxy
+  $health = Invoke-RestMethod -Method Get -Uri (Get-ProxyHealthUrl) -TimeoutSec 8
+  Write-Step "health ok=$($health.ok)"
+
+  $rerank = Invoke-ProxyPost 'openAiRerank' @{
+    userProfile = @{ role = 'student'; skills = @('flutter', 'firebase') }
+    posts = @(
+      @{ id = 'p1'; title = 'Flutter Firebase app'; skills = @('flutter', 'firebase'); type = 'project' },
+      @{ id = 'p2'; title = 'Agriculture report'; skills = @('agriculture'); type = 'project' }
+    )
+  }
+  Write-Step "openAiRerank rows=$($rerank.ranking.Count)"
+
+  $skills = Invoke-ProxyPost 'openAiSkillPatterns' @{
+    skills = @('flutter', 'firebase', 'react', 'python', 'machine learning')
+    mode = 'local-test'
+    maxClusters = 4
+  }
+  Write-Step "openAiSkillPatterns clusters=$($skills.clusters.Count)"
+
+  $chatbot = Invoke-ProxyPost 'openAiChatbot' @{
+    prompt = 'Return JSON {"answer": string}. Answer briefly: what is MUST StarTrack?'
+  }
+  Write-Step "openAiChatbot contentChars=$($chatbot.content.Length)"
+
+  $validation = Invoke-ProxyPost 'openAiProjectValidation' @{
+    post = @{
+      id = 'local-test-project'
+      type = 'project'
+      title = 'Solar powered irrigation monitor'
+      description = 'A student prototype using sensors to track soil moisture and control irrigation for a campus farm.'
+      faculty = 'Faculty of Computing and Informatics'
+      skillsUsed = @('iot', 'firebase', 'sensors')
+      mediaUrls = @()
+      externalLinks = @(@{ url = 'https://github.com/example/irrigation-monitor'; description = 'prototype repository' })
+      ownershipAnswers = @{ role = 'I built the dashboard and sensor integration'; originality = 'Student prototype' }
+      contentValidationAnswers = @{ academicPurpose = 'Applied IoT learning project'; methods = 'Prototype, sensor testing, and field observations' }
+    }
+  }
+  Write-Step "openAiProjectValidation decision=$($validation.decision) confidence=$($validation.confidence)"
+}
+
 $proxyBase = Get-ProxyBaseUrl
 $commonDefines = @(
   "--dart-define=OPENAI_PROXY_BASE_URL=$proxyBase",
-  "--dart-define=FIREBASE_PROJECT_ID=star-track-4ba2b"
-)
-
-$cloudProxyBase = 'https://us-central1-star-track-4ba2b.cloudfunctions.net'
-$cloudDefines = @(
-  "--dart-define=OPENAI_PROXY_BASE_URL=$cloudProxyBase",
   "--dart-define=FIREBASE_PROJECT_ID=star-track-4ba2b"
 )
 
@@ -184,6 +226,9 @@ switch ($Mode) {
   }
   'stop' {
     Stop-Proxy
+  }
+  'test-ai' {
+    Test-AiEndpoints
   }
   'web' {
     Ensure-Proxy
@@ -216,20 +261,13 @@ switch ($Mode) {
     Enable-AndroidReverse
     $flutterArgs = @('build', 'apk', '--release') + $commonDefines
     Invoke-Flutter $flutterArgs
-    Write-Step "Built a local-proxy APK. Keep USB debugging + adb reverse active while testing local AI."
+    Write-Step "Built a local-proxy release APK. Keep USB debugging + adb reverse active while testing local AI."
   }
-  'release' {
-    $flutterArgs = @('build', 'apk', '--release') + $cloudDefines
+  'release-local' {
+    Ensure-Proxy
+    Enable-AndroidReverse
+    $flutterArgs = @('build', 'apk', '--release') + $commonDefines
     Invoke-Flutter $flutterArgs
-    Write-Step "Built release APK with Cloud AI endpoints: $cloudProxyBase"
-  }
-  'apk-cloud' {
-    $flutterArgs = @('build', 'apk', '--release') + $cloudDefines
-    Invoke-Flutter $flutterArgs
-    Write-Step "Built release APK with Cloud AI endpoints: $cloudProxyBase"
-  }
-  'deploy-cloud' {
-    Set-Location (Join-Path $ProjectRoot 'functions')
-    & firebase deploy --only functions --project star-track-4ba2b
+    Write-Step "Built a local-proxy release APK. Keep USB debugging + adb reverse active while testing local AI."
   }
 }

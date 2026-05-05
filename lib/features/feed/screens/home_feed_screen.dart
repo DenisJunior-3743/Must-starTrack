@@ -224,6 +224,8 @@ class _GuestRemotePostStats {
 }
 
 class HomeFeedScreen extends StatefulWidget {
+  static final ValueNotifier<bool> searchActive = ValueNotifier<bool>(false);
+
   const HomeFeedScreen({super.key});
 
   @override
@@ -233,10 +235,12 @@ class HomeFeedScreen extends StatefulWidget {
 class _HomeFeedScreenState extends State<HomeFeedScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabCtrl;
+  final _searchCtrl = TextEditingController();
   final _photoScrollCtrl = ScrollController();
   final _showcaseScrollCtrl = ScrollController();
   FeedCubit? _cubit;
   bool _controlsCollapsed = true;
+  bool _isSearching = false;
   final bool _immersiveMode = false;
   // Tracks whether the Videos tab (index 0) is the visible tab.
   // This is passed down to _VideoFeedTab so every _VideoPage knows
@@ -319,6 +323,21 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
     }
   }
 
+  void _openInlineSearch() {
+    if (!mounted) return;
+    setState(() {
+      _isSearching = true;
+      _controlsCollapsed = true;
+    });
+    HomeFeedScreen.searchActive.value = true;
+  }
+
+  void _closeInlineSearch() {
+    if (!mounted) return;
+    setState(() => _isSearching = false);
+    HomeFeedScreen.searchActive.value = false;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -366,6 +385,8 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
 
   @override
   void dispose() {
+    HomeFeedScreen.searchActive.value = false;
+    _searchCtrl.dispose();
     _tabCtrl.removeListener(_onTabChanged);
     _tabCtrl.dispose();
     _photoScrollCtrl.dispose();
@@ -382,11 +403,17 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
         children: [
           Column(
             children: [
-              if (!_immersiveMode) const _StaticFeedHeader(),
+              if (!_immersiveMode)
+                _StaticFeedHeader(
+                  isSearching: _isSearching,
+                  searchCtrl: _searchCtrl,
+                  onSearchTap: _openInlineSearch,
+                  onCloseSearch: _closeInlineSearch,
+                ),
               AnimatedSize(
                 duration: const Duration(milliseconds: 220),
                 curve: Curves.easeOutCubic,
-                child: (_controlsCollapsed || _immersiveMode)
+                child: (_controlsCollapsed || _immersiveMode || _isSearching)
                     ? const SizedBox.shrink()
                     : Column(
                         children: [
@@ -471,6 +498,14 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                           : rawPhotoPosts;
                       final showcasePosts = rawShowcasePosts;
 
+                      if (_isSearching) {
+                        return _InlineFeedSearchView(
+                          posts: state.posts,
+                          cubit: cubit,
+                          searchCtrl: _searchCtrl,
+                        );
+                      }
+
                       if (contentPool.isEmpty) {
                         return Stack(
                           children: [
@@ -554,39 +589,13 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                                   : 4,
                               left: 8,
                               right: 8,
-                              child: Container(
-                                padding: const EdgeInsets.only(bottom: 6),
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context)
-                                      .scaffoldBackgroundColor
-                                      .withValues(alpha: 0.97),
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? Colors.white.withValues(alpha: 0.08)
-                                        : Colors.black.withValues(alpha: 0.06),
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(
-                                          alpha: Theme.of(context).brightness ==
-                                                  Brightness.dark
-                                              ? 0.22
-                                              : 0.08),
-                                      blurRadius: 14,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: _FilterChips(
-                                  cubit: cubit,
-                                  currentTabIndex: _tabCtrl.index,
-                                  tabsCollapsed: _controlsCollapsed,
-                                  onToggleTabs: () => setState(
-                                    () => _controlsCollapsed =
-                                        !_controlsCollapsed,
-                                  ),
+                              child: _FilterChips(
+                                cubit: cubit,
+                                currentTabIndex: _tabCtrl.index,
+                                tabsCollapsed: _controlsCollapsed,
+                                onToggleTabs: () => setState(
+                                  () =>
+                                      _controlsCollapsed = !_controlsCollapsed,
                                 ),
                               ),
                             ),
@@ -642,38 +651,12 @@ class _HomeFeedScreenState extends State<HomeFeedScreen>
                                 : 4,
                             left: 8,
                             right: 8,
-                            child: Container(
-                              padding: const EdgeInsets.only(bottom: 6),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context)
-                                    .scaffoldBackgroundColor
-                                    .withValues(alpha: 0.97),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? Colors.white.withValues(alpha: 0.08)
-                                      : Colors.black.withValues(alpha: 0.06),
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(
-                                        alpha: Theme.of(context).brightness ==
-                                                Brightness.dark
-                                            ? 0.22
-                                            : 0.08),
-                                    blurRadius: 14,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: _FilterChips(
-                                cubit: cubit,
-                                currentTabIndex: _tabCtrl.index,
-                                tabsCollapsed: _controlsCollapsed,
-                                onToggleTabs: () => setState(
-                                  () => _controlsCollapsed = !_controlsCollapsed,
-                                ),
+                            child: _FilterChips(
+                              cubit: cubit,
+                              currentTabIndex: _tabCtrl.index,
+                              tabsCollapsed: _controlsCollapsed,
+                              onToggleTabs: () => setState(
+                                () => _controlsCollapsed = !_controlsCollapsed,
                               ),
                             ),
                           ),
@@ -5693,32 +5676,17 @@ void _traceFeedAction({
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _StaticFeedHeader extends StatelessWidget {
-  const _StaticFeedHeader();
+  final bool isSearching;
+  final TextEditingController searchCtrl;
+  final VoidCallback onSearchTap;
+  final VoidCallback onCloseSearch;
 
-  Future<void> _openHeaderSearch(BuildContext context) async {
-    final cubit = context.read<FeedCubit>();
-    final posts = cubit.state is FeedLoaded
-        ? (cubit.state as FeedLoaded).posts
-        : const <PostModel>[];
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => FractionallySizedBox(
-        heightFactor: 0.94,
-        child: _FeedSearchSheet(
-          posts: posts,
-          cubit: cubit,
-          parentContext: context,
-        ),
-      ),
-    );
-  }
+  const _StaticFeedHeader({
+    required this.isSearching,
+    required this.searchCtrl,
+    required this.onSearchTap,
+    required this.onCloseSearch,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -5735,6 +5703,14 @@ class _StaticFeedHeader extends StatelessWidget {
             avatarImage = CachedNetworkImageProvider(photoUrl);
           }
         }
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final searchFill =
+            isDark ? const Color(0xFF1A2230) : Theme.of(context).cardColor;
+        final searchBorder = isDark
+            ? AppColors.institutionalGreen.withValues(alpha: 0.55)
+            : AppColors.borderLight;
+        final searchTextColor =
+            isDark ? Colors.white : AppColors.textSecondaryLight;
 
         return Material(
           color:
@@ -5747,7 +5723,13 @@ class _StaticFeedHeader extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
                 child: Row(
                   children: [
-                    if (isGuest)
+                    if (isSearching)
+                      IconButton(
+                        onPressed: onCloseSearch,
+                        icon: const Icon(Icons.arrow_back_rounded),
+                        tooltip: 'Back',
+                      )
+                    else if (isGuest)
                       TextButton(
                         onPressed: () => context.push(RouteNames.login),
                         style: TextButton.styleFrom(
@@ -5803,44 +5785,105 @@ class _StaticFeedHeader extends StatelessWidget {
                         ),
                       ),
                     const SizedBox(width: 8),
-                    Expanded(
-                      child: InkWell(
-                        borderRadius:
-                            BorderRadius.circular(AppDimensions.radiusFull),
-                        onTap: () => _openHeaderSearch(context),
-                        child: Container(
-                          height: 38,
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).cardColor,
-                            borderRadius:
-                                BorderRadius.circular(AppDimensions.radiusFull),
-                            border: Border.all(color: AppColors.borderLight),
+                    if (isSearching)
+                      Expanded(
+                        child: TextField(
+                          controller: searchCtrl,
+                          autofocus: true,
+                          textInputAction: TextInputAction.search,
+                          style: GoogleFonts.plusJakartaSans(
+                            color: searchTextColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
                           ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.search_rounded,
+                          cursorColor: isDark
+                              ? AppColors.institutionalGreen
+                              : AppColors.primary,
+                          decoration: InputDecoration(
+                            hintText: 'Search materials, projects, people',
+                            hintStyle: GoogleFonts.plusJakartaSans(
+                              color: searchTextColor.withValues(alpha: 0.75),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            prefixIcon: Icon(
+                              Icons.search_rounded,
+                              size: 18,
+                              color: searchTextColor,
+                            ),
+                            suffixIcon: searchCtrl.text.isNotEmpty
+                                ? IconButton(
+                                    onPressed: () => searchCtrl.clear(),
+                                    icon: Icon(
+                                      Icons.close_rounded,
+                                      color: searchTextColor,
+                                    ),
+                                  )
+                                : null,
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 12),
+                            filled: true,
+                            fillColor: searchFill,
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(
+                                AppDimensions.radiusFull,
+                              ),
+                              borderSide:
+                                  BorderSide(color: searchBorder, width: 1.1),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(
+                                AppDimensions.radiusFull,
+                              ),
+                              borderSide:
+                                  BorderSide(color: searchBorder, width: 1.3),
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      Expanded(
+                        child: InkWell(
+                          borderRadius:
+                              BorderRadius.circular(AppDimensions.radiusFull),
+                          onTap: onSearchTap,
+                          child: Container(
+                            height: 38,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: searchFill,
+                              borderRadius: BorderRadius.circular(
+                                AppDimensions.radiusFull,
+                              ),
+                              border:
+                                  Border.all(color: searchBorder, width: 1.1),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.search_rounded,
                                   size: 18,
-                                  color: AppColors.textSecondaryLight),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Search materials, projects, people',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 12,
-                                    color: AppColors.textSecondaryLight,
-                                    fontWeight: FontWeight.w600,
+                                  color: searchTextColor,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Search materials, projects, people',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 12,
+                                      color: searchTextColor,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    if (!isGuest) ...[
+                    if (!isSearching && !isGuest) ...[
                       const SizedBox(width: 4),
                       IconButton(
                         constraints: const BoxConstraints.tightFor(
@@ -5889,17 +5932,30 @@ class _StaticFeedHeader extends StatelessWidget {
                         tooltip: 'Notifications',
                       ),
                     ],
-                    Builder(
-                      builder: (ctx) => IconButton(
-                        constraints: const BoxConstraints.tightFor(
-                            width: 34, height: 34),
-                        padding: EdgeInsets.zero,
-                        iconSize: 20,
-                        icon: const Icon(Icons.menu_rounded),
-                        onPressed: () => Scaffold.of(ctx).openEndDrawer(),
-                        tooltip: 'Settings',
+                    if (!isSearching)
+                      Builder(
+                        builder: (ctx) => IconButton(
+                          constraints: const BoxConstraints.tightFor(
+                              width: 34, height: 34),
+                          padding: EdgeInsets.zero,
+                          iconSize: 20,
+                          icon: const Icon(Icons.menu_rounded),
+                          onPressed: () => Scaffold.of(ctx).openEndDrawer(),
+                          tooltip: 'Settings',
+                        ),
+                      )
+                    else
+                      TextButton(
+                        onPressed: null,
+                        child: Text(
+                          'Search',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                          ),
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -5911,36 +5967,77 @@ class _StaticFeedHeader extends StatelessWidget {
   }
 }
 
-class _FeedSearchSheet extends StatefulWidget {
+class _InlineFeedSearchView extends StatelessWidget {
   final List<PostModel> posts;
   final FeedCubit cubit;
-  final BuildContext parentContext;
+  final TextEditingController searchCtrl;
 
-  const _FeedSearchSheet({
+  const _InlineFeedSearchView({
     required this.posts,
     required this.cubit,
+    required this.searchCtrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Expanded(
+          child: _FeedSearchSheetBody(
+            posts: posts,
+            cubit: cubit,
+            searchCtrl: searchCtrl,
+            parentContext: context,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FeedSearchSheetBody extends StatefulWidget {
+  final List<PostModel> posts;
+  final FeedCubit cubit;
+  final TextEditingController searchCtrl;
+  final BuildContext parentContext;
+
+  const _FeedSearchSheetBody({
+    required this.posts,
+    required this.cubit,
+    required this.searchCtrl,
     required this.parentContext,
   });
 
   @override
-  State<_FeedSearchSheet> createState() => _FeedSearchSheetState();
+  State<_FeedSearchSheetBody> createState() => _FeedSearchSheetBodyState();
 }
 
-class _FeedSearchSheetState extends State<_FeedSearchSheet> {
-  final _queryCtrl = TextEditingController();
+class _FeedSearchSheetBodyState extends State<_FeedSearchSheetBody> {
   Timer? _debounce;
   String _query = '';
   bool _loadingUsers = false;
   List<UserModel> _users = const <UserModel>[];
 
   @override
+  void initState() {
+    super.initState();
+    _query = widget.searchCtrl.text.trim();
+    widget.searchCtrl.addListener(_handleQueryChanged);
+    if (_query.isNotEmpty) {
+      unawaited(_searchUsers(_query));
+    }
+  }
+
+  @override
   void dispose() {
     _debounce?.cancel();
-    _queryCtrl.dispose();
+    widget.searchCtrl.removeListener(_handleQueryChanged);
     super.dispose();
   }
 
-  void _onQueryChanged(String value) {
+  void _handleQueryChanged() {
+    final value = widget.searchCtrl.text;
+    if (_query == value.trim()) return;
     setState(() => _query = value.trim());
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 260), () {
@@ -6029,14 +6126,12 @@ class _FeedSearchSheetState extends State<_FeedSearchSheet> {
   }
 
   Future<void> _openPost(PostModel post) async {
-    Navigator.of(context).pop();
     await _openPostDetails(widget.parentContext, post, widget.cubit);
   }
 
   Future<void> _openUser(UserModel user) async {
     final uid = user.id;
     if (uid.isEmpty) return;
-    Navigator.of(context).pop();
     widget.parentContext.push(RouteNames.profile.replaceFirst(':userId', uid));
   }
 
@@ -6056,39 +6151,7 @@ class _FeedSearchSheetState extends State<_FeedSearchSheet> {
       length: 6,
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _queryCtrl,
-                    autofocus: true,
-                    onChanged: _onQueryChanged,
-                    textInputAction: TextInputAction.search,
-                    decoration: InputDecoration(
-                      hintText: 'Search by keyword, user, hashtag...',
-                      prefixIcon: const Icon(Icons.search_rounded),
-                      suffixIcon: _query.isNotEmpty
-                          ? IconButton(
-                              onPressed: () {
-                                _queryCtrl.clear();
-                                _onQueryChanged('');
-                              },
-                              icon: const Icon(Icons.close_rounded),
-                            )
-                          : null,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close_rounded),
-                ),
-              ],
-            ),
-          ),
+          const SizedBox(height: 8),
           if (_query.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),

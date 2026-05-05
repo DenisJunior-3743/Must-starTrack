@@ -1,73 +1,60 @@
-MUST STARTRACK - SIMPLE LOCAL AI RUN COMMANDS
+MUST STARTRACK - LOCAL AI COMMANDS
 
-One proxy powers everything locally:
-- recommendations
-- skill patterns
-- chatbot
-- project approval
+One local proxy powers:
+- recommendations: openAiRerank
+- skill patterns: openAiSkillPatterns
+- chatbot: openAiChatbot
+- project approval: openAiProjectValidation
 
-The app now uses one Dart define:
+All app runs below use:
 OPENAI_PROXY_BASE_URL=http://127.0.0.1:8787
 
-Android also uses 127.0.0.1 because the runner enables adb reverse automatically:
-phone/emulator localhost:8787 -> laptop localhost:8787.
-That means Wi-Fi/network changes do not matter for normal debug runs.
+======================================================================
+TEST ALL LOCAL AI ENDPOINTS
+======================================================================
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Run-StarTrackAI.ps1 test-ai
 
 ======================================================================
-RUN WEB WITH AI
+RUN WEB WITH LOCAL AI
 ======================================================================
-.\scripts\Run-StarTrackAI.ps1 web
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Run-StarTrackAI.ps1 web
 
 ======================================================================
-RUN ANDROID WITH AI
+RUN ANDROID WITH LOCAL AI
 ======================================================================
-.\scripts\Run-StarTrackAI.ps1 android
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Run-StarTrackAI.ps1 android
 
 Optional specific device:
-.\scripts\Run-StarTrackAI.ps1 android -Device RFGYC1PEY6
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Run-StarTrackAI.ps1 android -Device RFGYC1PEY6
 
 ======================================================================
 ASSEMBLE DEBUG APK WITH LOCAL AI
 ======================================================================
-.\scripts\Run-StarTrackAI.ps1 apk-debug
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Run-StarTrackAI.ps1 apk-debug
 
 Output:
 build\app\outputs\flutter-apk\app-debug.apk
 
-This is a debug APK and still uses:
-OPENAI_PROXY_BASE_URL=http://127.0.0.1:8787
-
-Keep USB debugging connected so adb reverse keeps Android localhost:8787
-mapped to your laptop localhost:8787.
-
 ======================================================================
-START ONLY THE AI PROXY
+START ONLY THE LOCAL AI PROXY
 ======================================================================
-.\scripts\Run-StarTrackAI.ps1 proxy
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Run-StarTrackAI.ps1 proxy
 
 Health check:
 Invoke-RestMethod http://127.0.0.1:8787/health
 
 ======================================================================
-STOP THE AI PROXY
+STOP THE LOCAL AI PROXY
 ======================================================================
-.\scripts\Run-StarTrackAI.ps1 stop
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Run-StarTrackAI.ps1 stop
 
 ======================================================================
-LOCAL RELEASE APK TEST (USB + ADB REVERSE)
+LOCAL RELEASE APK TEST
 ======================================================================
-.\scripts\Run-StarTrackAI.ps1 apk-local
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Run-StarTrackAI.ps1 apk-local
 
-Note: this builds a release APK with the local proxy URL. It still needs
-USB debugging with adb reverse active while testing.
+Note:
+Android local AI uses adb reverse:
+device localhost:8787 -> laptop localhost:8787
 
-======================================================================
-REAL RELEASE APK (CLOUD AI)
-======================================================================
-Deploy functions once:
-.\scripts\Run-StarTrackAI.ps1 deploy-cloud
-
-Build release:
-.\scripts\Run-StarTrackAI.ps1 release
-
-This release APK works away from your laptop because it uses Cloud Functions.
+Keep USB debugging connected while testing a local-proxy APK.

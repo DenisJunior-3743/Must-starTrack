@@ -7,7 +7,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../../core/constants/app_enums.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/config/openai_config.dart';
 import '../../../firebase_options.dart';
@@ -17,7 +16,6 @@ import '../../../data/models/user_model.dart';
 import '../../../data/remote/firestore_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../data/remote/openai_service.dart';
-import '../../../data/remote/project_validation_service.dart';
 import '../../../data/remote/recommender_service.dart';
 import 'web_recommendation_benchmark.dart';
 import '../../admin/screens/recommendation_web_lab_screen.dart';
@@ -32,8 +30,8 @@ enum _WebRecommendationCategory { feed, personalized, general }
 
 enum _DashboardSection {
   overview,
-  projectApproval,
   studentLab,
+  projectApproval,
   kmeans,
   localMath,
   aiStage,
@@ -43,6 +41,126 @@ enum _DashboardSection {
   generalResults,
   studentExplorer,
   skillPatternLab,
+}
+
+class _ApprovalAiReview {
+  const _ApprovalAiReview({
+    required this.decision,
+    required this.confidence,
+    required this.summary,
+    required this.findings,
+    required this.evidence,
+    required this.scores,
+  });
+
+  final String decision;
+  final double confidence;
+  final String summary;
+  final List<String> findings;
+  final List<String> evidence;
+  final Map<String, int> scores;
+
+  factory _ApprovalAiReview.fromPayload(Map<String, dynamic>? payload) {
+    if (payload == null) {
+      return const _ApprovalAiReview(
+        decision: 'needs_human',
+        confidence: 0,
+        summary: 'Local AI did not return a project review.',
+        findings: <String>[],
+        evidence: <String>[],
+        scores: <String, int>{},
+      );
+    }
+
+    final rawDecision = (payload['decision'] ?? 'needs_human')
+        .toString()
+        .trim()
+        .toLowerCase();
+    final decision = switch (rawDecision) {
+      'approve' || 'approved' => 'approve',
+      'reject' || 'rejected' => 'reject',
+      'needs_human' || 'manual_review' => 'needs_human',
+      _ => 'needs_human',
+    };
+
+    final rawScores = payload['scores'];
+    final scores = <String, int>{};
+    if (rawScores is Map) {
+      for (final entry in rawScores.entries) {
+        final key = entry.key.toString().trim();
+        if (key.isEmpty) continue;
+        final parsed = _parseInt(entry.value);
+        if (parsed != null) {
+          scores[key] = parsed.clamp(0, 100);
+        }
+      }
+    }
+
+    final findings = _stringList(payload['findings'] ?? payload['flags']);
+    final evidence = _stringList(
+      payload['evidence'] ?? payload['evidence_needed'],
+    );
+    final finalTake = (payload['final_take'] ??
+            payload['finalTake'] ??
+            payload['admin_summary'] ??
+            '')
+        .toString()
+        .trim();
+
+    return _ApprovalAiReview(
+      decision: decision,
+      confidence: _parseDouble(payload['confidence'])?.clamp(0, 1) ?? 0,
+      summary: finalTake.isNotEmpty ? finalTake : _defaultSummary(decision),
+      findings: findings,
+      evidence: evidence,
+      scores: scores,
+    );
+  }
+
+  factory _ApprovalAiReview.error(Object error) {
+    return _ApprovalAiReview(
+      decision: 'needs_human',
+      confidence: 0,
+      summary: 'Local AI review failed.',
+      findings: <String>[error.toString()],
+      evidence: const <String>[],
+      scores: const <String, int>{},
+    );
+  }
+
+  static String _defaultSummary(String decision) {
+    switch (decision) {
+      case 'approve':
+        return 'Local AI would approve this project.';
+      case 'reject':
+        return 'Local AI would reject this project.';
+      default:
+        return 'Local AI recommends manual review for this project.';
+    }
+  }
+
+  static List<String> _stringList(Object? raw) {
+    if (raw is Iterable) {
+      return raw
+          .map((item) => item.toString().trim())
+          .where((item) => item.isNotEmpty)
+          .toList(growable: false);
+    }
+    final value = raw?.toString().trim() ?? '';
+    if (value.isEmpty) return const <String>[];
+    return <String>[value];
+  }
+
+  static double? _parseDouble(Object? value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '');
+  }
+
+  static int? _parseInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.round();
+    return int.tryParse(value?.toString() ?? '');
+  }
 }
 
 class StarTrackWebRecommendationsApp extends StatelessWidget {
@@ -95,7 +213,8 @@ class _WebAdminGate extends StatefulWidget {
 }
 
 class _WebAdminGateState extends State<_WebAdminGate> {
-  final _emailController = TextEditingController(text: 'admin@must.ac.ug');
+  final _emailController =
+      TextEditingController(text: 'admin@must.ac.ug');
   final _passwordController = TextEditingController();
   bool _loading = false;
   bool _obscure = true;
@@ -124,7 +243,8 @@ class _WebAdminGateState extends State<_WebAdminGate> {
     try {
       // Ensure Firebase is ready before auth call.
       if (Firebase.apps.isEmpty) {
-        await Firebase.initializeApp(options: DefaultFirebaseOptions.web);
+        await Firebase.initializeApp(
+            options: DefaultFirebaseOptions.web);
       }
 
       final credential = await FirebaseAuth.instance
@@ -134,7 +254,8 @@ class _WebAdminGateState extends State<_WebAdminGate> {
       final token = await credential.user?.getIdTokenResult();
       final role = token?.claims?['role'] as String? ?? '';
 
-      final isAdmin = role == 'admin' || role == 'super_admin';
+      final isAdmin =
+          role == 'admin' || role == 'super_admin';
 
       // If custom claims not set, fall back to checking Firestore profile.
       if (!isAdmin) {
@@ -369,8 +490,8 @@ class _WebAdminGateState extends State<_WebAdminGate> {
                           keyboardType: TextInputType.emailAddress,
                           decoration: InputDecoration(
                             labelText: 'Admin email',
-                            labelStyle:
-                                GoogleFonts.plusJakartaSans(fontSize: 13),
+                            labelStyle: GoogleFonts.plusJakartaSans(
+                                fontSize: 13),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -379,8 +500,8 @@ class _WebAdminGateState extends State<_WebAdminGate> {
                               borderSide: const BorderSide(
                                   color: Color(0xFF0D1B8F), width: 2),
                             ),
-                            prefixIcon:
-                                const Icon(Icons.alternate_email, size: 18),
+                            prefixIcon: const Icon(Icons.alternate_email,
+                                size: 18),
                             contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 14, vertical: 14),
                           ),
@@ -392,8 +513,8 @@ class _WebAdminGateState extends State<_WebAdminGate> {
                           obscureText: _obscure,
                           decoration: InputDecoration(
                             labelText: 'Password',
-                            labelStyle:
-                                GoogleFonts.plusJakartaSans(fontSize: 13),
+                            labelStyle: GoogleFonts.plusJakartaSans(
+                                fontSize: 13),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -402,8 +523,8 @@ class _WebAdminGateState extends State<_WebAdminGate> {
                               borderSide: const BorderSide(
                                   color: Color(0xFF0D1B8F), width: 2),
                             ),
-                            prefixIcon:
-                                const Icon(Icons.lock_outline, size: 18),
+                            prefixIcon: const Icon(Icons.lock_outline,
+                                size: 18),
                             suffixIcon: IconButton(
                               icon: Icon(
                                 _obscure
@@ -426,7 +547,8 @@ class _WebAdminGateState extends State<_WebAdminGate> {
                             decoration: BoxDecoration(
                               color: Colors.red.shade50,
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: Colors.red.shade200),
+                              border: Border.all(
+                                  color: Colors.red.shade200),
                             ),
                             child: Row(
                               children: [
@@ -451,7 +573,8 @@ class _WebAdminGateState extends State<_WebAdminGate> {
                           onPressed: _loading ? null : _signIn,
                           style: FilledButton.styleFrom(
                             backgroundColor: const Color(0xFF0D1B8F),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -497,14 +620,9 @@ class _WebRecommendationDashboard extends StatefulWidget {
 class _WebRecommendationDashboardState
     extends State<_WebRecommendationDashboard> {
   static const String _allFaculties = 'All Faculties';
-  static const double _compactChartHeight = 240;
-  static const double _panelGap = 22;
-  static const GlobalStudentRankTimeRange _webLeaderboardTimeRange =
-      GlobalStudentRankTimeRange.sprint;
 
   late final RecommenderService _recommender;
   late final OpenAiService _openAi;
-  late final ProjectValidationService _projectValidation;
   FirestoreService? _firestore;
 
   List<UserModel> _users = const <UserModel>[];
@@ -515,17 +633,12 @@ class _WebRecommendationDashboardState
   StreamSubscription<List<UserModel>>? _usersSubscription;
   StreamSubscription<List<PostModel>>? _postsSubscription;
   StreamSubscription<List<PostModel>>? _approvalPostsSubscription;
-  Timer? _ajaxRefreshTimer;
   bool _loadingRemote = true;
-  bool _loadingApprovalPosts = true;
-  bool _ajaxRefreshInFlight = false;
   String? _remoteError;
-  String? _approvalError;
   int _recomputeToken = 0;
-  bool _recomputeQueuedFromBuild = false;
-  DateTime? _lastAjaxRefreshAt;
-  String? _selectedApprovalPostId;
-  final Set<String> _approvalBusyPostIds = <String>{};
+  final Map<String, _ApprovalAiReview> _approvalAiByPostId =
+      <String, _ApprovalAiReview>{};
+  final Set<String> _approvalAiInFlightPostIds = <String>{};
 
   _WebRecommendationCategory _category = _WebRecommendationCategory.feed;
   String? _selectedUserId;
@@ -550,7 +663,6 @@ class _WebRecommendationDashboardState
   Map<String, int> _followerCountsIndex = const <String, int>{};
   Map<String, List<String>> _projectCommentSnippetsByPost =
       const <String, List<String>>{};
-  Map<String, double> _commentSentimentByStudent = const <String, double>{};
   String _projectCommentSignature = '';
   List<String> _remoteFaculties = const <String>[];
   final bool _useFirestoreRecs = false;
@@ -559,20 +671,15 @@ class _WebRecommendationDashboardState
   @override
   void initState() {
     super.initState();
-    _openAi = OpenAiService(
-      apiKey: _webOpenAiApiKeyFromEnv,
-      diagnosticsTag: 'web_shell',
-    );
+    _openAi = OpenAiService(apiKey: _webOpenAiApiKeyFromEnv);
     _recommender = RecommenderService(
       openAiService: _openAi,
     );
-    _projectValidation = ProjectValidationService(openAiService: _openAi);
     unawaited(_bootstrapRemoteData());
   }
 
   @override
   void dispose() {
-    _ajaxRefreshTimer?.cancel();
     _usersSubscription?.cancel();
     _postsSubscription?.cancel();
     _approvalPostsSubscription?.cancel();
@@ -582,15 +689,11 @@ class _WebRecommendationDashboardState
   UserModel? get _selectedUser {
     if (_users.isEmpty) return null;
     final requestedId = _selectedUserId;
-    if (requestedId == null || requestedId.isEmpty) {
-      return _visibleStudents.isNotEmpty
-          ? _visibleStudents.first
-          : _users.first;
-    }
+    if (requestedId == null || requestedId.isEmpty) return null;
     for (final user in _users) {
       if (user.id == requestedId) return user;
     }
-    return _visibleStudents.isNotEmpty ? _visibleStudents.first : _users.first;
+    return null;
   }
 
   _KMeansTrace get _currentKMeansTrace {
@@ -607,8 +710,7 @@ class _WebRecommendationDashboardState
 
   int _effectivePostCountForUser(UserModel user) {
     final profileCount = user.profile?.totalPosts ?? 0;
-    final inferredCount =
-        _posts.where((post) => post.authorId == user.id).length;
+    final inferredCount = _posts.where((post) => post.authorId == user.id).length;
     return math.max(profileCount, inferredCount);
   }
 
@@ -635,8 +737,9 @@ class _WebRecommendationDashboardState
           (row['user_id'] ?? row['userId'] ?? '').toString().trim();
       final rowAlgorithm =
           (row['algorithm'] ?? row['algo'] ?? '').toString().trim();
-      final rowItemType =
-          (row['item_type'] ?? row['itemType'] ?? 'post').toString().trim();
+      final rowItemType = (row['item_type'] ?? row['itemType'] ?? 'post')
+          .toString()
+          .trim();
       return rowUserId == userId &&
           rowAlgorithm == algorithm &&
           rowItemType == 'post';
@@ -668,21 +771,15 @@ class _WebRecommendationDashboardState
   }
 
   int _openAiCountFor(List<RecommendedPost> rows) {
-    return rows
-        .where((row) => row.scoreBreakdown['openai_score'] != null)
-        .length;
+    return rows.where((row) => row.scoreBreakdown['openai_score'] != null).length;
   }
 
   int _realOpenAiCountFor(List<RecommendedPost> rows) {
-    return rows
-        .where((row) => row.scoreBreakdown['ai_source_openai'] == 1.0)
-        .length;
+    return rows.where((row) => row.scoreBreakdown['ai_source_openai'] == 1.0).length;
   }
 
   int _proxyAiCountFor(List<RecommendedPost> rows) {
-    return rows
-        .where((row) => row.scoreBreakdown['ai_source_proxy'] == 1.0)
-        .length;
+    return rows.where((row) => row.scoreBreakdown['ai_source_proxy'] == 1.0).length;
   }
 
   HybridRerankDiagnostics? get _activeHybridDiagnostics {
@@ -726,41 +823,13 @@ class _WebRecommendationDashboardState
     return total / rows.length;
   }
 
-  List<String> _commentsForStudent(UserModel user, {int limit = 6}) {
-    final comments = <String>[];
-    for (final post in _posts) {
-      if (post.type != 'project' || post.authorId != user.id) continue;
-      comments.addAll(_projectCommentSnippetsByPost[post.id] ?? const []);
-    }
-    return comments
-        .map((comment) => comment.trim())
-        .where((comment) => comment.isNotEmpty)
-        .take(limit)
-        .toList(growable: false);
-  }
-
-  String _aiReactionForSentiment(double sentiment, int commentCount) {
-    if (commentCount == 0) return 'No project comments yet';
-    if (sentiment >= 0.72) return 'AI reads strong positive validation';
-    if (sentiment >= 0.56) return 'AI reads constructive approval';
-    if (sentiment >= 0.44) return 'AI reads neutral or mixed feedback';
-    return 'AI detects weak or negative feedback';
-  }
-
-  Color _sentimentColor(double sentiment) {
-    if (sentiment >= 0.72) return const Color(0xFF0F9D58);
-    if (sentiment >= 0.56) return AppColors.primary;
-    if (sentiment >= 0.44) return AppColors.mustGoldDark;
-    return const Color(0xFFDC2626);
-  }
-
   List<_GeneralStudentScore> get _allStudentScores {
     if (_users.isEmpty) return const <_GeneralStudentScore>[];
     return _buildGeneralRecommendation(
       students: _users,
       faculty: null,
       clusterAssignments: _currentKMeansTrace.finalAssignments,
-      commentSentimentByStudent: _commentSentimentByStudent,
+      commentSentimentByStudent: const <String, double>{},
     );
   }
 
@@ -772,17 +841,25 @@ class _WebRecommendationDashboardState
       counts[key] = (counts[key] ?? 0) + 1;
     }
     if (counts.isEmpty) return _allFaculties;
-    return (counts.entries.toList()..sort((a, b) => b.value.compareTo(a.value)))
+    return (counts.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value)))
         .first
         .key;
   }
 
   String get _explorerFaculty {
-    if (_selectedFaculty != _allFaculties) return _selectedFaculty;
-    return _bestFacultyName;
+    return _selectedFaculty;
   }
 
   List<UserModel> _studentsForFaculty(String faculty) {
+    if (faculty == _allFaculties) {
+      return _users.toList(growable: false)
+        ..sort(
+          (a, b) => _displayName(a)
+              .toLowerCase()
+              .compareTo(_displayName(b).toLowerCase()),
+        );
+    }
     return _users.where((user) {
       final value = (user.profile?.faculty ?? '').trim();
       final normalized = value.isEmpty ? 'Unknown Faculty' : value;
@@ -805,8 +882,8 @@ class _WebRecommendationDashboardState
 
     final entries = grouped.entries.toList()
       ..sort((a, b) {
-        final bestA = a.value.isEmpty ? 0 : a.value.first.points;
-        final bestB = b.value.isEmpty ? 0 : b.value.first.points;
+        final bestA = a.value.isEmpty ? 0.0 : a.value.first.score;
+        final bestB = b.value.isEmpty ? 0.0 : b.value.first.score;
         return bestB.compareTo(bestA);
       });
     return entries;
@@ -837,124 +914,6 @@ class _WebRecommendationDashboardState
     }).toList(growable: false);
   }
 
-  PostModel? get _selectedApprovalPost {
-    final selectedId = _selectedApprovalPostId;
-    if (selectedId == null || selectedId.isEmpty) {
-      return _approvalPosts.isEmpty ? null : _approvalPosts.first;
-    }
-    for (final post in _approvalPosts) {
-      if (post.id == selectedId) return post;
-    }
-    return _approvalPosts.isEmpty ? null : _approvalPosts.first;
-  }
-
-  UserModel? _authorForPost(PostModel post) {
-    for (final user in _users) {
-      if (user.id == post.authorId) return user;
-    }
-    return null;
-  }
-
-  Future<void> _refreshApprovalPosts() async {
-    final firestore = _firestore;
-    if (firestore == null) return;
-    setState(() {
-      _loadingApprovalPosts = true;
-      _approvalError = null;
-    });
-    try {
-      final posts = await firestore.getRecentPosts(
-        limit: 5000,
-        includePendingForAdmin: true,
-      );
-      _applyApprovalSnapshot(posts, allowSetState: true);
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _approvalError = 'Could not load approval queue: $error';
-        _loadingApprovalPosts = false;
-      });
-    }
-  }
-
-  Future<void> _writeApprovalPost(PostModel post) async {
-    await FirebaseFirestore.instance.collection('posts').doc(post.id).set(
-      <String, dynamic>{
-        ...post.toMap(),
-        ...post.toJson(),
-        'moderation_status': post.moderationStatus.name,
-        'moderationStatus': post.moderationStatus.name,
-        'status': post.moderationStatus == ModerationStatus.approved
-            ? 'published'
-            : post.moderationStatus.name,
-        'is_archived': post.isArchived,
-        'isArchived': post.isArchived,
-        'updated_at': post.updatedAt.millisecondsSinceEpoch,
-        'updatedAt': post.updatedAt.toIso8601String(),
-      },
-      SetOptions(merge: true),
-    );
-  }
-
-  Future<void> _reviewApprovalPost(PostModel post) async {
-    if (_approvalBusyPostIds.contains(post.id)) return;
-    setState(() => _approvalBusyPostIds.add(post.id));
-    try {
-      final pendingPost = post.copyWith(
-        moderationStatus: ModerationStatus.pending,
-        updatedAt: DateTime.now(),
-      );
-      final reviewed = await _projectValidation.reviewPendingPost(pendingPost);
-      final savedReviewed = reviewed.copyWith(updatedAt: DateTime.now());
-      await _writeApprovalPost(savedReviewed);
-      _applyApprovalSnapshot(
-        _approvalPosts
-            .map((item) => item.id == post.id ? savedReviewed : item)
-            .toList(growable: false),
-        allowSetState: true,
-      );
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _approvalError = 'AI review failed: $error');
-    } finally {
-      if (mounted) {
-        setState(() => _approvalBusyPostIds.remove(post.id));
-      } else {
-        _approvalBusyPostIds.remove(post.id);
-      }
-    }
-  }
-
-  Future<void> _setApprovalStatus(
-    PostModel post,
-    ModerationStatus status,
-  ) async {
-    if (_approvalBusyPostIds.contains(post.id)) return;
-    setState(() => _approvalBusyPostIds.add(post.id));
-    try {
-      final updated = post.copyWith(
-        moderationStatus: status,
-        updatedAt: DateTime.now(),
-      );
-      await _writeApprovalPost(updated);
-      _applyApprovalSnapshot(
-        _approvalPosts
-            .map((item) => item.id == post.id ? updated : item)
-            .toList(growable: false),
-        allowSetState: true,
-      );
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _approvalError = 'Could not update approval: $error');
-    } finally {
-      if (mounted) {
-        setState(() => _approvalBusyPostIds.remove(post.id));
-      } else {
-        _approvalBusyPostIds.remove(post.id);
-      }
-    }
-  }
-
   void _selectFaculty(String faculty) {
     setState(() {
       _selectedFaculty = faculty;
@@ -962,7 +921,7 @@ class _WebRecommendationDashboardState
       if (filtered.isEmpty) {
         _selectedUserId = null;
       } else if (!filtered.any((user) => user.id == _selectedUserId)) {
-        _selectedUserId = filtered.first.id;
+        _selectedUserId = null;
       }
     });
     unawaited(_recompute());
@@ -1160,17 +1119,12 @@ class _WebRecommendationDashboardState
               ),
               _InlineMetricChip(
                 label: 'cluster',
-                value: cluster != null ? _clusterLabel(cluster) : 'Unknown',
+                value: cluster != null ? 'C$cluster' : 'Unknown',
               ),
               _InlineMetricChip(
                 label: 'global_score',
                 value: _d(globalScore),
               ),
-              if (category == _WebRecommendationCategory.general)
-                _InlineMetricChip(
-                  label: 'ai_comment_sentiment',
-                  value: _d(_commentSentimentByStudent[user.id] ?? 0.5),
-                ),
               _InlineMetricChip(
                 label: 'mode',
                 value: _modeLabel(category),
@@ -1187,63 +1141,6 @@ class _WebRecommendationDashboardState
               ),
             ),
           ],
-          if (category == _WebRecommendationCategory.general) ...[
-            const SizedBox(height: 14),
-            _studentCommentReactionCard(user),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _studentCommentReactionCard(UserModel user) {
-    final comments = _commentsForStudent(user, limit: 3);
-    final sentiment = _commentSentimentByStudent[user.id] ?? 0.5;
-    final color = _sentimentColor(sentiment);
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.22)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            _aiReactionForSentiment(sentiment, comments.length),
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              color: color,
-            ),
-          ),
-          const SizedBox(height: 8),
-          if (comments.isEmpty)
-            Text(
-              'No comments have been captured for this student project yet.',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 12,
-                color: AppColors.textSecondaryLight,
-              ),
-            )
-          else
-            ...comments.map(
-              (comment) => Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Text(
-                  '"$comment"',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 11,
-                    height: 1.35,
-                    color: AppColors.textSecondaryLight,
-                  ),
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -1297,14 +1194,11 @@ class _WebRecommendationDashboardState
                 ? _generalResults.take(6).map((item) => item.score).toList(
                       growable: false,
                     )
-                : local
-                    .take(6)
-                    .map((item) => item.score)
-                    .toList(growable: false),
+                : local.take(6).map((item) => item.score).toList(growable: false),
             color: category == _WebRecommendationCategory.general
                 ? AppColors.mustGoldDark
                 : AppColors.primary,
-            height: _compactChartHeight,
+            height: 240,
           ),
           if (category != _WebRecommendationCategory.general &&
               ai.isNotEmpty) ...[
@@ -1387,85 +1281,12 @@ class _WebRecommendationDashboardState
     final user = _selectedUser;
 
     if (user == null) {
-      return SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: _panel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.person_search_rounded,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'No Student Selected',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            color: p,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Use Student Explorer cards in the sidebar flow to select a student and open focused analytics.',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 12,
-                            height: 1.45,
-                            color: s,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  _InlineMetricChip(
-                    label: 'students_loaded',
-                    value: '${_users.length}',
-                  ),
-                  _InlineMetricChip(
-                    label: 'posts_loaded',
-                    value: '${_posts.length}',
-                  ),
-                  const _InlineMetricChip(
-                    label: 'hint',
-                    value: 'Student Explorer -> Select Student',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: FilledButton.icon(
-                  onPressed: () {
-                    setState(() =>
-                        _activeSection = _DashboardSection.studentExplorer);
-                  },
-                  icon: const Icon(Icons.people_alt_outlined),
-                  label: const Text('Open Student Explorer'),
-                ),
-              ),
-            ],
+      return Center(
+        child: Text(
+          'Select a student to open recommendation analytics lab.',
+          style: GoogleFonts.plusJakartaSans(
+            color: AppColors.textSecondaryLight,
+            fontWeight: FontWeight.w600,
           ),
         ),
       );
@@ -1476,79 +1297,45 @@ class _WebRecommendationDashboardState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _panel(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+          Row(
+            children: [
+              _UserAvatar(user: user, radius: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _UserAvatar(user: user, radius: 22),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _displayName(user),
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: p,
-                            ),
-                          ),
-                          Text(
-                            'Recommendation signals, ranking steps, and output panels grouped for clean review screenshots.',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 12,
-                              color: s,
-                              height: 1.45,
-                            ),
-                          ),
-                        ],
+                    Text(
+                      _displayName(user),
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: p,
                       ),
                     ),
-                    FilledButton.icon(
-                      onPressed: () => _openPrintableAnalytics(
-                        context,
-                        user,
-                        _studentLabCategory,
+                    Text(
+                      'Recommendation signals + step-by-step analytics',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        color: s,
                       ),
-                      icon: const Icon(Icons.print_outlined, size: 16),
-                      label: const Text('Print Analytics'),
                     ),
                   ],
                 ),
-                const SizedBox(height: 14),
-                _studentLabSnapshotStrip(user),
-              ],
-            ),
-          ),
-          _panel(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Analysis Scope',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    color: p,
-                  ),
+              ),
+              FilledButton.icon(
+                onPressed: () => _openPrintableAnalytics(
+                  context,
+                  user,
+                  _studentLabCategory,
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  'Switch between feed, personal, and general ranking traces while keeping this student context fixed.',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12,
-                    height: 1.45,
-                    color: s,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _studentLabTabs(),
-              ],
-            ),
+                icon: const Icon(Icons.print_outlined, size: 16),
+                label: const Text('Print Analytics'),
+              ),
+            ],
           ),
+          const SizedBox(height: 14),
+          _studentLabTabs(),
           const SizedBox(height: 14),
           _studentSignalPanel(user, _studentLabCategory),
           const SizedBox(height: 12),
@@ -1566,10 +1353,10 @@ class _WebRecommendationDashboardState
       _firestore ??= FirestoreService();
       final firestore = _firestore!;
 
-      final users = await firestore.getAllUsersFromRemote(limit: 5000);
-      final posts = await firestore.getRecentPosts(limit: 5000);
+      final users = await firestore.getAllUsersFromRemote(limit: 600);
+      final posts = await firestore.getRecentPosts(limit: 300);
       final approvalPosts = await firestore.getRecentPosts(
-        limit: 5000,
+        limit: 300,
         includePendingForAdmin: true,
       );
       final logs = await firestore.getRecentRecommendationLogs(limit: 400);
@@ -1588,7 +1375,7 @@ class _WebRecommendationDashboardState
 
       _usersSubscription?.cancel();
       _usersSubscription =
-          firestore.watchAllUsers(limit: 5000).listen((remoteUsers) {
+          firestore.watchAllUsers(limit: 600).listen((remoteUsers) {
         _applyRemoteSnapshot(
           users: remoteUsers,
           posts: _posts,
@@ -1598,7 +1385,7 @@ class _WebRecommendationDashboardState
       });
 
       _postsSubscription?.cancel();
-      _postsSubscription = firestore.watchRecentPosts(limit: 5000).listen(
+      _postsSubscription = firestore.watchRecentPosts(limit: 300).listen(
         (remotePosts) {
           _applyRemoteSnapshot(
             users: _users,
@@ -1611,24 +1398,11 @@ class _WebRecommendationDashboardState
 
       _approvalPostsSubscription?.cancel();
       _approvalPostsSubscription = firestore
-          .watchRecentPosts(limit: 5000, includePendingForAdmin: true)
+          .watchRecentPosts(limit: 300, includePendingForAdmin: true)
           .listen(
         (remotePosts) {
           _applyApprovalSnapshot(remotePosts);
         },
-        onError: (Object error) {
-          if (!mounted) return;
-          setState(() {
-            _approvalError = 'Could not stream approval queue: $error';
-            _loadingApprovalPosts = false;
-          });
-        },
-      );
-
-      _ajaxRefreshTimer?.cancel();
-      _ajaxRefreshTimer = Timer.periodic(
-        const Duration(seconds: 8),
-        (_) => unawaited(_refreshDynamicRemoteData()),
       );
     } catch (error) {
       if (!mounted) return;
@@ -1637,27 +1411,6 @@ class _WebRecommendationDashboardState
             'Could not load Firestore data on web. Check your Firebase web config and security rules. Details: $error';
         _loadingRemote = false;
       });
-    }
-  }
-
-  Future<void> _refreshDynamicRemoteData() async {
-    if (_ajaxRefreshInFlight) return;
-    final firestore = _firestore;
-    if (firestore == null || _posts.isEmpty) return;
-
-    _ajaxRefreshInFlight = true;
-    try {
-      final logs = await firestore.getRecentRecommendationLogs(limit: 400);
-      final followerIndex = await firestore.getFollowerCountIndex(limit: 5000);
-      _remoteRecommendationLogs = logs;
-      _followerCountsIndex = followerIndex;
-      await _refreshProjectCommentSnippets(_posts, force: true);
-      _lastAjaxRefreshAt = DateTime.now();
-      if (mounted) setState(() {});
-    } catch (_) {
-      // Streams keep the dashboard usable; this lightweight refresh is best effort.
-    } finally {
-      _ajaxRefreshInFlight = false;
     }
   }
 
@@ -1676,10 +1429,14 @@ class _WebRecommendationDashboardState
   }) {
     // Recommendation dashboard is student-centric; exclude lecturers/admins.
     final cleanUsers = users
-        .where(
-            (user) => user.profile != null && user.isStudent && user.isActive)
+        .where((user) => user.profile != null && user.isStudent)
         .toList();
     final selectedId = _selectedUserId;
+    final resolvedSelectedId = cleanUsers.isEmpty
+        ? null
+        : (selectedId != null && cleanUsers.any((u) => u.id == selectedId)
+            ? selectedId
+            : null);
 
     _users = cleanUsers;
     _posts = posts;
@@ -1701,21 +1458,11 @@ class _WebRecommendationDashboardState
       }
     }
 
-    final visibleUsers = cleanUsers.where((user) {
-      final rawFaculty = (user.profile?.faculty ?? '').trim();
-      final faculty = rawFaculty.isEmpty ? 'Unknown Faculty' : rawFaculty;
-      return _selectedFaculty == _allFaculties || faculty == _selectedFaculty;
-    }).toList(growable: false);
-    final selectedStillVisible = selectedId != null &&
-        selectedId.isNotEmpty &&
-        visibleUsers.any((user) => user.id == selectedId);
-    _selectedUserId = selectedStillVisible
-        ? selectedId
-        : (visibleUsers.isNotEmpty ? visibleUsers.first.id : null);
+    _selectedUserId = resolvedSelectedId;
     _kMeansTrace = cleanUsers.isEmpty ? null : _buildKMeansTrace(cleanUsers);
     _loadingRemote = false;
     _remoteError = null;
-    unawaited(_refreshProjectCommentSnippets(posts));
+    _refreshProjectCommentSnippets(posts);
 
     if (cleanUsers.isEmpty) {
       _feedLocalResults = const <RecommendedPost>[];
@@ -1726,7 +1473,6 @@ class _WebRecommendationDashboardState
       _feedHybridDiagnostics = null;
       _personalHybridDiagnostics = null;
       _collaboratorResults = const <RecommendedUser>[];
-      _commentSentimentByStudent = const <String, double>{};
       _generalResults = const <_GeneralStudentScore>[];
       _benchmark = null;
       if (mounted && allowSetState) setState(() {});
@@ -1741,31 +1487,22 @@ class _WebRecommendationDashboardState
     bool allowSetState = false,
   }) {
     final approvalPosts = posts
-        .where(
-            (post) => post.type.toLowerCase() == 'project' && !post.isArchived)
-        .where((post) =>
-            post.moderationStatus == ModerationStatus.pending ||
-            (post.aiReviewStatus ?? '').trim().isNotEmpty)
+        .where((post) => post.type.toLowerCase() == 'project')
+        .where((post) => !post.isArchived)
         .toList(growable: false)
       ..sort((a, b) {
-        final statusA = a.moderationStatus == ModerationStatus.pending ? 0 : 1;
-        final statusB = b.moderationStatus == ModerationStatus.pending ? 0 : 1;
-        if (statusA != statusB) return statusA.compareTo(statusB);
+        final aPending = a.moderationStatus.name == 'pending' ? 0 : 1;
+        final bPending = b.moderationStatus.name == 'pending' ? 0 : 1;
+        if (aPending != bPending) return aPending.compareTo(bPending);
         return b.createdAt.compareTo(a.createdAt);
       });
 
-    final selectedId = _selectedApprovalPostId;
-    final nextSelectedId = approvalPosts.isEmpty
-        ? null
-        : (selectedId != null &&
-                approvalPosts.any((post) => post.id == selectedId)
-            ? selectedId
-            : approvalPosts.first.id);
-
     _approvalPosts = approvalPosts;
-    _selectedApprovalPostId = nextSelectedId;
-    _loadingApprovalPosts = false;
-    _approvalError = null;
+    for (final post in approvalPosts.take(12)) {
+      if (post.moderationStatus.name == 'pending') {
+        _ensureApprovalAiReview(post);
+      }
+    }
 
     if (mounted && allowSetState) {
       setState(() {});
@@ -1774,22 +1511,45 @@ class _WebRecommendationDashboardState
     }
   }
 
-  Future<void> _refreshProjectCommentSnippets(
-    List<PostModel> posts, {
-    bool force = false,
-  }) async {
+  void _ensureApprovalAiReview(PostModel post) {
+    if (_approvalAiByPostId.containsKey(post.id) ||
+        _approvalAiInFlightPostIds.contains(post.id)) {
+      return;
+    }
+    _approvalAiInFlightPostIds.add(post.id);
+    unawaited(() async {
+      try {
+        final payload = await _openAi.validateProjectPost(post: post.toJson());
+        final review = _ApprovalAiReview.fromPayload(payload);
+        if (!mounted) return;
+        setState(() {
+          _approvalAiByPostId[post.id] = review;
+          _approvalAiInFlightPostIds.remove(post.id);
+        });
+      } catch (error) {
+        if (!mounted) return;
+        setState(() {
+          _approvalAiByPostId[post.id] = _ApprovalAiReview.error(error);
+          _approvalAiInFlightPostIds.remove(post.id);
+        });
+      }
+    }());
+  }
+
+  void _refreshProjectCommentSnippets(List<PostModel> posts) {
     final firestore = _firestore;
     if (firestore == null) return;
 
-    final projectPosts =
-        posts.where((post) => post.type == 'project').toList(growable: false);
+    final projectPosts = posts
+        .where((post) => post.type == 'project')
+        .toList(growable: false);
     final postIds = projectPosts
         .map((post) => post.id.trim())
         .where((id) => id.isNotEmpty)
         .toList(growable: false)
       ..sort();
     final signature = postIds.join('|');
-    if (!force && signature == _projectCommentSignature) return;
+    if (signature == _projectCommentSignature) return;
 
     _projectCommentSignature = signature;
     if (postIds.isEmpty) {
@@ -1797,29 +1557,90 @@ class _WebRecommendationDashboardState
       return;
     }
 
-    try {
-      final snippets = await firestore.getRecentCommentSnippetsForPosts(
-        postIds: postIds,
-        perPost: 5,
-      );
-      final nextSignature = _commentSnippetSignature(snippets);
-      final previousSignature =
-          _commentSnippetSignature(_projectCommentSnippetsByPost);
-      _projectCommentSnippetsByPost = snippets;
-      if (nextSignature != previousSignature && mounted) {
-        unawaited(_recompute());
+    unawaited(() async {
+      try {
+        final snippets = await firestore.getRecentCommentSnippetsForPosts(
+          postIds: postIds,
+          perPost: 5,
+        );
+        _projectCommentSnippetsByPost = snippets;
+        if (mounted) {
+          unawaited(_recompute());
+        }
+      } catch (_) {
+        _projectCommentSnippetsByPost = const <String, List<String>>{};
       }
-    } catch (_) {
-      _projectCommentSnippetsByPost = const <String, List<String>>{};
-    }
+    }());
   }
 
-  String _commentSnippetSignature(Map<String, List<String>> snippets) {
-    final entries = snippets.entries.toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
-    return entries
-        .map((entry) => '${entry.key}:${entry.value.join("~")}')
-        .join('|');
+  Future<Map<String, double>> _aiCommentSentimentByStudent({
+    required List<UserModel> students,
+    required String? faculty,
+  }) async {
+    if (!_openAi.isConfigured) return const <String, double>{};
+
+    final projectPosts = _posts.where((post) => post.type == 'project');
+    final selectedStudents = students.where((student) {
+      if (faculty == null || faculty.isEmpty) return true;
+      return student.profile?.faculty == faculty;
+    }).toList(growable: false);
+
+    final payloadRows = <Map<String, dynamic>>[];
+    for (final student in selectedStudents) {
+      final comments = <String>[];
+      for (final post in projectPosts) {
+        if (post.authorId != student.id) continue;
+        comments.addAll(_projectCommentSnippetsByPost[post.id] ?? const <String>[]);
+      }
+      final compactComments = comments
+          .map((comment) => comment.trim())
+          .where((comment) => comment.isNotEmpty)
+          .take(8)
+          .toList(growable: false);
+      if (compactComments.isEmpty) continue;
+
+      payloadRows.add({
+        'id': student.id,
+        'title': 'Comment sentiment profile for ${_displayName(student)}',
+        'category': student.profile?.faculty,
+        'skills': student.profile?.skills ?? const <String>[],
+        'type': 'project_comment_sentiment',
+        'commentCount': compactComments.length,
+        'comments': compactComments,
+      });
+    }
+
+    if (payloadRows.isEmpty) return const <String, double>{};
+
+    try {
+      final response = await _openAi.rankPosts(
+        userProfile: {
+          'requestType': 'general_comment_sentiment',
+          'objective':
+              'Score each student by positivity and constructiveness of project comments. Positive sentiment should increase score, negative sentiment should lower score.',
+          'faculty': faculty,
+        },
+        posts: payloadRows,
+      );
+
+      final ranking = (response?['ranking'] as List?) ?? const [];
+      final scoreByStudent = <String, double>{};
+      for (final row in ranking) {
+        if (row is! Map) continue;
+        final data = Map<String, dynamic>.from(row);
+        final id = (data['postId'] ?? data['id'])?.toString();
+        if (id == null || id.isEmpty) continue;
+        final rawScore = data['score'] ?? data['sentimentScore'] ?? data['finalScore'];
+        final parsed = rawScore is num
+            ? rawScore.toDouble()
+            : double.tryParse(rawScore?.toString() ?? '');
+        if (parsed == null) continue;
+        scoreByStudent[id] = parsed.clamp(0.0, 1.0).toDouble();
+      }
+      return scoreByStudent;
+    } catch (_) {
+      return const <String, double>{};
+    }
   }
 
   Future<void> _recompute({bool allowSetState = true}) async {
@@ -1827,20 +1648,6 @@ class _WebRecommendationDashboardState
     final currentUser = _selectedUser;
     final trace = _currentKMeansTrace;
     if (currentUser == null) {
-      if (mounted && allowSetState) {
-        setState(() {
-          _feedLocalResults = const <RecommendedPost>[];
-          _feedAiResults = const <RecommendedPost>[];
-          _feedVideoQueue = const <FeedVideoQueueItem>[];
-          _personalLocalResults = const <RecommendedPost>[];
-          _personalAiResults = const <RecommendedPost>[];
-          _feedHybridDiagnostics = null;
-          _personalHybridDiagnostics = null;
-          _collaboratorResults = const <RecommendedUser>[];
-          _commentSentimentByStudent = const <String, double>{};
-          _generalResults = const <_GeneralStudentScore>[];
-        });
-      }
       return;
     }
 
@@ -1882,7 +1689,7 @@ class _WebRecommendationDashboardState
         .map((item) => item.post)
         .toList(growable: false);
     final feedCandidates =
-        eligibleFeedVideos.isEmpty ? feedSourceCandidates : eligibleFeedVideos;
+      eligibleFeedVideos.isEmpty ? feedSourceCandidates : eligibleFeedVideos;
 
     final feedLocal = _recommender.rankLocally(
       user: currentUser,
@@ -1895,7 +1702,7 @@ class _WebRecommendationDashboardState
       candidates: feedCandidates,
       recentSearchTerms: feedSearchTerms,
       recentlyViewedCategories: feedViewedCategories,
-      allowProxyFallback: true,
+      allowProxyFallback: false,
     );
     final feedAi = feedHybrid.posts;
 
@@ -1928,7 +1735,7 @@ class _WebRecommendationDashboardState
         if ((currentUser.profile?.programName ?? '').isNotEmpty)
           currentUser.profile!.programName!,
       },
-      allowProxyFallback: true,
+      allowProxyFallback: false,
     );
     final personalAi = personalHybrid.posts;
 
@@ -1939,13 +1746,8 @@ class _WebRecommendationDashboardState
           currentUser.profile?.skills.toSet() ?? const <String>{},
     );
 
-    final projectPosts =
-        _posts.where((post) => post.type == 'project').toList(growable: false);
-    final commentSentimentByStudent =
-        await _recommender.scoreProjectCommentSentimentByStudent(
+    final commentSentimentByStudent = await _aiCommentSentimentByStudent(
       students: _users,
-      projects: projectPosts,
-      commentSnippetsByPost: _projectCommentSnippetsByPost,
       faculty: _selectedFaculty == _allFaculties ? null : _selectedFaculty,
     );
 
@@ -1960,7 +1762,6 @@ class _WebRecommendationDashboardState
       localResults: personalLocal,
       hybridResults: personalAi,
       remoteLogs: _remoteRecommendationLogs,
-      projectPosts: projectPosts,
       topN: 10,
     );
 
@@ -1968,14 +1769,21 @@ class _WebRecommendationDashboardState
 
     void applyRecomputeResults() {
       _feedLocalResults = feedLocal;
-      _feedAiResults = feedAi;
+      _feedAiResults = _stableAiRows(
+        nextRows: feedAi,
+        previousRows: _feedAiResults,
+        diagnostics: feedHybrid.diagnostics,
+      );
       _feedVideoQueue = feedQueue;
       _personalLocalResults = personalLocal;
-      _personalAiResults = personalAi;
+      _personalAiResults = _stableAiRows(
+        nextRows: personalAi,
+        previousRows: _personalAiResults,
+        diagnostics: personalHybrid.diagnostics,
+      );
       _feedHybridDiagnostics = feedHybrid.diagnostics;
       _personalHybridDiagnostics = personalHybrid.diagnostics;
       _collaboratorResults = collaborators;
-      _commentSentimentByStudent = commentSentimentByStudent;
       _generalResults = general;
       _benchmark = benchmark;
     }
@@ -1987,17 +1795,21 @@ class _WebRecommendationDashboardState
     }
   }
 
-  void _queueRecomputeAfterBuild() {
-    if (_recomputeQueuedFromBuild) return;
-    _recomputeQueuedFromBuild = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        _recomputeQueuedFromBuild = false;
-        return;
-      }
-      final future = _recompute();
-      unawaited(future.whenComplete(() => _recomputeQueuedFromBuild = false));
-    });
+  List<RecommendedPost> _stableAiRows({
+    required List<RecommendedPost> nextRows,
+    required List<RecommendedPost> previousRows,
+    required HybridRerankDiagnostics diagnostics,
+  }) {
+    if (nextRows.isEmpty) return previousRows.isNotEmpty ? previousRows : nextRows;
+    final nextHasAi = _openAiCountFor(nextRows) > 0;
+    final previousHasAi = _openAiCountFor(previousRows) > 0;
+    if (!nextHasAi &&
+        previousHasAi &&
+        diagnostics.openAiAttempted &&
+        !diagnostics.openAiSucceeded) {
+      return previousRows;
+    }
+    return nextRows;
   }
 
   List<_GeneralStudentScore> _buildGeneralRecommendation({
@@ -2012,29 +1824,55 @@ class _WebRecommendationDashboardState
     }).toList(growable: false);
 
     final ranked = filtered.map((student) {
-      final rankScore = _recommender.computeGlobalStudentRankScore(
-        student: student,
-        projects: _posts,
-        followerCount: _effectiveFollowerCountForUser(student),
-        aiCommentSentiment: commentSentimentByStudent[student.id],
-      );
-      final points = _recommender.computeGlobalStudentRankPoints(
-        score: rankScore.score,
-        updatedAt: student.updatedAt,
-        timeRange: _webLeaderboardTimeRange,
-      );
+      final profile = student.profile!;
+      final streak = (profile.activityStreak / 30).clamp(0.0, 1.0).toDouble();
+        final posts =
+          (_effectivePostCountForUser(student) / 12).clamp(0.0, 1.0).toDouble();
+        final collabs = (_effectiveCollabCountForUser(student) / 8)
+          .clamp(0.0, 1.0)
+          .toDouble();
+        final followers = (_effectiveFollowerCountForUser(student) / 40)
+          .clamp(0.0, 1.0)
+          .toDouble();
+      final completeness = _profileCompleteness(student);
+      final skillDensity =
+          (profile.skills.length / 8).clamp(0.0, 1.0).toDouble();
+        final aiCommentSentiment =
+          (commentSentimentByStudent[student.id] ?? 0.5).clamp(0.0, 1.0);
+        final sentimentDelta = ((aiCommentSentiment - 0.5) * 0.22)
+          .clamp(-0.11, 0.11)
+          .toDouble();
+
+        final baseScore = ((0.24 * streak) +
+            (0.22 * posts) +
+            (0.20 * collabs) +
+            (0.14 * followers) +
+            (0.12 * completeness) +
+            (0.08 * skillDensity))
+          .clamp(0.0, 1.0)
+          .toDouble();
+
+        final score = (baseScore + sentimentDelta)
+          .clamp(0.0, 1.0)
+          .toDouble();
 
       return _GeneralStudentScore(
         user: student,
-        score: rankScore.score,
-        points: points,
+        score: score,
         cluster: clusterAssignments[student.id] ?? 0,
-        scoreBreakdown: rankScore.breakdown,
-        projectCount: rankScore.projectCount,
-        projectTitles: rankScore.projectTitles,
+        scoreBreakdown: {
+          'streak_score': streak,
+          'post_score': posts,
+          'collab_score': collabs,
+          'follower_score': followers,
+          'profile_completeness': completeness,
+          'skill_density': skillDensity,
+          'ai_comment_sentiment': aiCommentSentiment,
+          'sentiment_delta': sentimentDelta,
+        },
       );
     }).toList(growable: false)
-      ..sort((a, b) => b.points.compareTo(a.points));
+      ..sort((a, b) => b.score.compareTo(a.score));
 
     return ranked;
   }
@@ -2050,7 +1888,7 @@ class _WebRecommendationDashboardState
                   .toDouble(),
               activityDensity:
                   (((_effectivePostCountForUser(user) / 12.0) * 0.55) +
-                          ((_effectiveCollabCountForUser(user) / 8.0) * 0.45))
+                      ((_effectiveCollabCountForUser(user) / 8.0) * 0.45))
                       .clamp(0.0, 1.0)
                       .toDouble(),
               completeness: _profileCompleteness(user),
@@ -2151,15 +1989,10 @@ class _WebRecommendationDashboardState
             .toList() ??
         [];
 
-    final postsById = <String, PostModel>{
-      for (final post in _posts) post.id: post
-    };
-    final usersById = <String, UserModel>{
-      for (final candidate in _users) candidate.id: candidate
-    };
+    final postsById = <String, PostModel>{for (final post in _posts) post.id: post};
+    final usersById = <String, UserModel>{for (final candidate in _users) candidate.id: candidate};
 
-    List<RecommendedPost> mapPostRecommendations(
-        List<Map<String, dynamic>> rows) {
+    List<RecommendedPost> mapPostRecommendations(List<Map<String, dynamic>> rows) {
       final mapped = <RecommendedPost>[];
       for (final row in rows) {
         final postId = row['postId'] as String?;
@@ -2170,8 +2003,7 @@ class _WebRecommendationDashboardState
           RecommendedPost(
             post: post,
             score: (row['score'] as num?)?.toDouble() ?? 0.0,
-            reasons:
-                (row['reasons'] as List?)?.cast<String>() ?? const <String>[],
+            reasons: (row['reasons'] as List?)?.cast<String>() ?? const <String>[],
           ),
         );
       }
@@ -2188,10 +2020,9 @@ class _WebRecommendationDashboardState
         RecommendedUser(
           user: collabUser,
           score: (row['score'] as num?)?.toDouble() ?? 0.0,
-          reasons:
-              (row['reasons'] as List?)?.cast<String>() ?? const <String>[],
-          matchedSkills: (row['matchedSkills'] as List?)?.cast<String>() ??
-              const <String>[],
+          reasons: (row['reasons'] as List?)?.cast<String>() ?? const <String>[],
+          matchedSkills:
+              (row['matchedSkills'] as List?)?.cast<String>() ?? const <String>[],
         ),
       );
     }
@@ -2329,7 +2160,8 @@ class _WebRecommendationDashboardState
           // ── Nav items ──────────────────────────────────────────────────
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+              padding:
+                  const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
               children: [
                 _sidebarNavItem(
                   icon: Icons.dashboard_outlined,
@@ -2508,7 +2340,8 @@ class _WebRecommendationDashboardState
                   style: GoogleFonts.plusJakartaSans(
                     color: isActive ? Colors.white : textColor,
                     fontSize: 13,
-                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                    fontWeight:
+                        isActive ? FontWeight.w700 : FontWeight.w500,
                   ),
                 ),
               ],
@@ -2601,7 +2434,8 @@ class _WebRecommendationDashboardState
                   style: GoogleFonts.plusJakartaSans(
                     color: isActive ? Colors.white : textColor,
                     fontSize: 12,
-                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
+                    fontWeight:
+                        isActive ? FontWeight.w700 : FontWeight.w400,
                   ),
                 ),
               ],
@@ -2662,12 +2496,12 @@ class _WebRecommendationDashboardState
   // ── Top bar ───────────────────────────────────────────────────────────────
 
   Widget _buildTopBar() {
-    final aiCoveragePercent =
-        (_aiCoverageFor(_activeAiPostResults) * 100).toStringAsFixed(0);
+    final aiCoveragePercent = (_aiCoverageFor(_activeAiPostResults) * 100)
+        .toStringAsFixed(0);
     const sectionNames = {
       _DashboardSection.overview: 'Dashboard Overview',
-      _DashboardSection.projectApproval: 'Project Approval',
       _DashboardSection.studentLab: 'Student Recommendation Lab',
+      _DashboardSection.projectApproval: 'Project Approval',
       _DashboardSection.kmeans: 'K-Means Clustering',
       _DashboardSection.localMath: 'Local Ranking Math',
       _DashboardSection.aiStage: 'AI Rerank Stage',
@@ -2727,38 +2561,10 @@ class _WebRecommendationDashboardState
             ),
           ],
           const Spacer(),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0F9D58).withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  _ajaxRefreshInFlight
-                      ? Icons.sync_rounded
-                      : Icons.flash_on_rounded,
-                  color: const Color(0xFF0F9D58),
-                  size: 14,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  _lastAjaxRefreshAt == null ? 'AJAX live' : 'AJAX updated',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 11,
-                    color: const Color(0xFF0F9D58),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
           if (_remoteError != null)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: Colors.red.shade50,
                 borderRadius: BorderRadius.circular(6),
@@ -2782,7 +2588,8 @@ class _WebRecommendationDashboardState
             ),
           const SizedBox(width: 8),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
               color: const Color(0xFF7C3AED).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(6),
@@ -2830,9 +2637,9 @@ class _WebRecommendationDashboardState
     const s = AppColors.textSecondaryLight;
     return switch (_activeSection) {
       _DashboardSection.overview => _buildOverviewSection(),
-      _DashboardSection.projectApproval => _buildProjectApprovalSection(),
       _DashboardSection.studentLab => _buildStudentLabSection(),
       _DashboardSection.studentExplorer => _buildStudentExplorer(),
+      _DashboardSection.projectApproval => _buildProjectApprovalSection(p, s),
       _DashboardSection.kmeans => ListView(
           padding: const EdgeInsets.all(20),
           children: [_kMeansPanel(p, s)],
@@ -2866,1187 +2673,6 @@ class _WebRecommendationDashboardState
   }
 
   // ── Overview section ──────────────────────────────────────────────────────
-
-  // Project approval dashboard
-
-  Widget _buildProjectApprovalSection() {
-    const p = AppColors.textPrimaryLight;
-    const s = AppColors.textSecondaryLight;
-    final pendingCount = _approvalPosts
-        .where((post) => post.moderationStatus == ModerationStatus.pending)
-        .length;
-    final reviewedCount = _approvalPosts
-        .where((post) => (post.aiReviewStatus ?? '').trim().isNotEmpty)
-        .length;
-    final approveCount = _approvalPosts
-        .where((post) => post.aiDecision?.toLowerCase() == 'approve')
-        .length;
-    final humanCount = _approvalPosts
-        .where((post) => post.aiDecision?.toLowerCase() == 'needs_human')
-        .length;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _panel(
-            child: Row(
-              children: [
-                Container(
-                  width: 46,
-                  height: 46,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0F9D58).withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.verified_user_outlined,
-                    color: Color(0xFF0F9D58),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Project approval control room',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w900,
-                          color: p,
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        'Review submitted project evidence, AI scoring, confidence, findings, and the final moderation output from the same validation service used by mobile.',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 12,
-                          height: 1.45,
-                          color: s,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 14),
-                OutlinedButton.icon(
-                  onPressed:
-                      _loadingApprovalPosts ? null : _refreshApprovalPosts,
-                  icon: const Icon(Icons.refresh_rounded, size: 16),
-                  label: const Text('Refresh'),
-                ),
-              ],
-            ),
-          ),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _approvalStatCard(
-                label: 'pending review',
-                value: '$pendingCount',
-                icon: Icons.hourglass_top_rounded,
-                color: AppColors.mustGoldDark,
-              ),
-              _approvalStatCard(
-                label: 'ai reviewed',
-                value: '$reviewedCount',
-                icon: Icons.auto_awesome_rounded,
-                color: const Color(0xFF7C3AED),
-              ),
-              _approvalStatCard(
-                label: 'ai says approve',
-                value: '$approveCount',
-                icon: Icons.check_circle_outline_rounded,
-                color: const Color(0xFF0F9D58),
-              ),
-              _approvalStatCard(
-                label: 'needs human',
-                value: '$humanCount',
-                icon: Icons.manage_search_rounded,
-                color: const Color(0xFFDC2626),
-              ),
-              _approvalStatCard(
-                label: 'ai route',
-                value: _openAi.isConfigured ? 'ready' : 'manual',
-                icon: Icons.hub_outlined,
-                color:
-                    _openAi.isConfigured ? AppColors.primary : Colors.redAccent,
-              ),
-            ],
-          ),
-          if (_approvalError != null) ...[
-            const SizedBox(height: 16),
-            _panel(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons.warning_amber_rounded,
-                    color: Colors.red.shade600,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      _approvalError!,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        height: 1.4,
-                        color: Colors.red.shade700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 16),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final narrow = constraints.maxWidth < 1040;
-              final queue = _approvalQueuePanel(p, s);
-              final detail = _approvalDetailPanel(p, s);
-              if (narrow) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    queue,
-                    const SizedBox(height: 16),
-                    detail,
-                  ],
-                );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: 370, child: queue),
-                  const SizedBox(width: 16),
-                  Expanded(child: detail),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _approvalStatCard({
-    required String label,
-    required String value,
-    required IconData icon,
-    required Color color,
-  }) {
-    return Container(
-      width: 184,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.20)),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.07),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: color, size: 18),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.textPrimaryLight,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textSecondaryLight,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _approvalQueuePanel(Color textPrimary, Color textSecondary) {
-    if (_loadingApprovalPosts) {
-      return _panel(
-        child: const SizedBox(
-          height: 260,
-          child: Center(child: CircularProgressIndicator()),
-        ),
-      );
-    }
-
-    if (_approvalPosts.isEmpty) {
-      return _panel(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Approval queue',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-                color: textPrimary,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'No project submissions are waiting for AI or admin review.',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 12,
-                height: 1.45,
-                color: textSecondary,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return _panel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                'Approval queue',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                  color: textPrimary,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '${_approvalPosts.length} projects',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: textSecondary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ..._approvalPosts.take(120).map(
-                (post) => _approvalQueueTile(post, textPrimary, textSecondary),
-              ),
-        ],
-      ),
-    );
-  }
-
-  Widget _approvalQueueTile(
-    PostModel post,
-    Color textPrimary,
-    Color textSecondary,
-  ) {
-    final selected = _selectedApprovalPostId == post.id;
-    final statusColor = _approvalStatusColor(post.moderationStatus);
-    final decisionColor = _approvalDecisionColor(post.aiDecision);
-    final author = _authorForPost(post);
-    final busy = _approvalBusyPostIds.contains(post.id);
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => setState(() => _selectedApprovalPostId = post.id),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: selected
-                ? AppColors.primary.withValues(alpha: 0.07)
-                : const Color(0xFFF8FAFF),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: selected
-                  ? AppColors.primary.withValues(alpha: 0.35)
-                  : const Color(0xFFE3EAFB),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      post.title.isEmpty ? 'Untitled project' : post.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w800,
-                        color: textPrimary,
-                      ),
-                    ),
-                  ),
-                  if (busy) ...[
-                    const SizedBox(width: 8),
-                    const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  _miniBadge(
-                    _approvalStatusLabel(post.moderationStatus),
-                    statusColor,
-                  ),
-                  const SizedBox(width: 6),
-                  _miniBadge(
-                    _approvalDecisionLabel(post.aiDecision),
-                    decisionColor,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '${author != null ? _displayName(author) : post.authorName ?? 'Unknown author'} - trust ${post.trustScore} - ${_formatShortDate(post.createdAt)}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 10.5,
-                  color: textSecondary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _approvalDetailPanel(Color textPrimary, Color textSecondary) {
-    final post = _selectedApprovalPost;
-    if (post == null) {
-      return _panel(
-        child: SizedBox(
-          height: 260,
-          child: Center(
-            child: Text(
-              'Select a project to inspect the approval logic.',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 12,
-                color: textSecondary,
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _approvalSubmissionPanel(post, textPrimary, textSecondary),
-        const SizedBox(height: 16),
-        _approvalAiHandlingPanel(post, textPrimary, textSecondary),
-        const SizedBox(height: 16),
-        _approvalOutputPanel(post, textPrimary, textSecondary),
-      ],
-    );
-  }
-
-  Widget _approvalSubmissionPanel(
-    PostModel post,
-    Color textPrimary,
-    Color textSecondary,
-  ) {
-    final author = _authorForPost(post);
-    final authorName = author != null
-        ? _displayName(author)
-        : (post.authorName?.trim().isNotEmpty ?? false)
-            ? post.authorName!.trim()
-            : 'Unknown author';
-    final description = (post.description ?? '').trim();
-
-    return _panel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (author != null)
-                _UserAvatar(user: author, radius: 22)
-              else
-                CircleAvatar(
-                  radius: 22,
-                  backgroundColor: AppColors.primaryTint10,
-                  child: Text(
-                    authorName.substring(0, 1).toUpperCase(),
-                    style: GoogleFonts.plusJakartaSans(
-                      color: AppColors.primaryDark,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      post.title.isEmpty ? 'Untitled project' : post.title,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        color: textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$authorName - ${post.faculty ?? 'Unknown faculty'} - ${post.program ?? 'Unknown program'}',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        color: textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              _miniBadge(
-                _approvalStatusLabel(post.moderationStatus),
-                _approvalStatusColor(post.moderationStatus),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _InlineMetricChip(
-                label: 'category',
-                value: post.category ?? 'Not set',
-              ),
-              _InlineMetricChip(
-                label: 'visibility',
-                value: post.visibility.name,
-              ),
-              _InlineMetricChip(
-                  label: 'media', value: '${post.mediaUrls.length}'),
-              _InlineMetricChip(
-                label: 'links',
-                value: '${post.externalLinks.length}',
-              ),
-              _InlineMetricChip(
-                label: 'created',
-                value: _formatShortDate(post.createdAt),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'Submitted content',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              color: textPrimary,
-            ),
-          ),
-          const SizedBox(height: 7),
-          Text(
-            description.isEmpty ? 'No description was submitted.' : description,
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 12,
-              height: 1.55,
-              color: textSecondary,
-            ),
-          ),
-          if (post.skillsUsed.isNotEmpty || post.tags.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ...post.skillsUsed.map(
-                  (skill) => _miniBadge(skill, AppColors.primary),
-                ),
-                ...post.tags.map(
-                  (tag) => _miniBadge('#$tag', AppColors.mustGoldDark),
-                ),
-              ],
-            ),
-          ],
-          const SizedBox(height: 16),
-          _approvalAnswerGrid(
-            title: 'Ownership evidence',
-            answers: post.ownershipAnswers,
-            textPrimary: textPrimary,
-            textSecondary: textSecondary,
-          ),
-          const SizedBox(height: 14),
-          _approvalAnswerGrid(
-            title: 'Content validation answers',
-            answers: post.contentValidationAnswers,
-            textPrimary: textPrimary,
-            textSecondary: textSecondary,
-          ),
-          if (post.youtubeUrl?.trim().isNotEmpty ?? false) ...[
-            const SizedBox(height: 14),
-            _approvalLinkRow(
-              'YouTube',
-              post.youtubeUrl!.trim(),
-              Icons.smart_display_outlined,
-            ),
-          ],
-          if (post.externalLinks.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            ...post.externalLinks.take(4).map((link) {
-              final label = (link['label'] ?? link['title'] ?? 'External link')
-                  .toString()
-                  .trim();
-              final url = (link['url'] ?? '').toString().trim();
-              return _approvalLinkRow(
-                label.isEmpty ? 'External link' : label,
-                url.isEmpty ? 'No URL captured' : url,
-                Icons.link_rounded,
-              );
-            }),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _approvalAnswerGrid({
-    required String title,
-    required Map<String, String> answers,
-    required Color textPrimary,
-    required Color textSecondary,
-  }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFF),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE3EAFB)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              color: textPrimary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          if (answers.isEmpty)
-            Text(
-              'No answers captured for this section.',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 11,
-                color: textSecondary,
-              ),
-            )
-          else
-            ...answers.entries.map((entry) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _humanizeKey(entry.key),
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.primaryDark,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      entry.value.trim().isEmpty
-                          ? 'No answer supplied.'
-                          : entry.value.trim(),
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 11.5,
-                        height: 1.45,
-                        color: textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-        ],
-      ),
-    );
-  }
-
-  Widget _approvalLinkRow(String label, String value, IconData icon) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 15, color: AppColors.primary),
-        const SizedBox(width: 7),
-        Expanded(
-          child: Text(
-            '$label: $value',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 11.5,
-              height: 1.35,
-              color: AppColors.textSecondaryLight,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _approvalAiHandlingPanel(
-    PostModel post,
-    Color textPrimary,
-    Color textSecondary,
-  ) {
-    final scoreEntries = post.aiScores.entries.toList(growable: false)
-      ..sort((a, b) => b.value.compareTo(a.value));
-    final labels = scoreEntries
-        .map((entry) => _humanizeKey(entry.key))
-        .toList(growable: false);
-    final values = scoreEntries
-        .map((entry) => entry.value.toDouble())
-        .toList(growable: false);
-    final decisionColor = _approvalDecisionColor(post.aiDecision);
-
-    return _panel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                'How AI handled it',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w900,
-                  color: textPrimary,
-                ),
-              ),
-              const Spacer(),
-              _miniBadge(
-                _openAi.isConfigured ? 'AI available' : 'Manual fallback',
-                _openAi.isConfigured ? const Color(0xFF0F9D58) : Colors.red,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Mobile and web share ProjectValidationService: the post is converted to one validation payload, OpenAI scores academic relevance, ownership evidence, completeness, safety, and decides approve, reject, or needs human review.',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 12,
-              height: 1.48,
-              color: textSecondary,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _InlineMetricChip(
-                label: 'review_status',
-                value: post.aiReviewStatus ?? 'not_run',
-              ),
-              _InlineMetricChip(
-                label: 'decision',
-                value: _approvalDecisionLabel(post.aiDecision),
-              ),
-              _InlineMetricChip(
-                label: 'confidence',
-                value: post.aiConfidence == null
-                    ? 'n/a'
-                    : '${(post.aiConfidence! * 100).toStringAsFixed(0)}%',
-              ),
-              _InlineMetricChip(
-                label: 'trust_score',
-                value: '${post.trustScore}',
-              ),
-              _InlineMetricChip(
-                label: 'reviewed',
-                value: post.aiReviewedAt == null
-                    ? 'not yet'
-                    : _formatShortDate(post.aiReviewedAt!),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (scoreEntries.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.mustGoldLight,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: AppColors.mustGold.withValues(alpha: 0.26),
-                ),
-              ),
-              child: Text(
-                'No AI score breakdown is stored yet. Run AI Review to produce the approval trace.',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 12,
-                  height: 1.45,
-                  color: AppColors.mustGoldDark,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            )
-          else
-            JsVisualizationPanel(
-              chartId: 'approval-${post.id}',
-              title: 'AI approval score breakdown',
-              labels: labels,
-              values: values,
-              height: 300,
-              color: decisionColor,
-            ),
-          const SizedBox(height: 16),
-          _approvalMediaAnalysisBox(post, textPrimary, textSecondary),
-          const SizedBox(height: 16),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final narrow = constraints.maxWidth < 760;
-              final findings = _approvalBulletBox(
-                title: 'AI findings',
-                items: post.aiFindings,
-                empty: 'No findings stored yet.',
-                color: decisionColor,
-              );
-              final evidence = _approvalBulletBox(
-                title: 'Evidence used',
-                items: post.aiEvidence,
-                empty: 'No evidence list stored yet.',
-                color: AppColors.primary,
-              );
-              if (narrow) {
-                return Column(
-                  children: [
-                    findings,
-                    const SizedBox(height: 12),
-                    evidence,
-                  ],
-                );
-              }
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: findings),
-                  const SizedBox(width: 12),
-                  Expanded(child: evidence),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _approvalMediaAnalysisBox(
-    PostModel post,
-    Color textPrimary,
-    Color textSecondary,
-  ) {
-    final analysis = post.aiMediaAnalysis;
-    final itemsRaw = analysis['items'];
-    final items = itemsRaw is List ? itemsRaw : const [];
-    final total = analysis['total_count'] ?? post.mediaUrls.length;
-    final inspected = analysis['inspected_count'] ?? items.length;
-    final completed = analysis['completed_count'] ?? 0;
-    final visual = analysis['visual_academic_relevance'] ?? 0;
-    final match = analysis['media_description_alignment'] ?? 0;
-    final ownership = analysis['media_ownership_signal'] ?? 0;
-    final audio = analysis['audio_project_relevance'] ?? 0;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFF),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE3EAFB)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.visibility_outlined,
-                size: 17,
-                color: AppColors.primary,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'AI media inspection',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w900,
-                  color: textPrimary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            analysis.isEmpty
-                ? 'No media inspection has been stored yet. When media has remote URLs, AI inspects images directly, samples a video frame, and attempts video/audio transcription.'
-                : 'AI inspected the same remote media the admin can preview, then used the findings in the final approval decision.',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 11.5,
-              height: 1.45,
-              color: textSecondary,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _InlineMetricChip(label: 'media_total', value: '$total'),
-              _InlineMetricChip(label: 'inspected', value: '$inspected'),
-              _InlineMetricChip(label: 'completed', value: '$completed'),
-              _InlineMetricChip(label: 'visual', value: '$visual'),
-              _InlineMetricChip(label: 'match', value: '$match'),
-              _InlineMetricChip(label: 'ownership', value: '$ownership'),
-              _InlineMetricChip(label: 'audio', value: '$audio'),
-            ],
-          ),
-          if (items.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            ...items.take(3).map((item) {
-              final row = item is Map ? item : const <String, dynamic>{};
-              final type = (row['type'] ?? 'media').toString();
-              final status = (row['status'] ?? 'unknown').toString();
-              final findingsRaw = row['findings'];
-              final findings = findingsRaw is List
-                  ? findingsRaw
-                      .map((entry) => entry.toString().trim())
-                      .where((entry) => entry.isNotEmpty)
-                      .join(' ')
-                  : '';
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 7),
-                child: Text(
-                  '$type / $status: ${findings.isEmpty ? 'No finding text returned.' : findings}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 11,
-                    height: 1.35,
-                    color: textSecondary,
-                  ),
-                ),
-              );
-            }),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _approvalBulletBox({
-    required String title,
-    required List<String> items,
-    required String empty,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.18)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 12,
-              fontWeight: FontWeight.w900,
-              color: color,
-            ),
-          ),
-          const SizedBox(height: 8),
-          if (items.isEmpty)
-            Text(
-              empty,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 11.5,
-                color: AppColors.textSecondaryLight,
-              ),
-            )
-          else
-            ...items.take(6).map(
-                  (item) => Padding(
-                    padding: const EdgeInsets.only(bottom: 7),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 5,
-                          height: 5,
-                          margin: const EdgeInsets.only(top: 7),
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            item,
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 11.5,
-                              height: 1.4,
-                              color: AppColors.textSecondaryLight,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-        ],
-      ),
-    );
-  }
-
-  Widget _approvalOutputPanel(
-    PostModel post,
-    Color textPrimary,
-    Color textSecondary,
-  ) {
-    final busy = _approvalBusyPostIds.contains(post.id);
-    final decisionColor = _approvalDecisionColor(post.aiDecision);
-    final finalTake = (post.aiFinalTake ?? '').trim();
-
-    return _panel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: decisionColor.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(Icons.output_rounded, color: decisionColor),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Approval output',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w900,
-                        color: textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      finalTake.isEmpty
-                          ? 'No final AI summary is stored yet.'
-                          : finalTake,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        height: 1.5,
-                        color: textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              _miniBadge(
-                _approvalDecisionLabel(post.aiDecision),
-                decisionColor,
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              FilledButton.icon(
-                onPressed: busy ? null : () => _reviewApprovalPost(post),
-                icon: busy
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.auto_awesome_rounded, size: 16),
-                label: Text(busy ? 'Working...' : 'Run AI Review'),
-              ),
-              OutlinedButton.icon(
-                onPressed: busy
-                    ? null
-                    : () => _setApprovalStatus(
-                          post,
-                          ModerationStatus.approved,
-                        ),
-                icon: const Icon(Icons.check_rounded, size: 16),
-                label: const Text('Approve'),
-              ),
-              OutlinedButton.icon(
-                onPressed: busy
-                    ? null
-                    : () => _setApprovalStatus(
-                          post,
-                          ModerationStatus.rejected,
-                        ),
-                icon: const Icon(Icons.close_rounded, size: 16),
-                label: const Text('Reject'),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _miniBadge(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.18)),
-      ),
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: GoogleFonts.plusJakartaSans(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w800,
-          color: color,
-        ),
-      ),
-    );
-  }
-
-  String _approvalStatusLabel(ModerationStatus status) {
-    return switch (status) {
-      ModerationStatus.pending => 'pending',
-      ModerationStatus.approved => 'approved',
-      ModerationStatus.rejected => 'rejected',
-    };
-  }
-
-  Color _approvalStatusColor(ModerationStatus status) {
-    return switch (status) {
-      ModerationStatus.pending => AppColors.mustGoldDark,
-      ModerationStatus.approved => const Color(0xFF0F9D58),
-      ModerationStatus.rejected => const Color(0xFFDC2626),
-    };
-  }
-
-  String _approvalDecisionLabel(String? decision) {
-    final normalized = decision?.trim().toLowerCase();
-    return switch (normalized) {
-      'approve' => 'AI approve',
-      'reject' => 'AI reject',
-      'needs_human' => 'needs human',
-      _ => 'not reviewed',
-    };
-  }
-
-  Color _approvalDecisionColor(String? decision) {
-    final normalized = decision?.trim().toLowerCase();
-    return switch (normalized) {
-      'approve' => const Color(0xFF0F9D58),
-      'reject' => const Color(0xFFDC2626),
-      'needs_human' => AppColors.mustGoldDark,
-      _ => AppColors.primary,
-    };
-  }
-
-  String _humanizeKey(String key) {
-    final cleaned = key
-        .replaceAll('_', ' ')
-        .replaceAll('-', ' ')
-        .trim()
-        .replaceAll(RegExp(r'\s+'), ' ');
-    if (cleaned.isEmpty) return 'Signal';
-    return cleaned
-        .split(' ')
-        .map((word) => word.isEmpty
-            ? word
-            : '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}')
-        .join(' ');
-  }
-
-  String _formatShortDate(DateTime date) {
-    final local = date.toLocal();
-    final day = local.day.toString().padLeft(2, '0');
-    final month = local.month.toString().padLeft(2, '0');
-    final hour = local.hour.toString().padLeft(2, '0');
-    final minute = local.minute.toString().padLeft(2, '0');
-    return '$day/$month/${local.year} $hour:$minute';
-  }
 
   Widget _buildOverviewSection() {
     const p = AppColors.textPrimaryLight;
@@ -4092,7 +2718,8 @@ class _WebRecommendationDashboardState
             _panel(
               child: Text(
                 'No users found from Firestore. Ensure your users collection contains profile data.',
-                style: GoogleFonts.plusJakartaSans(fontSize: 12, color: s),
+                style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12, color: s),
               ),
             ),
           ],
@@ -4149,7 +2776,7 @@ class _WebRecommendationDashboardState
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${students.length} students${topStudent != null ? ' - top student ${_displayName(topStudent.user)} (${_pointsLabel(topStudent.points)})' : ''}',
+                  '${students.length} students${topStudent != null ? ' · top student ${_displayName(topStudent.user)}' : ''}',
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 12,
                     color: textSecondary,
@@ -4183,7 +2810,7 @@ class _WebRecommendationDashboardState
           ),
           const SizedBox(height: 6),
           Text(
-            'A clean snapshot of the strongest student in each top faculty using the same project-aware leaderboard score as mobile.',
+            'A clean snapshot of the strongest student in each top faculty based on the current global scoring model.',
             style: GoogleFonts.plusJakartaSans(
               fontSize: 12,
               color: textSecondary,
@@ -4237,7 +2864,7 @@ class _WebRecommendationDashboardState
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
-                      _pointsLabel(topStudent.points),
+                      '${(topStudent.score * 100).round()}%',
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
@@ -4254,6 +2881,322 @@ class _WebRecommendationDashboardState
     );
   }
 
+  Widget _buildProjectApprovalSection(Color textPrimary, Color textSecondary) {
+    if (_loadingRemote && _approvalPosts.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final pending = _approvalPosts
+        .where((post) => post.moderationStatus.name == 'pending')
+        .toList(growable: false);
+    final approved = _approvalPosts
+        .where((post) => post.moderationStatus.name == 'approved')
+        .length;
+    final rejected = _approvalPosts
+        .where((post) => post.moderationStatus.name == 'rejected')
+        .length;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _panel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryTint10,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.verified_user_outlined,
+                        color: AppColors.primaryDark,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Project Approval',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              color: textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'Pending projects are checked through the local AI proxy, then mapped to approve, reject, or manual review.',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12,
+                              color: textSecondary,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    FilledButton.icon(
+                      onPressed: () {
+                        for (final post in pending) {
+                          _ensureApprovalAiReview(post);
+                        }
+                      },
+                      icon: const Icon(Icons.auto_awesome, size: 16),
+                      label: const Text('Run AI Review'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _InlineMetricChip(
+                      label: 'pending_projects',
+                      value: '${pending.length}',
+                    ),
+                    _InlineMetricChip(
+                      label: 'approved_visible',
+                      value: '$approved',
+                    ),
+                    _InlineMetricChip(
+                      label: 'rejected',
+                      value: '$rejected',
+                    ),
+                    _InlineMetricChip(
+                      label: 'ai_reviewed',
+                      value: '${_approvalAiByPostId.length}',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          if (_approvalPosts.isEmpty)
+            _panel(
+              child: Text(
+                'No project approval records loaded yet.',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  color: textSecondary,
+                ),
+              ),
+            )
+          else
+            ..._approvalPosts.take(80).map(
+                  (post) => _projectApprovalCard(
+                    post: post,
+                    textPrimary: textPrimary,
+                    textSecondary: textSecondary,
+                  ),
+                ),
+        ],
+      ),
+    );
+  }
+
+  Widget _projectApprovalCard({
+    required PostModel post,
+    required Color textPrimary,
+    required Color textSecondary,
+  }) {
+    final review = _approvalAiByPostId[post.id];
+    final inFlight = _approvalAiInFlightPostIds.contains(post.id);
+    final status = post.moderationStatus.name;
+    final decision = review?.decision ?? (inFlight ? 'checking' : 'not_run');
+    final decisionColor = _approvalDecisionColor(decision);
+    final finalResult = _approvalFinalResult(status, review);
+
+    return _panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  post.title,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: textPrimary,
+                  ),
+                ),
+              ),
+              _statusPill(status, AppColors.textSecondaryLight),
+              const SizedBox(width: 8),
+              _statusPill(decision, decisionColor),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${post.authorName ?? post.authorId} • ${post.faculty ?? 'Unknown faculty'} • ${post.createdAt.toLocal()}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 11,
+              color: textSecondary,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            post.description?.trim().isNotEmpty == true
+                ? post.description!.trim()
+                : 'No project description supplied.',
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 12,
+              height: 1.45,
+              color: textPrimary,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _InlineMetricChip(
+                label: 'skills',
+                value: post.skillsUsed.isEmpty
+                    ? '0'
+                    : post.skillsUsed.take(4).join(', '),
+              ),
+              _InlineMetricChip(
+                label: 'media',
+                value: '${post.mediaUrls.length}',
+              ),
+              _InlineMetricChip(
+                label: 'links',
+                value: '${post.externalLinks.length}',
+              ),
+              _InlineMetricChip(
+                label: 'final_result',
+                value: finalResult,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (inFlight)
+            Row(
+              children: [
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Local AI is reviewing this project...',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    color: textSecondary,
+                  ),
+                ),
+              ],
+            )
+          else if (review != null) ...[
+            Text(
+              review.summary,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: decisionColor,
+              ),
+            ),
+            if (review.findings.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                review.findings.take(3).join(' | '),
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 11,
+                  color: textSecondary,
+                  height: 1.4,
+                ),
+              ),
+            ],
+            if (review.scores.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: review.scores.entries
+                    .take(6)
+                    .map(
+                      (entry) => _InlineMetricChip(
+                        label: entry.key,
+                        value: entry.value.toStringAsFixed(0),
+                      ),
+                    )
+                    .toList(growable: false),
+              ),
+            ],
+          ] else
+            OutlinedButton.icon(
+              onPressed: () => _ensureApprovalAiReview(post),
+              icon: const Icon(Icons.auto_awesome, size: 16),
+              label: const Text('Run local AI review'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusPill(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.plusJakartaSans(
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  Color _approvalDecisionColor(String decision) {
+    switch (decision.toLowerCase()) {
+      case 'approve':
+      case 'approved':
+        return const Color(0xFF0F9D58);
+      case 'reject':
+      case 'rejected':
+        return Colors.red.shade700;
+      case 'needs_human':
+      case 'pending':
+        return AppColors.mustGoldDark;
+      case 'checking':
+        return AppColors.primaryDark;
+      default:
+        return AppColors.textSecondaryLight;
+    }
+  }
+
+  String _approvalFinalResult(String currentStatus, _ApprovalAiReview? review) {
+    if (currentStatus != 'pending') return currentStatus;
+    final decision = review?.decision.toLowerCase();
+    if (decision == 'approve') return 'would_approve';
+    if (decision == 'reject') return 'would_reject';
+    if (decision == 'needs_human') return 'manual_review';
+    return 'pending_ai';
+  }
+
   Widget _buildStatsRow() {
     final byFaculty = <String, int>{};
     for (final u in _users) {
@@ -4266,8 +3209,9 @@ class _WebRecommendationDashboardState
               ..sort((a, b) => b.value.compareTo(a.value)))
             .first
             .key;
-    final short =
-        topFaculty.length > 18 ? '${topFaculty.substring(0, 18)}…' : topFaculty;
+    final short = topFaculty.length > 18
+        ? '${topFaculty.substring(0, 18)}…'
+        : topFaculty;
 
     return Row(
       children: [
@@ -4372,8 +3316,8 @@ class _WebRecommendationDashboardState
       return Center(
         child: Text(
           'No students loaded yet.',
-          style:
-              GoogleFonts.plusJakartaSans(color: AppColors.textSecondaryLight),
+          style: GoogleFonts.plusJakartaSans(
+              color: AppColors.textSecondaryLight),
         ),
       );
     }
@@ -4428,8 +3372,8 @@ class _WebRecommendationDashboardState
                     ),
                   ),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: AppColors.primaryTint10,
                       borderRadius: BorderRadius.circular(999),
@@ -4527,9 +3471,6 @@ class _WebRecommendationDashboardState
                               user: user,
                               score: score,
                               cluster: cluster,
-                              clusterLabel: cluster != null
-                                  ? _clusterLabel(cluster)
-                                  : null,
                               clusterColor: color,
                               onSelect: () => _selectStudent(user),
                             ),
@@ -4592,7 +3533,8 @@ class _WebRecommendationDashboardState
                         color: const Color(0xFFF4B400).withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: const Color(0xFFF4B400).withValues(alpha: 0.4),
+                          color:
+                              const Color(0xFFF4B400).withValues(alpha: 0.4),
                         ),
                       ),
                       child: Text(
@@ -4630,7 +3572,8 @@ class _WebRecommendationDashboardState
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    _MetricPill(label: 'Students', value: '${_users.length}'),
+                    _MetricPill(
+                        label: 'Students', value: '${_users.length}'),
                     _MetricPill(
                         label: 'Content Pool', value: '${_posts.length}'),
                     _MetricPill(
@@ -4661,7 +3604,8 @@ class _WebRecommendationDashboardState
                               ),
                             ),
                             Text(
-                              currentUser.profile?.faculty ?? currentUser.email,
+                              currentUser.profile?.faculty ??
+                                  currentUser.email,
                               style: GoogleFonts.plusJakartaSans(
                                 color: Colors.white.withValues(alpha: 0.7),
                                 fontSize: 11,
@@ -4672,7 +3616,8 @@ class _WebRecommendationDashboardState
                           ],
                         ),
                       ),
-                      if ((currentUser.profile?.programName ?? '').isNotEmpty)
+                      if ((currentUser.profile?.programName ?? '')
+                          .isNotEmpty)
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 5),
@@ -4760,9 +3705,7 @@ class _WebRecommendationDashboardState
                           ),
                         ),
                         Text(
-                          '${_clusterLabel(0)}:${iterationCounts[0]}  '
-                          '${_clusterLabel(1)}:${iterationCounts[1]}  '
-                          '${_clusterLabel(2)}:${iterationCounts[2]}',
+                          'C0:${iterationCounts[0]}  C1:${iterationCounts[1]}  C2:${iterationCounts[2]}',
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 12,
                             color: textSecondary,
@@ -4805,7 +3748,7 @@ class _WebRecommendationDashboardState
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
-                  '${_displayName(point.user)} -> ${_clusterLabel(cluster)}',
+                  '${_displayName(point.user)} -> C$cluster',
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -4822,22 +3765,18 @@ class _WebRecommendationDashboardState
                 chartId:
                     'kmeans-${_selectedUserId ?? 'none'}-${_chartToken(_selectedFaculty)}',
                 title: 'Cluster distribution (histogram)',
-                labels: [_clusterLabel(0), _clusterLabel(1), _clusterLabel(2)],
+                labels: const ['Cluster 0', 'Cluster 1', 'Cluster 2'],
                 values: [
                   (counts[0] ?? 0).toDouble(),
                   (counts[1] ?? 0).toDouble(),
                   (counts[2] ?? 0).toDouble(),
                 ],
                 color: AppColors.primary,
-                height: _compactChartHeight,
+                height: 240,
               );
-              final centroids = trace.iterations.isNotEmpty
-                  ? trace.iterations.last.centroids
-                  : const <_FeatureVector>[];
               final scatter = _ClusterScatterPlot(
                 points: trace.points,
                 assignments: trace.finalAssignments,
-                centroids: centroids,
               );
 
               if (isCompact) {
@@ -4860,8 +3799,6 @@ class _WebRecommendationDashboardState
               );
             },
           ),
-          const SizedBox(height: 12),
-          _skillDistributionPanel(textPrimary, textSecondary),
         ],
       ),
     );
@@ -4901,8 +3838,7 @@ class _WebRecommendationDashboardState
             decoration: BoxDecoration(
               color: AppColors.mustGold.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
-              border:
-                  Border.all(color: AppColors.mustGold.withValues(alpha: 0.35)),
+              border: Border.all(color: AppColors.mustGold.withValues(alpha: 0.35)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -4964,7 +3900,7 @@ class _WebRecommendationDashboardState
             labels: results.take(8).map((item) => item.post.title).toList(),
             values: results.take(8).map((item) => item.score).toList(),
             color: const Color(0xFF1B8A4B),
-            height: _compactChartHeight,
+            height: 250,
           ),
           const SizedBox(height: 10),
           SingleChildScrollView(
@@ -4998,31 +3934,12 @@ class _WebRecommendationDashboardState
                         ),
                       ),
                     ),
-                    DataCell(SizedBox(
-                        width: 54,
-                        child: Text(_d(breakdown['content_similarity']),
-                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(
-                        width: 54,
-                        child: Text(_d(breakdown['behavioral_relevance']),
-                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(
-                        width: 54,
-                        child: Text(_d(breakdown['cluster_affinity']),
-                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(
-                        width: 54,
-                        child: Text(_d(breakdown['quality_score']),
-                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(
-                        width: 54,
-                        child: Text(_d(breakdown['freshness']),
-                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(
-                        width: 54,
-                        child: Text(_d(item.score),
-                            style: GoogleFonts.plusJakartaSans(
-                                fontSize: 11, fontWeight: FontWeight.w700)))),
+                    DataCell(SizedBox(width: 54, child: Text(_d(breakdown['content_similarity']), style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(width: 54, child: Text(_d(breakdown['behavioral_relevance']), style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(width: 54, child: Text(_d(breakdown['cluster_affinity']), style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(width: 54, child: Text(_d(breakdown['quality_score']), style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(width: 54, child: Text(_d(breakdown['freshness']), style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(width: 54, child: Text(_d(item.score), style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w700)))),
                   ],
                 );
               }).toList(growable: false),
@@ -5035,10 +3952,12 @@ class _WebRecommendationDashboardState
 
   Widget _generalLocalMathPanel(Color textPrimary, Color textSecondary) {
     const weights = {
-      'profile_score': 0.54,
-      'project_portfolio_score': 0.34,
-      'follower_score': 0.12,
-      'sentiment_delta': 1.00,
+      'streak_score': 0.24,
+      'post_score': 0.22,
+      'collab_score': 0.20,
+      'follower_score': 0.14,
+      'profile_completeness': 0.12,
+      'skill_density': 0.08,
     };
 
     return _panel(
@@ -5059,8 +3978,7 @@ class _WebRecommendationDashboardState
             decoration: BoxDecoration(
               color: AppColors.primary.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(12),
-              border:
-                  Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -5075,7 +3993,7 @@ class _WebRecommendationDashboardState
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Study all projects for each student, calculate project-level signals, then rank students from strongest to weakest.',
+                  'Rank students by cohort contribution, then adjust with AI sentiment from project comments.',
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 12,
                     color: textSecondary,
@@ -5092,7 +4010,7 @@ class _WebRecommendationDashboardState
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'profile_score = skills + activity + posts + collabs + completeness',
+                  'base_score = Σ(weight_i × cohort_signal_i)',
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 12,
                     color: textPrimary,
@@ -5100,7 +4018,7 @@ class _WebRecommendationDashboardState
                   ),
                 ),
                 Text(
-                  'project_portfolio = coverage + engagement + skill evidence + freshness + trust + media',
+                  'sentiment_delta = (ai_comment_sentiment - 0.5) × 0.22',
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 12,
                     color: textPrimary,
@@ -5108,7 +4026,7 @@ class _WebRecommendationDashboardState
                   ),
                 ),
                 Text(
-                  'final_score = 0.54 profile + 0.34 projects + 0.12 followers + sentiment_delta',
+                  'final_score = clamp(base_score + sentiment_delta, 0, 1)',
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 12,
                     color: textPrimary,
@@ -5118,9 +4036,7 @@ class _WebRecommendationDashboardState
               ],
             ),
           ),
-          const SizedBox(height: 18),
-          _commentEvidenceStrip(textPrimary, textSecondary),
-          const SizedBox(height: 18),
+          const SizedBox(height: 10),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -5133,7 +4049,7 @@ class _WebRecommendationDashboardState
                 )
                 .toList(growable: false),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 10),
           JsVisualizationPanel(
             chartId: 'general-${_chartToken(_selectedFaculty)}',
             title: 'General student scores',
@@ -5143,9 +4059,9 @@ class _WebRecommendationDashboardState
                 .toList(),
             values: _generalResults.take(8).map((item) => item.score).toList(),
             color: AppColors.mustGoldDark,
-            height: _compactChartHeight,
+            height: 250,
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 10),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: DataTable(
@@ -5156,9 +4072,9 @@ class _WebRecommendationDashboardState
               columns: const [
                 DataColumn(label: Text('Student')),
                 DataColumn(label: Text('Cluster')),
-                DataColumn(label: Text('Projects')),
-                DataColumn(label: Text('Profile')),
-                DataColumn(label: Text('Portfolio')),
+                DataColumn(label: Text('Streak')),
+                DataColumn(label: Text('Posts')),
+                DataColumn(label: Text('Collabs')),
                 DataColumn(label: Text('Followers')),
                 DataColumn(label: Text('AI Sent')),
                 DataColumn(label: Text('Final')),
@@ -5167,42 +4083,14 @@ class _WebRecommendationDashboardState
                 final breakdown = item.scoreBreakdown;
                 return DataRow(
                   cells: [
-                    DataCell(SizedBox(
-                        width: 130,
-                        child: Text(_displayName(item.user),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(
-                        width: 120,
-                        child: Text(_clusterLabel(item.cluster),
-                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(
-                        width: 54,
-                        child: Text('${item.projectCount}',
-                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(
-                        width: 54,
-                        child: Text(_d(breakdown['profile_score']),
-                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(
-                        width: 54,
-                        child: Text(_d(breakdown['project_portfolio_score']),
-                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(
-                        width: 54,
-                        child: Text(_d(breakdown['follower_score']),
-                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(
-                        width: 54,
-                        child: Text(_d(breakdown['ai_comment_sentiment']),
-                            style: GoogleFonts.plusJakartaSans(
-                                fontSize: 11, fontWeight: FontWeight.w700)))),
-                    DataCell(SizedBox(
-                        width: 54,
-                        child: Text(_d(item.score),
-                            style: GoogleFonts.plusJakartaSans(
-                                fontSize: 11, fontWeight: FontWeight.w700)))),
+                    DataCell(SizedBox(width: 130, child: Text(_displayName(item.user), maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(width: 40, child: Text('C${item.cluster}', style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(width: 54, child: Text(_d(breakdown['streak_score']), style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(width: 54, child: Text(_d(breakdown['post_score']), style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(width: 54, child: Text(_d(breakdown['collab_score']), style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(width: 54, child: Text(_d(breakdown['follower_score']), style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(width: 54, child: Text(_d(breakdown['ai_comment_sentiment']), style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w700)))),
+                    DataCell(SizedBox(width: 54, child: Text(_d(item.score), style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w700)))),
                   ],
                 );
               }).toList(growable: false),
@@ -5210,132 +4098,6 @@ class _WebRecommendationDashboardState
           ),
         ],
       ),
-    );
-  }
-
-  Widget _commentEvidenceStrip(Color textPrimary, Color textSecondary) {
-    final candidates = _generalResults
-        .where((item) => _commentsForStudent(item.user, limit: 1).isNotEmpty)
-        .take(3)
-        .toList(growable: false);
-
-    if (candidates.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFC),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.borderLight),
-        ),
-        child: Text(
-          'No project comments are available yet for the selected cohort. When comments arrive, AJAX refresh pulls them into the AI sentiment stage and the leaderboard recomputes.',
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 12,
-            height: 1.5,
-            color: textSecondary,
-          ),
-        ),
-      );
-    }
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 1000
-            ? 3
-            : constraints.maxWidth >= 680
-                ? 2
-                : 1;
-        final spacing = (columns - 1) * 14;
-        final width = (constraints.maxWidth - spacing) / columns;
-
-        return Wrap(
-          spacing: 14,
-          runSpacing: 14,
-          children: candidates.map((item) {
-            final sentiment =
-                item.scoreBreakdown['ai_comment_sentiment'] ?? 0.5;
-            final delta = item.scoreBreakdown['sentiment_delta'] ?? 0.0;
-            final comments = _commentsForStudent(item.user, limit: 2);
-            final color = _sentimentColor(sentiment);
-            return SizedBox(
-              width: width,
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: color.withValues(alpha: 0.24)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        _UserAvatar(user: item.user, radius: 14),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _displayName(item.user),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              color: textPrimary,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          '${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(3)}',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w900,
-                            color: color,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      _aiReactionForSentiment(sentiment, comments.length),
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: color,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    ...comments.map(
-                      (comment) => Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Text(
-                          '"$comment"',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 11,
-                            height: 1.35,
-                            color: textSecondary,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'AI sentiment ${_d(sentiment)} -> final ${_d(item.score)}',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }).toList(growable: false),
-        );
-      },
     );
   }
 
@@ -5355,31 +4117,20 @@ class _WebRecommendationDashboardState
             ),
             const SizedBox(height: 6),
             Text(
-              'General recommendation does not rerank with OpenAI, but it does use OpenAI to read project comments as a strong global signal. The sentiment score becomes a bounded delta on the leaderboard score.',
+              'General recommendation is cohort-wide and stays local in this dashboard. No AI reranking is applied here because the goal is a stable faculty-filtered leaderboard.',
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 12,
                 height: 1.45,
                 color: textSecondary,
               ),
             ),
-            const SizedBox(height: 16),
-            _commentEvidenceStrip(textPrimary, textSecondary),
           ],
         ),
       );
     }
 
-    var rows = _activeAiPostResults.take(8).toList(growable: false);
-    var diagnostics = _activeHybridDiagnostics;
-    if (rows.isEmpty &&
-        diagnostics == null &&
-        _posts.isNotEmpty &&
-        _selectedUser != null) {
-      _queueRecomputeAfterBuild();
-      final localPreview =
-          _activeLocalPostResults.take(8).toList(growable: false);
-      if (localPreview.isNotEmpty) rows = localPreview;
-    }
+    final rows = _activeAiPostResults.take(8).toList(growable: false);
+    final diagnostics = _activeHybridDiagnostics;
     final aiCoverage = _aiCoverageFor(rows);
     final aiCoveragePercent = (aiCoverage * 100).toStringAsFixed(1);
     final aiCount = _openAiCountFor(rows);
@@ -5496,7 +4247,7 @@ class _WebRecommendationDashboardState
             labels: rows.take(8).map((item) => item.post.title).toList(),
             values: rows.take(8).map((item) => item.score).toList(),
             color: const Color(0xFF7C3AED),
-            height: _compactChartHeight,
+            height: 250,
           ),
           const SizedBox(height: 10),
           SingleChildScrollView(
@@ -5514,12 +4265,10 @@ class _WebRecommendationDashboardState
               ],
               rows: rows.map((item) {
                 final breakdown = item.scoreBreakdown;
-                final localScore = breakdown['local_score'] ??
-                    breakdown['blended_score'] ??
-                    item.score;
-                final aiScore = breakdown['openai_score'] ??
-                    breakdown['blended_score'] ??
-                    item.score;
+                final localScore =
+                    breakdown['local_score'] ?? breakdown['blended_score'] ?? item.score;
+                final aiScore =
+                    breakdown['openai_score'] ?? breakdown['blended_score'] ?? item.score;
                 return DataRow(
                   cells: [
                     DataCell(
@@ -5533,19 +4282,9 @@ class _WebRecommendationDashboardState
                         ),
                       ),
                     ),
-                    DataCell(SizedBox(
-                        width: 54,
-                        child: Text(_d(localScore),
-                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(
-                        width: 54,
-                        child: Text(_d(aiScore),
-                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(
-                        width: 54,
-                        child: Text(_d(item.score),
-                            style: GoogleFonts.plusJakartaSans(
-                                fontSize: 11, fontWeight: FontWeight.w700)))),
+                    DataCell(SizedBox(width: 54, child: Text(_d(localScore), style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(width: 54, child: Text(_d(aiScore), style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(width: 54, child: Text(_d(item.score), style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w700)))),
                   ],
                 );
               }).toList(growable: false),
@@ -5555,6 +4294,7 @@ class _WebRecommendationDashboardState
       ),
     );
   }
+
 
   Widget _benchmarkPanel(Color textPrimary, Color textSecondary) {
     final benchmark = _benchmark;
@@ -5633,10 +4373,8 @@ class _WebRecommendationDashboardState
               benchmark.hybridAverageTopN,
             ],
             color: AppColors.primaryDark,
-            height: _compactChartHeight,
+            height: 230,
           ),
-          const SizedBox(height: 10),
-          _mediaValidationProofPanel(benchmark, textPrimary, textSecondary),
           const SizedBox(height: 10),
           if (reasonEntries.isNotEmpty) ...[
             Text(
@@ -5692,84 +4430,11 @@ class _WebRecommendationDashboardState
     );
   }
 
-  Widget _mediaValidationProofPanel(
-    RecommendationBenchmarkSnapshot benchmark,
-    Color textPrimary,
-    Color textSecondary,
-  ) {
-    final media = benchmark.mediaValidation;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.primaryTint10.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Media validation proof layer',
-            style: GoogleFonts.plusJakartaSans(
-              fontWeight: FontWeight.w800,
-              fontSize: 13,
-              color: textPrimary,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Images are checked for academic/prototype/research relevance and description match. Video receives a representative frame check and, when the file is small enough, audio transcription. Audio files are transcribed and compared with the project claim.',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 12,
-              height: 1.45,
-              color: textSecondary,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _InlineMetricChip(
-                label: 'media_posts',
-                value: '${media.mediaPosts}',
-              ),
-              _InlineMetricChip(label: 'images', value: '${media.imagePosts}'),
-              _InlineMetricChip(label: 'videos', value: '${media.videoPosts}'),
-              _InlineMetricChip(label: 'audio', value: '${media.audioPosts}'),
-              _InlineMetricChip(
-                label: 'ai_reviewed',
-                value: '${media.aiReviewedMediaPosts}',
-              ),
-              _InlineMetricChip(
-                label: 'avg_confidence',
-                value: '${(media.averageAiConfidence * 100).round()}%',
-              ),
-              _InlineMetricChip(
-                label: 'needs_human',
-                value: '${media.needsHumanCount}',
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          JsVisualizationPanel(
-            chartId:
-                'media-proof-${_category.name}-${_selectedUserId ?? 'none'}',
-            title: 'Media validation score distribution',
-            labels: media.scoreDistribution.keys.toList(growable: false),
-            values: media.scoreDistribution.values.toList(growable: false),
-            color: AppColors.mustGold,
-            height: _compactChartHeight,
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _feedResultsPanel(Color textPrimary, Color textSecondary) {
     final results = _feedAiResults;
     final eligibleQueue = _feedVideoQueue
         .where((item) => item.isEligible)
+        .take(5)
         .toList(growable: false);
     return _panel(
       child: Column(
@@ -5794,7 +4459,7 @@ class _WebRecommendationDashboardState
           if (_feedVideoQueue.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
-              'Possible video queue before playback: ${eligibleQueue.length} eligible from ${_feedVideoQueue.length} video candidates. Ordered results below are the playback order.',
+              'Potential queue: ${eligibleQueue.length} eligible from ${_feedVideoQueue.length} video candidates before ranking.',
               style: GoogleFonts.plusJakartaSans(
                 fontSize: 11,
                 color: textSecondary,
@@ -5802,19 +4467,6 @@ class _WebRecommendationDashboardState
             ),
           ],
           const SizedBox(height: 8),
-          if (eligibleQueue.isNotEmpty) ...[
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: eligibleQueue.take(12).map((item) {
-                return _InlineMetricChip(
-                  label: item.post.title,
-                  value: _d(item.eligibilityScore),
-                );
-              }).toList(growable: false),
-            ),
-            const SizedBox(height: 10),
-          ],
           ...results
               .take(10)
               .toList(growable: false)
@@ -5833,11 +4485,11 @@ class _WebRecommendationDashboardState
   Widget _personalResultsPanel(Color textPrimary, Color textSecondary) {
     final projectResults = _personalAiResults
         .where((item) => item.post.type != 'opportunity')
-        .take(8)
+        .take(4)
         .toList(growable: false);
     final opportunityResults = _personalAiResults
         .where((item) => item.post.type == 'opportunity')
-        .take(12)
+        .take(4)
         .toList(growable: false);
 
     return _panel(
@@ -5898,7 +4550,7 @@ class _WebRecommendationDashboardState
             title: 'Potential collaborators',
             child: Column(
               children: _collaboratorResults
-                  .take(12)
+                  .take(4)
                   .toList(growable: false)
                   .asMap()
                   .entries
@@ -6001,7 +4653,7 @@ class _WebRecommendationDashboardState
           ),
           const SizedBox(height: 6),
           Text(
-            'This list ranks students from best to worst using every project authored by each student, then blends profile strength, project signals, followers, and comment sentiment.',
+            'This list ranks students irrespective of viewer. The only applied filter is faculty, which lets you inspect the global leaderboard inside a cohort.',
             style: GoogleFonts.plusJakartaSans(
               fontSize: 12,
               height: 1.45,
@@ -6017,20 +4669,15 @@ class _WebRecommendationDashboardState
               .map((entry) {
             final rank = entry.key + 1;
             final item = entry.value;
-            final sentiment =
-                item.scoreBreakdown['ai_comment_sentiment'] ?? 0.5;
-            final delta = item.scoreBreakdown['sentiment_delta'] ?? 0.0;
-            final comments = _commentsForStudent(item.user, limit: 2);
             final clusterColors = [
               const Color(0xFF0D1B8F),
               const Color(0xFF1B8A4B),
               const Color(0xFFE65100),
             ];
             final clusterColor = clusterColors[item.cluster % 3];
-            final sentimentColor = _sentimentColor(sentiment);
             return Container(
-              margin: const EdgeInsets.only(bottom: 14),
-              padding: const EdgeInsets.all(14),
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: AppColors.mustGoldLight,
                 borderRadius: BorderRadius.circular(12),
@@ -6055,8 +4702,9 @@ class _WebRecommendationDashboardState
                         '$rank',
                         style: GoogleFonts.plusJakartaSans(
                           fontWeight: FontWeight.w900,
-                          color:
-                              rank <= 3 ? Colors.white : AppColors.mustGoldDark,
+                          color: rank <= 3
+                              ? Colors.white
+                              : AppColors.mustGoldDark,
                           fontSize: 12,
                         ),
                       ),
@@ -6079,11 +4727,6 @@ class _WebRecommendationDashboardState
                         ),
                         Text(
                           item.scoreBreakdown.entries
-                              .where((e) =>
-                                  e.key == 'profile_score' ||
-                                  e.key == 'project_portfolio_score' ||
-                                  e.key == 'ai_comment_sentiment' ||
-                                  e.key == 'sentiment_delta')
                               .map((e) => '${e.key}=${_d(e.value)}')
                               .join(' · '),
                           style: GoogleFonts.plusJakartaSans(
@@ -6093,61 +4736,19 @@ class _WebRecommendationDashboardState
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          item.projectTitles.isEmpty
-                              ? '${item.projectCount} projects studied'
-                              : '${item.projectCount} projects: ${item.projectTitles.take(2).join(', ')}',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 10,
-                            color: textSecondary,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (comments.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            '"${comments.first}"',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 10,
-                              fontStyle: FontStyle.italic,
-                              color: textSecondary,
-                            ),
-                          ),
-                        ],
                       ],
                     ),
                   ),
                   const SizedBox(width: 8),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: sentimentColor.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      '${_d(sentiment)} (${delta >= 0 ? '+' : ''}${_d(delta)})',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: sentimentColor,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 7, vertical: 3),
                     decoration: BoxDecoration(
                       color: clusterColor.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
-                      _clusterLabel(item.cluster),
+                      'C${item.cluster}',
                       style: GoogleFonts.plusJakartaSans(
                         color: clusterColor,
                         fontSize: 10,
@@ -6157,7 +4758,7 @@ class _WebRecommendationDashboardState
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    _pointsLabel(item.points),
+                    _d(item.score),
                     style: GoogleFonts.plusJakartaSans(
                       fontWeight: FontWeight.w900,
                       color: AppColors.mustGoldDark,
@@ -6175,60 +4776,21 @@ class _WebRecommendationDashboardState
 
   Widget _panel({required Widget child}) {
     return Container(
-      margin: const EdgeInsets.only(bottom: _panelGap),
-      padding: const EdgeInsets.all(22),
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFFFFFF), Color(0xFFF9FBFF)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-        border: Border.all(color: const Color(0xFFDCE5FF)),
+        border: Border.all(color: AppColors.borderLight),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0D1B8F).withValues(alpha: 0.06),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
       child: child,
-    );
-  }
-
-  Widget _studentLabSnapshotStrip(UserModel user) {
-    final profile = user.profile;
-    final cluster = _currentKMeansTrace.finalAssignments[user.id];
-    final program = (profile?.programName ?? '').trim();
-
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: [
-        _InlineMetricChip(
-            label: 'faculty', value: profile?.faculty ?? 'Unknown'),
-        _InlineMetricChip(
-          label: 'program',
-          value: program.isEmpty ? 'Not set' : program,
-        ),
-        _InlineMetricChip(
-          label: 'skills',
-          value: '${profile?.skills.length ?? 0}',
-        ),
-        _InlineMetricChip(
-          label: 'streak',
-          value: '${profile?.activityStreak ?? 0}',
-        ),
-        _InlineMetricChip(
-          label: 'posts',
-          value: '${_effectivePostCountForUser(user)}',
-        ),
-        _InlineMetricChip(
-          label: 'cluster',
-          value: cluster != null ? _clusterLabel(cluster) : 'Unassigned',
-        ),
-      ],
     );
   }
 
@@ -6265,204 +4827,6 @@ class _WebRecommendationDashboardState
     }
   }
 
-  String _clusterLabel(int cluster) {
-    final trace = _currentKMeansTrace;
-    final members = trace.points
-        .where((point) => trace.finalAssignments[point.user.id] == cluster)
-        .toList(growable: false);
-    if (members.isEmpty) return 'General Skill Mix';
-
-    final avgSkills = members
-            .map((point) => point.vector.skillsDensity)
-            .fold<double>(0, (total, value) => total + value) /
-        members.length;
-    final avgActivity = members
-            .map((point) => point.vector.activityDensity)
-            .fold<double>(0, (total, value) => total + value) /
-        members.length;
-    final avgComplete = members
-            .map((point) => point.vector.completeness)
-            .fold<double>(0, (total, value) => total + value) /
-        members.length;
-
-    if (avgSkills >= 0.55 && avgActivity >= 0.45) return 'Portfolio Leaders';
-    if (avgSkills >= 0.55) return 'Skill Specialists';
-    if (avgActivity >= 0.45) return 'Active Builders';
-    if (avgComplete < 0.45) return 'Profile Builders';
-    return 'General Skill Mix';
-  }
-
-  Widget _skillDistributionPanel(Color textPrimary, Color textSecondary) {
-    final familyByFaculty = <String, Map<String, int>>{};
-    for (final user in _users) {
-      final faculty = (user.profile?.faculty ?? 'Unknown Faculty').trim();
-      final normalizedFaculty = faculty.isEmpty ? 'Unknown Faculty' : faculty;
-      final families = familyByFaculty.putIfAbsent(
-        normalizedFaculty,
-        () => <String, int>{},
-      );
-      for (final skill in user.profile?.skills ?? const <String>[]) {
-        final family = _skillFamilyFor(skill);
-        families[family] = (families[family] ?? 0) + 1;
-      }
-    }
-
-    final families = <String>{
-      for (final facultyMap in familyByFaculty.values) ...facultyMap.keys,
-    }.toList(growable: false)
-      ..sort();
-
-    if (families.isEmpty) {
-      return Text(
-        'No skill data is available yet for faculty distribution.',
-        style: GoogleFonts.plusJakartaSans(fontSize: 12, color: textSecondary),
-      );
-    }
-
-    final topFaculties = familyByFaculty.entries.toList(growable: false)
-      ..sort((a, b) {
-        final aTotal = a.value.values.fold<int>(0, (t, v) => t + v);
-        final bTotal = b.value.values.fold<int>(0, (t, v) => t + v);
-        return bTotal.compareTo(aTotal);
-      });
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderLight),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Skill distribution across faculties',
-            style: GoogleFonts.plusJakartaSans(
-              fontWeight: FontWeight.w800,
-              fontSize: 13,
-              color: textPrimary,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Skills are grouped into named domains such as Frontend, Mobile, Backend, Data, AI, Cloud, and General Skill Mix before ranking uses cluster affinity.',
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 12,
-              height: 1.45,
-              color: textSecondary,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: families
-                .map(
-                  (family) => _InlineMetricChip(
-                    label: family,
-                    value: familyByFaculty.values
-                        .fold<int>(
-                            0, (total, row) => total + (row[family] ?? 0))
-                        .toString(),
-                  ),
-                )
-                .toList(growable: false),
-          ),
-          const SizedBox(height: 10),
-          ...topFaculties.take(4).map((entry) {
-            final total = entry.value.values.fold<int>(0, (t, v) => t + v);
-            final summary = entry.value.entries.toList(growable: false)
-              ..sort((a, b) => b.value.compareTo(a.value));
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text(
-                '${entry.key}: ${summary.take(4).map((e) => '${e.key} ${e.value}').join(' | ')} ($total skills)',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 11,
-                  color: textSecondary,
-                ),
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  String _skillFamilyFor(String rawSkill) {
-    final skill = rawSkill.trim().toLowerCase();
-    if (skill.isEmpty) return 'General Skill Mix';
-    bool has(List<String> probes) {
-      return probes.any((probe) => skill.contains(probe));
-    }
-
-    if (has(const [
-      'react',
-      'vue',
-      'angular',
-      'html',
-      'css',
-      'javascript',
-      'typescript',
-      'frontend',
-      'web programming',
-      'ui',
-      'ux',
-    ])) {
-      return 'Frontend';
-    }
-    if (has(const ['flutter', 'dart', 'android', 'ios', 'mobile'])) {
-      return 'Mobile';
-    }
-    if (has(const [
-      'node',
-      'express',
-      'spring',
-      'django',
-      'laravel',
-      'backend',
-      'api',
-      'server',
-    ])) {
-      return 'Backend';
-    }
-    if (has(const [
-      'sql',
-      'postgres',
-      'mysql',
-      'mongodb',
-      'firebase',
-      'redis',
-      'database',
-    ])) {
-      return 'Data';
-    }
-    if (has(const [
-      'machine learning',
-      'deep learning',
-      'ai',
-      'nlp',
-      'computer vision',
-      'llm',
-    ])) {
-      return 'AI';
-    }
-    if (has(const [
-      'docker',
-      'kubernetes',
-      'aws',
-      'azure',
-      'gcp',
-      'cloud',
-      'devops',
-      'ci/cd',
-    ])) {
-      return 'Cloud';
-    }
-    return 'General Skill Mix';
-  }
-
   String _displayName(UserModel user) {
     final name = (user.displayName ?? '').trim();
     return name.isNotEmpty ? name : user.email;
@@ -6473,8 +4837,6 @@ class _WebRecommendationDashboardState
   }
 
   String _d(double? value) => (value ?? 0).toStringAsFixed(3);
-
-  String _pointsLabel(int points) => '$points pts';
 }
 
 class _ResultSubsection extends StatelessWidget {
@@ -6641,12 +5003,10 @@ class _ClusterScatterPlot extends StatelessWidget {
   const _ClusterScatterPlot({
     required this.points,
     required this.assignments,
-    this.centroids = const <_FeatureVector>[],
   });
 
   final List<_StudentPoint> points;
   final Map<String, int> assignments;
-  final List<_FeatureVector> centroids;
 
   @override
   Widget build(BuildContext context) {
@@ -6661,31 +5021,20 @@ class _ClusterScatterPlot extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                'Cluster spread (skills vs activity)',
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimaryLight,
-                ),
-              ),
-              const Spacer(),
-              _legendDot(const Color(0xFF1F6FEB), 'C0'),
-              const SizedBox(width: 8),
-              _legendDot(const Color(0xFF0F9D58), 'C1'),
-              const SizedBox(width: 8),
-              _legendDot(const Color(0xFFE67E22), 'C2'),
-            ],
+          Text(
+            'Cluster spread plot (skills vs activity)',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimaryLight,
+            ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Expanded(
             child: CustomPaint(
               painter: _ClusterScatterPainter(
                 points: points,
                 assignments: assignments,
-                centroids: centroids,
               ),
               child: const SizedBox.expand(),
             ),
@@ -6694,39 +5043,16 @@ class _ClusterScatterPlot extends StatelessWidget {
       ),
     );
   }
-
-  Widget _legendDot(Color color, String label) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 3),
-        Text(
-          label,
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 10,
-            color: AppColors.textSecondaryLight,
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 class _ClusterScatterPainter extends CustomPainter {
   const _ClusterScatterPainter({
     required this.points,
     required this.assignments,
-    this.centroids = const <_FeatureVector>[],
   });
 
   final List<_StudentPoint> points;
   final Map<String, int> assignments;
-  final List<_FeatureVector> centroids;
 
   static const _clusterColors = <Color>[
     Color(0xFF1F6FEB),
@@ -6755,46 +5081,18 @@ class _ClusterScatterPainter extends CustomPainter {
     for (final point in points) {
       final cluster = assignments[point.user.id] ?? 0;
       final color = _clusterColors[cluster.clamp(0, _clusterColors.length - 1)];
-      final x = chart.left +
-          (point.vector.skillsDensity.clamp(0.0, 1.0) * chart.width);
-      final y = chart.bottom -
-          (point.vector.activityDensity.clamp(0.0, 1.0) * chart.height);
+      final x = chart.left + (point.vector.skillsDensity.clamp(0.0, 1.0) * chart.width);
+      final y = chart.bottom - (point.vector.activityDensity.clamp(0.0, 1.0) * chart.height);
 
-      canvas.drawCircle(Offset(x, y), 3.5, Paint()..color = color);
+      final dotPaint = Paint()..color = color;
+      canvas.drawCircle(Offset(x, y), 4.5, dotPaint);
       canvas.drawCircle(
         Offset(x, y),
-        5.5,
+        7,
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1
           ..color = color.withValues(alpha: 0.35),
-      );
-    }
-
-    // Centroid markers (×)
-    for (var i = 0; i < centroids.length; i++) {
-      final c = centroids[i];
-      final color = _clusterColors[i.clamp(0, _clusterColors.length - 1)];
-      final cx = chart.left + c.skillsDensity.clamp(0.0, 1.0) * chart.width;
-      final cy =
-          chart.bottom - c.activityDensity.clamp(0.0, 1.0) * chart.height;
-
-      final crossPaint = Paint()
-        ..color = color
-        ..strokeWidth = 2.5
-        ..strokeCap = StrokeCap.round;
-      const r = 6.0;
-      canvas.drawLine(
-          Offset(cx - r, cy - r), Offset(cx + r, cy + r), crossPaint);
-      canvas.drawLine(
-          Offset(cx + r, cy - r), Offset(cx - r, cy + r), crossPaint);
-      canvas.drawCircle(
-        Offset(cx, cy),
-        9,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5
-          ..color = color.withValues(alpha: 0.55),
       );
     }
 
@@ -6804,14 +5102,13 @@ class _ClusterScatterPainter extends CustomPainter {
       color: const Color(0xFF5B6676),
     );
     final xPainter = TextPainter(
-      text: TextSpan(text: 'Skills density →', style: labelStyle),
+      text: TextSpan(text: 'Skills density', style: labelStyle),
       textDirection: TextDirection.ltr,
     )..layout();
-    xPainter.paint(
-        canvas, Offset(chart.right - xPainter.width, chart.bottom + 6));
+    xPainter.paint(canvas, Offset(chart.right - xPainter.width, chart.bottom + 8));
 
     final yPainter = TextPainter(
-      text: TextSpan(text: 'Activity ↑', style: labelStyle),
+      text: TextSpan(text: 'Activity', style: labelStyle),
       textDirection: TextDirection.ltr,
     )..layout();
     yPainter.paint(canvas, Offset(2, chart.top));
@@ -6819,9 +5116,7 @@ class _ClusterScatterPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _ClusterScatterPainter oldDelegate) {
-    return oldDelegate.points != points ||
-        oldDelegate.assignments != assignments ||
-        oldDelegate.centroids != centroids;
+    return oldDelegate.points != points || oldDelegate.assignments != assignments;
   }
 }
 
@@ -6829,20 +5124,14 @@ class _GeneralStudentScore {
   const _GeneralStudentScore({
     required this.user,
     required this.score,
-    required this.points,
     required this.cluster,
     required this.scoreBreakdown,
-    required this.projectCount,
-    required this.projectTitles,
   });
 
   final UserModel user;
   final double score;
-  final int points;
   final int cluster;
   final Map<String, double> scoreBreakdown;
-  final int projectCount;
-  final List<String> projectTitles;
 }
 
 // ── Profile picture avatar with initials fallback ─────────────────────────────
@@ -6893,14 +5182,12 @@ class _StudentExplorerCard extends StatefulWidget {
     required this.onSelect,
     this.score,
     this.cluster,
-    this.clusterLabel,
     this.clusterColor,
   });
 
   final UserModel user;
   final double? score;
   final int? cluster;
-  final String? clusterLabel;
   final Color? clusterColor;
   final VoidCallback onSelect;
 
@@ -6996,7 +5283,7 @@ class _StudentExplorerCardState extends State<_StudentExplorerCard> {
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
-                            widget.clusterLabel ?? 'Cluster',
+                            'C${widget.cluster}',
                             style: GoogleFonts.plusJakartaSans(
                               color: color,
                               fontSize: 9,
@@ -7173,3 +5460,5 @@ bool _isVideoCandidate(PostModel post) {
         lower.contains('video/upload');
   });
 }
+
+
