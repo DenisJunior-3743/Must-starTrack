@@ -92,7 +92,7 @@ String _postTypeLabel(PostModel post) {
 }
 
 Color _postTypeAccent(PostModel post) {
-  return AppColors.mustGoldDark;
+  return AppColors.primary;
 }
 
 List<PostModel> _rankAdvertsForViewerFaculty(
