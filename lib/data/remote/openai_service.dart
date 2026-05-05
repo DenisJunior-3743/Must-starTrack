@@ -26,23 +26,39 @@ class OpenAiService {
     defaultValue: '',
   );
 
+  static const String _proxyBaseUrlFromEnv = String.fromEnvironment(
+    'OPENAI_PROXY_BASE_URL',
+    defaultValue: '',
+  );
+
   static const String _skillPatternProxyUrlFromEnv = String.fromEnvironment(
     'OPENAI_SKILL_PATTERN_PROXY_URL',
     defaultValue: '',
   );
 
-  static const String _defaultProjectId = String.fromEnvironment(
-    'FIREBASE_PROJECT_ID',
-    defaultValue: 'star-track-4ba2b',
+  static const String _projectValidationProxyUrlFromEnv =
+      String.fromEnvironment(
+    'OPENAI_PROJECT_VALIDATION_PROXY_URL',
+    defaultValue: '',
+  );
+
+  static const String _chatbotProxyUrlFromEnv = String.fromEnvironment(
+    'OPENAI_CHATBOT_PROXY_URL',
+    defaultValue: '',
   );
 
   bool get isConfigured {
-    if (kIsWeb) return _rerankProxyEndpoint.trim().isNotEmpty;
-    return _apiKey.isNotEmpty;
+    return _rerankProxyEndpoint.trim().isNotEmpty ||
+        _chatbotProxyEndpoint.trim().isNotEmpty;
   }
 
   Future<String?> generateJson(String prompt) async {
-    if (!isConfigured) return null;
+    final proxyResult = await _generateJsonViaProxy(prompt);
+    if (proxyResult != null && proxyResult.trim().isNotEmpty) {
+      return proxyResult;
+    }
+
+    if (_apiKey.isEmpty || kIsWeb) return null;
 
     final response = await _dio.post(
       'https://api.openai.com/v1/chat/completions',
@@ -53,8 +69,7 @@ class OpenAiService {
         'messages': [
           {
             'role': 'system',
-            'content':
-                'You are the MUST StarTrack intelligent assistant. '
+            'content': 'You are the MUST StarTrack intelligent assistant. '
                 'You know the platform deeply and always respond with valid JSON only.',
           },
           {
@@ -88,9 +103,14 @@ class OpenAiService {
     required Map<String, dynamic> userProfile,
     required List<Map<String, dynamic>> posts,
   }) async {
-    if (kIsWeb) {
-      return _rankPostsViaProxy(userProfile: userProfile, posts: posts);
+    final proxy = await _rankPostsViaProxy(
+      userProfile: userProfile,
+      posts: posts,
+    );
+    if (_hasRankingRows(proxy)) {
+      return proxy;
     }
+    if (_apiKey.isEmpty || kIsWeb) return proxy;
 
     final prompt = '''
 Return strict JSON with key "ranking" as array of objects {"postId": string, "score": number, "reason": string}.
@@ -153,13 +173,15 @@ Posts: ${jsonEncode(posts)}
       };
     }
 
-    if (kIsWeb) {
-      return _clusterSkillsViaProxy(
-        skills: skills,
-        mode: mode,
-        maxClusters: maxClusters,
-      );
+    final proxy = await _clusterSkillsViaProxy(
+      skills: skills,
+      mode: mode,
+      maxClusters: maxClusters,
+    );
+    if (_hasSkillClusters(proxy)) {
+      return proxy;
     }
+    if (_apiKey.isEmpty || kIsWeb) return proxy;
 
     final prompt = '''
 Return strict JSON with keys:
@@ -203,6 +225,46 @@ Skills: ${jsonEncode(skills)}
     }
 
     return null;
+  }
+
+  Future<Map<String, dynamic>?> validateProjectPost({
+    required Map<String, dynamic> post,
+  }) async {
+    return _validateProjectPostViaProxy(post: post);
+  }
+
+  Future<String?> _generateJsonViaProxy(String prompt) async {
+    final endpoint = _chatbotProxyEndpoint;
+    if (endpoint.trim().isEmpty) return null;
+
+    try {
+      final response = await _dio.post(
+        endpoint,
+        data: <String, dynamic>{'prompt': prompt},
+        options: Options(
+          contentType: Headers.jsonContentType,
+          connectTimeout: _connectTimeout,
+          sendTimeout: _sendTimeout,
+          receiveTimeout: _receiveTimeout,
+        ),
+      );
+
+      final data = response.data;
+      if (data is Map<String, dynamic>) {
+        final content = data['content'] ?? data['raw'] ?? data['json'];
+        if (content is String && content.trim().isNotEmpty) return content;
+        if (data['answer'] != null) return jsonEncode(data);
+      }
+      if (data is Map) {
+        final map = Map<String, dynamic>.from(data);
+        final content = map['content'] ?? map['raw'] ?? map['json'];
+        if (content is String && content.trim().isNotEmpty) return content;
+        if (map['answer'] != null) return jsonEncode(map);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<Map<String, dynamic>?> _rankPostsViaProxy({
@@ -267,22 +329,97 @@ Skills: ${jsonEncode(skills)}
     }
   }
 
+  Future<Map<String, dynamic>?> _validateProjectPostViaProxy({
+    required Map<String, dynamic> post,
+  }) async {
+    final endpoint = _projectValidationProxyEndpoint;
+
+    try {
+      final response = await _dio.post(
+        endpoint,
+        data: <String, dynamic>{'post': post},
+        options: Options(
+          contentType: Headers.jsonContentType,
+          connectTimeout: _connectTimeout,
+          sendTimeout: _sendTimeout,
+          receiveTimeout: _receiveTimeout,
+        ),
+      );
+
+      final data = response.data;
+      if (data is Map<String, dynamic>) return data;
+      if (data is Map) return Map<String, dynamic>.from(data);
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   String get _rerankProxyEndpoint {
-    final fromEnv = _proxyUrlFromEnv.trim();
+    final fromEnv = _endpointFromBaseOrOverride(
+      overrideUrl: _proxyUrlFromEnv,
+      path: 'openAiRerank',
+    );
     if (fromEnv.isNotEmpty) return fromEnv;
-    return 'https://us-central1-$_defaultProjectId.cloudfunctions.net/openAiRerank';
+    return 'http://127.0.0.1:8787/openAiRerank';
   }
 
   String get _skillPatternProxyEndpoint {
-    final fromEnv = _skillPatternProxyUrlFromEnv.trim();
+    final fromEnv = _endpointFromBaseOrOverride(
+      overrideUrl: _skillPatternProxyUrlFromEnv,
+      path: 'openAiSkillPatterns',
+    );
     if (fromEnv.isNotEmpty) return fromEnv;
-    return 'https://us-central1-$_defaultProjectId.cloudfunctions.net/openAiSkillPatterns';
+    return 'http://127.0.0.1:8787/openAiSkillPatterns';
+  }
+
+  String get _projectValidationProxyEndpoint {
+    final fromEnv = _endpointFromBaseOrOverride(
+      overrideUrl: _projectValidationProxyUrlFromEnv,
+      path: 'openAiProjectValidation',
+    );
+    if (fromEnv.isNotEmpty) return fromEnv;
+    return 'http://127.0.0.1:8787/openAiProjectValidation';
+  }
+
+  String get _chatbotProxyEndpoint {
+    final fromEnv = _endpointFromBaseOrOverride(
+      overrideUrl: _chatbotProxyUrlFromEnv,
+      path: 'openAiChatbot',
+    );
+    if (fromEnv.isNotEmpty) return fromEnv;
+    return 'http://127.0.0.1:8787/openAiChatbot';
+  }
+
+  String _endpointFromBaseOrOverride({
+    required String overrideUrl,
+    required String path,
+  }) {
+    final override = overrideUrl.trim();
+    if (override.isNotEmpty) return override;
+
+    final base = _proxyBaseUrlFromEnv.trim();
+    if (base.isEmpty) return '';
+    final normalizedBase =
+        base.endsWith('/') ? base.substring(0, base.length - 1) : base;
+    return '$normalizedBase/$path';
+  }
+
+  bool _hasRankingRows(Map<String, dynamic>? payload) {
+    final ranking = payload?['ranking'];
+    return ranking is List && ranking.isNotEmpty;
+  }
+
+  bool _hasSkillClusters(Map<String, dynamic>? payload) {
+    final clusters = payload?['clusters'];
+    return clusters is List && clusters.isNotEmpty;
   }
 
   String _stripCodeFences(String input) {
     final trimmed = input.trim();
     if (!trimmed.startsWith('```')) return trimmed;
-    final withoutStart = trimmed.replaceFirst(RegExp(r'^```[a-zA-Z0-9_-]*\s*'), '');
+    final withoutStart =
+        trimmed.replaceFirst(RegExp(r'^```[a-zA-Z0-9_-]*\s*'), '');
     return withoutStart.replaceFirst(RegExp(r'\s*```$'), '').trim();
   }
 

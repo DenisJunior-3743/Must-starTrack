@@ -1,4 +1,4 @@
-﻿// lib/features/feed/screens/create_post_screen.dart
+// lib/features/feed/screens/create_post_screen.dart
 //
 // MUST StarTrack â€” Create Post Screen (Phase 3)
 //
@@ -42,6 +42,7 @@ import '../../../data/local/dao/user_dao.dart';
 import '../../../data/models/post_model.dart';
 import '../../../data/models/user_model.dart';
 import '../../../data/remote/cloudinary_service.dart';
+import '../../../data/remote/openai_service.dart';
 import '../../../data/remote/sync_service.dart';
 import '../../auth/bloc/auth_cubit.dart';
 import '../../shared/hci_components/st_form_widgets.dart';
@@ -91,15 +92,26 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
   bool get _isEditing => widget.existingPost != null;
   bool get _isGroupProject =>
-      (widget.groupId?.isNotEmpty ?? false) || widget.existingPost?.groupId != null;
+      (widget.groupId?.isNotEmpty ?? false) ||
+      widget.existingPost?.groupId != null;
 
   static const int _maxFileSizeBytes = 50 * 1024 * 1024;
   static const int _maxImageSizeBytes = 1536 * 1024; // 1.5 MB
 
-  static const _categories = ['Innovation', 'Research', 'Software', 'Design', 'Hardware', 'Data Analysis'];
+  static const _categories = [
+    'Innovation',
+    'Research',
+    'Software',
+    'Design',
+    'Hardware',
+    'Data Analysis'
+  ];
   static const _faculties = [
-    'Computing and Informatics', 'Applied Sciences and Technology',
-    'Medicine', 'Business and Management Sciences', 'Science',
+    'Computing and Informatics',
+    'Applied Sciences and Technology',
+    'Medicine',
+    'Business and Management Sciences',
+    'Science',
   ];
   static const _types = [
     ('project', 'Project', Icons.rocket_launch_rounded),
@@ -110,7 +122,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   @override
   void initState() {
     super.initState();
-    _qualificationsCtrl.addListener(() => _qualifications = _qualificationsCtrl.text);
+    _qualificationsCtrl
+        .addListener(() => _qualifications = _qualificationsCtrl.text);
     _seedFromExistingPost();
     if (_isGroupProject) {
       _type = 'project';
@@ -136,21 +149,28 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
     _titleCtrl.text = post.title;
     _descCtrl.text = post.description ?? '';
-    _category = _categories.contains(post.category) ? post.category! : _category;
+    _category =
+        _categories.contains(post.category) ? post.category! : _category;
     _faculty = post.faculty;
     _type = post.type;
     _visibility = post.visibility;
     _tags = _normalizeSkillTokens(post.tags);
-    _linkItems = post.externalLinks.map((m) => _LinkItem(url: m['url'] ?? '', description: m['description'] ?? '')).toList();
+    _linkItems = post.externalLinks
+        .map((m) =>
+            _LinkItem(url: m['url'] ?? '', description: m['description'] ?? ''))
+        .toList();
     _qualifications = post.areaOfExpertise ??
-      (post.skillsUsed.isNotEmpty ? post.skillsUsed.join(', ') : '');
+        (post.skillsUsed.isNotEmpty ? post.skillsUsed.join(', ') : '');
     _qualificationsCtrl.text = _qualifications;
     _deadline = post.opportunityDeadline;
     // Seed multi-faculty selection for opportunities and adverts.
     if ((_type == 'opportunity' || _type == 'advert') && _faculty != null) {
-      _selectedFaculties = _faculty!.split(', ').where((f) => f.isNotEmpty).toList();
+      _selectedFaculties =
+          _faculty!.split(', ').where((f) => f.isNotEmpty).toList();
     }
-    _deadlineCtrl.text = _deadline != null ? '${_deadline!.year}-${_deadline!.month.toString().padLeft(2,'0')}-${_deadline!.day.toString().padLeft(2,'0')}' : '';
+    _deadlineCtrl.text = _deadline != null
+        ? '${_deadline!.year}-${_deadline!.month.toString().padLeft(2, '0')}-${_deadline!.day.toString().padLeft(2, '0')}'
+        : '';
     _youtubeCtrl.text = post.youtubeUrl ?? '';
     _uploads.addAll(post.mediaUrls.map(_uploadItemFromSource));
   }
@@ -368,7 +388,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           source: remoteUrl,
         );
       } catch (error) {
-        debugPrint('[CreatePost] Immediate upload failed for ${item.name}: $error');
+        debugPrint(
+            '[CreatePost] Immediate upload failed for ${item.name}: $error');
         _setUploadState(
           item.id,
           isUploading: false,
@@ -393,7 +414,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       }
 
       final originalName = picked.name.isNotEmpty ? picked.name : _uuid.v4();
-      final sanitizedName = originalName.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+      final sanitizedName =
+          originalName.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
       final targetPath = '${uploadDir.path}/${_uuid.v4()}_$sanitizedName';
       final targetFile = File(targetPath);
 
@@ -533,7 +555,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         _setUploadProgress(upload.id, 1.0, source: remoteUrl);
         resolvedUrls.add(remoteUrl);
       } catch (error) {
-        debugPrint('[CreatePost] Media upload failed for ${upload.name}: $error');
+        debugPrint(
+            '[CreatePost] Media upload failed for ${upload.name}: $error');
         _setUploadProgress(upload.id, 0.0);
         resolvedUrls.add(upload.source);
       }
@@ -561,7 +584,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     if (_type == 'advert' && _selectedFaculties.isEmpty) {
       messenger.showSnackBar(
         const SnackBar(
-          content: Text('Select at least one target faculty (or All Faculties).'),
+          content:
+              Text('Select at least one target faculty (or All Faculties).'),
           backgroundColor: AppColors.warning,
         ),
       );
@@ -584,12 +608,17 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     final now = DateTime.now();
     final normalizedTags = _normalizeSkillTokens(_tags);
     final normalizedOpportunitySkills =
-      _normalizeSkillTokensFromText(_qualificationsCtrl.text);
-    final normalizedSkillsUsed =
-      _type == 'project' ? normalizedTags : (_type == 'opportunity' ? normalizedOpportunitySkills : const <String>[]);
-    final normalizedAreaOfExpertise =
-      _type == 'opportunity' ? _normalizeExpertiseText(_qualificationsCtrl.text) : null;
-    final selectedAudience = _selectedFaculties.contains(_FacultyMultiSelect.allFacultiesLabel)
+        _normalizeSkillTokensFromText(_qualificationsCtrl.text);
+    final normalizedSkillsUsed = _type == 'project'
+        ? normalizedTags
+        : (_type == 'opportunity'
+            ? normalizedOpportunitySkills
+            : const <String>[]);
+    final normalizedAreaOfExpertise = _type == 'opportunity'
+        ? _normalizeExpertiseText(_qualificationsCtrl.text)
+        : null;
+    final selectedAudience = _selectedFaculties
+            .contains(_FacultyMultiSelect.allFacultiesLabel)
         ? _FacultyMultiSelect.allFacultiesLabel
         : (_selectedFaculties.isEmpty ? null : _selectedFaculties.join(', '));
     // Only project and advert posts by students need admin approval.
@@ -600,29 +629,36 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         ? ModerationStatus.pending
         : ModerationStatus.approved;
 
-    final post = widget.existingPost?.copyWith(
+    var post = widget.existingPost?.copyWith(
           authorId: publishingUser.id,
           authorName: publishingUser.displayName,
           authorPhotoUrl: publishingUser.photoUrl,
           authorRole: publishingUser.role.name,
-        groupId: widget.groupId ?? widget.existingPost?.groupId,
-        groupName: widget.groupName ?? widget.existingPost?.groupName,
-        groupAvatarUrl:
-          widget.groupAvatarUrl ?? widget.existingPost?.groupAvatarUrl,
+          groupId: widget.groupId ?? widget.existingPost?.groupId,
+          groupName: widget.groupName ?? widget.existingPost?.groupName,
+          groupAvatarUrl:
+              widget.groupAvatarUrl ?? widget.existingPost?.groupAvatarUrl,
           type: _type,
           title: _titleCtrl.text.trim(),
           description: _descCtrl.text.trim(),
-          category: _type == 'project' ? _category : (_type == 'advert' ? 'advert' : null),
+          category: _type == 'project'
+              ? _category
+              : (_type == 'advert' ? 'advert' : null),
           faculty: _type == 'project' ? _faculty : selectedAudience,
           tags: _type == 'project' ? normalizedTags : [],
           skillsUsed: normalizedSkillsUsed,
-          youtubeUrl: _youtubeCtrl.text.trim().isNotEmpty ? _youtubeCtrl.text.trim() : null,
+          youtubeUrl: _youtubeCtrl.text.trim().isNotEmpty
+              ? _youtubeCtrl.text.trim()
+              : null,
           visibility: _visibility,
           moderationStatus: moderationStatus,
           mediaUrls: _type == 'opportunity' ? [] : mediaUrls,
-          externalLinks: _linkItems.map((l) => {'url': l.url, 'description': l.description}).toList(),
+          externalLinks: _linkItems
+              .map((l) => {'url': l.url, 'description': l.description})
+              .toList(),
           areaOfExpertise: normalizedAreaOfExpertise,
-          opportunityDeadline: (_type == 'opportunity' || _type == 'advert') ? _deadline : null,
+          opportunityDeadline:
+              (_type == 'opportunity' || _type == 'advert') ? _deadline : null,
           updatedAt: now,
         ) ??
         PostModel(
@@ -637,20 +673,31 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           type: _type,
           title: _titleCtrl.text.trim(),
           description: _descCtrl.text.trim(),
-          category: _type == 'project' ? _category : (_type == 'advert' ? 'advert' : null),
+          category: _type == 'project'
+              ? _category
+              : (_type == 'advert' ? 'advert' : null),
           faculty: _type == 'project' ? _faculty : selectedAudience,
           tags: _type == 'project' ? normalizedTags : [],
           skillsUsed: normalizedSkillsUsed,
-          youtubeUrl: _youtubeCtrl.text.trim().isNotEmpty ? _youtubeCtrl.text.trim() : null,
+          youtubeUrl: _youtubeCtrl.text.trim().isNotEmpty
+              ? _youtubeCtrl.text.trim()
+              : null,
           visibility: _visibility,
           moderationStatus: moderationStatus,
           mediaUrls: _type == 'opportunity' ? [] : mediaUrls,
-          externalLinks: _linkItems.map((l) => {'url': l.url, 'description': l.description}).toList(),
+          externalLinks: _linkItems
+              .map((l) => {'url': l.url, 'description': l.description})
+              .toList(),
           areaOfExpertise: normalizedAreaOfExpertise,
-          opportunityDeadline: (_type == 'opportunity' || _type == 'advert') ? _deadline : null,
+          opportunityDeadline:
+              (_type == 'opportunity' || _type == 'advert') ? _deadline : null,
           createdAt: now,
           updatedAt: now,
         );
+
+    if (requiresModeration && _type == 'project') {
+      post = await _applyAiProjectApproval(post);
+    }
 
     await _cacheUploadedImages(mediaUrls);
 
@@ -677,6 +724,24 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       MyProjectsScreen.invalidateCache();
       context.pop(true);
     }
+  }
+
+  Future<PostModel> _applyAiProjectApproval(PostModel post) async {
+    try {
+      final result = await sl<OpenAiService>().validateProjectPost(
+        post: post.toJson(),
+      );
+      final decision = (result?['decision'] ?? '').toString().toLowerCase();
+      if (decision == 'approve') {
+        return post.copyWith(moderationStatus: ModerationStatus.approved);
+      }
+      if (decision == 'reject') {
+        return post.copyWith(moderationStatus: ModerationStatus.rejected);
+      }
+    } catch (_) {
+      // Keep manual moderation as the safe fallback when local AI is unavailable.
+    }
+    return post;
   }
 
   Future<PublishPostResult> _updateExistingPost(
@@ -745,7 +810,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     context.go(RouteNames.home);
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -757,16 +821,20 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         ),
         title: Text(
           _isEditing
-            ? (_isGroupProject
-              ? 'Edit Group Project'
-              : (_type == 'project'
-                  ? 'Edit Project'
-                  : (_type == 'opportunity' ? 'Edit Opportunity' : 'Edit Advert')))
-            : (_isGroupProject
-              ? 'New Group Project'
-              : (_type == 'project'
-                  ? 'New Project'
-                  : (_type == 'opportunity' ? 'New Opportunity' : 'New Advert'))),
+              ? (_isGroupProject
+                  ? 'Edit Group Project'
+                  : (_type == 'project'
+                      ? 'Edit Project'
+                      : (_type == 'opportunity'
+                          ? 'Edit Opportunity'
+                          : 'Edit Advert')))
+              : (_isGroupProject
+                  ? 'New Group Project'
+                  : (_type == 'project'
+                      ? 'New Project'
+                      : (_type == 'opportunity'
+                          ? 'New Opportunity'
+                          : 'New Advert'))),
         ),
         actions: _isEditing
             ? const []
@@ -774,9 +842,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                 TextButton(
                   onPressed: () {},
                   child: Text('Drafts',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14, fontWeight: FontWeight.w700,
-                      color: AppColors.primary)),
+                      style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary)),
                 ),
               ],
       ),
@@ -795,13 +864,16 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: AppColors.primaryTint10,
-                      borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+                      borderRadius:
+                          BorderRadius.circular(AppDimensions.radiusLg),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.groupName ?? widget.existingPost?.groupName ?? 'Group Project',
+                          widget.groupName ??
+                              widget.existingPost?.groupName ??
+                              'Group Project',
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 16,
                             fontWeight: FontWeight.w800,
@@ -832,7 +904,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                       final active = _type == value;
                       return Expanded(
                         child: Padding(
-                          padding: EdgeInsets.only(right: value == 'project' ? 8 : 0),
+                          padding: EdgeInsets.only(
+                              right: value == 'project' ? 8 : 0),
                           child: GestureDetector(
                             onTap: () => setState(() => _type = value),
                             child: AnimatedContainer(
@@ -842,20 +915,29 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                                 color: active
                                     ? AppColors.primary
                                     : Theme.of(context).cardColor,
-                                borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+                                borderRadius: BorderRadius.circular(
+                                    AppDimensions.radiusMd),
                                 border: Border.all(
-                                  color: active ? AppColors.primary : AppColors.borderLight),
+                                    color: active
+                                        ? AppColors.primary
+                                        : AppColors.borderLight),
                               ),
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Icon(icon, size: 18,
-                                    color: active ? Colors.white : AppColors.textSecondaryLight),
+                                  Icon(icon,
+                                      size: 18,
+                                      color: active
+                                          ? Colors.white
+                                          : AppColors.textSecondaryLight),
                                   const SizedBox(width: 8),
                                   Text(label,
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 13, fontWeight: FontWeight.w600,
-                                      color: active ? Colors.white : AppColors.textSecondaryLight)),
+                                      style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: active
+                                              ? Colors.white
+                                              : AppColors.textSecondaryLight)),
                                 ],
                               ),
                             ),
@@ -876,28 +958,31 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                   children: [
                     StTextField(
                       label: _type == 'project'
-                        ? 'Project Title'
-                        : (_type == 'opportunity' ? 'Project Name' : 'Advert Title'),
+                          ? 'Project Title'
+                          : (_type == 'opportunity'
+                              ? 'Project Name'
+                              : 'Advert Title'),
                       hint: _type == 'project'
-                        ? 'Enter a catchy name for your project'
-                        : (_type == 'opportunity'
-                          ? 'Name of the project needing help'
-                          : 'Enter the advert title'),
+                          ? 'Enter a catchy name for your project'
+                          : (_type == 'opportunity'
+                              ? 'Name of the project needing help'
+                              : 'Enter the advert title'),
                       controller: _titleCtrl,
                       textInputAction: TextInputAction.next,
                       validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'Title is required.' : null,
+                          ? 'Title is required.'
+                          : null,
                     ),
                     const SizedBox(height: AppDimensions.spacingMd),
                     StTextField(
                       label: 'Description',
-                      hint: 'What are you building? Explain the goals and impact...',
+                      hint:
+                          'What are you building? Explain the goals and impact...',
                       controller: _descCtrl,
                       maxLines: 5,
                       textInputAction: TextInputAction.newline,
                     ),
                     const SizedBox(height: AppDimensions.spacingMd),
-
                     if (_type == 'project') ...[
                       // Category + Faculty row
                       Row(
@@ -906,9 +991,14 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                             child: StDropdown<String>(
                               label: 'Category',
                               value: _category,
-                              items: _categories.map((c) =>
-                                DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis))).toList(),
-                              onChanged: (v) => setState(() => _category = v ?? _category),
+                              items: _categories
+                                  .map((c) => DropdownMenuItem(
+                                      value: c,
+                                      child: Text(c,
+                                          overflow: TextOverflow.ellipsis)))
+                                  .toList(),
+                              onChanged: (v) =>
+                                  setState(() => _category = v ?? _category),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -916,9 +1006,14 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                             child: StDropdown<String>(
                               label: 'Faculty',
                               value: _faculty,
-                              items: _faculties.map((f) =>
-                                DropdownMenuItem(value: f, child: Text(f, overflow: TextOverflow.ellipsis))).toList(),
-                              onChanged: (v) => setState(() => _faculty = v ?? _faculty),
+                              items: _faculties
+                                  .map((f) => DropdownMenuItem(
+                                      value: f,
+                                      child: Text(f,
+                                          overflow: TextOverflow.ellipsis)))
+                                  .toList(),
+                              onChanged: (v) =>
+                                  setState(() => _faculty = v ?? _faculty),
                             ),
                           ),
                         ],
@@ -961,20 +1056,25 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                         onTap: () async {
                           final date = await showDatePicker(
                             context: context,
-                            initialDate: _deadline ?? DateTime.now().add(const Duration(days: 30)),
+                            initialDate: _deadline ??
+                                DateTime.now().add(const Duration(days: 30)),
                             firstDate: DateTime.now(),
-                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                            lastDate:
+                                DateTime.now().add(const Duration(days: 365)),
                           );
                           if (date != null) {
                             setState(() {
                               _deadline = date;
-                              _deadlineCtrl.text = '${date.year}-${date.month.toString().padLeft(2,'0')}-${date.day.toString().padLeft(2,'0')}';
+                              _deadlineCtrl.text =
+                                  '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
                             });
                           }
                         },
                         child: AbsorbPointer(
                           child: StTextField(
-                            label: _type == 'advert' ? 'Advert Deadline' : 'Deadline',
+                            label: _type == 'advert'
+                                ? 'Advert Deadline'
+                                : 'Deadline',
                             hint: 'Select deadline date',
                             controller: _deadlineCtrl,
                           ),
@@ -987,14 +1087,15 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
 
               // â”€â”€ Media upload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
               if (_type != 'opportunity') ...[
-                _SectionHeader(_type == 'advert' ? 'Advert Media' : 'Project Media'),
+                _SectionHeader(
+                    _type == 'advert' ? 'Advert Media' : 'Project Media'),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: _UploadArea(
                     onTap: _pickMedia,
                     items: _uploads,
-                    onRemove: (id) => setState(() =>
-                      _uploads.removeWhere((u) => u.id == id)),
+                    onRemove: (id) =>
+                        setState(() => _uploads.removeWhere((u) => u.id == id)),
                   ),
                 ),
               ],
@@ -1006,7 +1107,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                 child: _LinksArea(
                   onAdd: () => setState(() => _linkItems.add(_LinkItem())),
                   items: _linkItems,
-                  onRemove: (id) => setState(() => _linkItems.removeWhere((l) => l.id == id)),
+                  onRemove: (id) =>
+                      setState(() => _linkItems.removeWhere((l) => l.id == id)),
                 ),
               ),
 
@@ -1048,12 +1150,20 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           top: false,
           child: StButton(
             label: _isEditing
-              ? (_isGroupProject
-                ? 'Save Group Project'
-                : (_type == 'project' ? 'Save Project Changes' : (_type == 'advert' ? 'Save Advert Changes' : 'Save Opportunity Changes')))
-              : (_isGroupProject
-                ? 'Publish Group Project'
-                : (_type == 'project' ? 'Publish Project' : (_type == 'advert' ? 'Publish Advert' : 'Publish Opportunity'))),
+                ? (_isGroupProject
+                    ? 'Save Group Project'
+                    : (_type == 'project'
+                        ? 'Save Project Changes'
+                        : (_type == 'advert'
+                            ? 'Save Advert Changes'
+                            : 'Save Opportunity Changes')))
+                : (_isGroupProject
+                    ? 'Publish Group Project'
+                    : (_type == 'project'
+                        ? 'Publish Project'
+                        : (_type == 'advert'
+                            ? 'Publish Advert'
+                            : 'Publish Opportunity'))),
             trailingIcon: Icons.rocket_launch_rounded,
             isLoading: _publishing,
             onPressed: _publish,
@@ -1077,9 +1187,11 @@ class _SectionHeader extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
       child: Text(title.toUpperCase(),
-        style: GoogleFonts.plusJakartaSans(
-          fontSize: 11, fontWeight: FontWeight.w700,
-          color: AppColors.textSecondaryLight, letterSpacing: 0.1)),
+          style: GoogleFonts.plusJakartaSans(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textSecondaryLight,
+              letterSpacing: 0.1)),
     );
   }
 }
@@ -1139,9 +1251,8 @@ class _UploadItem {
 }
 
 _UploadItem _uploadItemFromSource(String source) {
-  final localPath = source.startsWith('file://')
-      ? Uri.parse(source).toFilePath()
-      : source;
+  final localPath =
+      source.startsWith('file://') ? Uri.parse(source).toFilePath() : source;
   final localFile = isLocalMediaPath(source) ? File(localPath) : null;
   return _UploadItem(
     id: const Uuid().v4(),
@@ -1169,7 +1280,8 @@ class _LinkItem {
   String url;
   String description;
 
-  _LinkItem({String? id, this.url = '', this.description = ''}) : id = id ?? const Uuid().v4();
+  _LinkItem({String? id, this.url = '', this.description = ''})
+      : id = id ?? const Uuid().v4();
 }
 
 class _UploadArea extends StatelessWidget {
@@ -1306,7 +1418,8 @@ class _UploadRow extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: SizedBox(
-              width: 56, height: 56,
+              width: 56,
+              height: 56,
               child: item.isVideo
                   ? Container(
                       color: AppColors.primaryTint10,
@@ -1316,8 +1429,8 @@ class _UploadRow extends StatelessWidget {
                       ),
                     )
                   : item.hasLocalFile
-                    ? Image.file(File(previewPath), fit: BoxFit.cover)
-                    : Image.network(item.source, fit: BoxFit.cover),
+                      ? Image.file(File(previewPath), fit: BoxFit.cover)
+                      : Image.network(item.source, fit: BoxFit.cover),
             ),
           ),
           const SizedBox(width: 12),
@@ -1331,15 +1444,16 @@ class _UploadRow extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(item.name,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 12, fontWeight: FontWeight.w500),
-                        overflow: TextOverflow.ellipsis),
+                          style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12, fontWeight: FontWeight.w500),
+                          overflow: TextOverflow.ellipsis),
                     ),
                     Text(
                       statusLabel,
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 10, fontWeight: FontWeight.w700,
-                        color: statusColor),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: statusColor),
                     ),
                   ],
                 ),
@@ -1350,12 +1464,11 @@ class _UploadRow extends StatelessWidget {
                     value: progressValue,
                     minHeight: 4,
                     backgroundColor: AppColors.borderLight,
-                    valueColor: AlwaysStoppedAnimation(
-                      item.uploadFailed
-                          ? AppColors.danger
-                          : isDone
-                              ? AppColors.success
-                              : AppColors.warning),
+                    valueColor: AlwaysStoppedAnimation(item.uploadFailed
+                        ? AppColors.danger
+                        : isDone
+                            ? AppColors.success
+                            : AppColors.warning),
                   ),
                 ),
               ],
@@ -1363,8 +1476,9 @@ class _UploadRow extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           IconButton(
-            icon: Icon(isDone ? Icons.delete_outline_rounded : Icons.close_rounded,
-              color: AppColors.textSecondaryLight),
+            icon: Icon(
+                isDone ? Icons.delete_outline_rounded : Icons.close_rounded,
+                color: AppColors.textSecondaryLight),
             onPressed: () => onRemove(item.id),
           ),
         ],
@@ -1437,7 +1551,8 @@ class _LinkRow extends StatelessWidget {
           Align(
             alignment: Alignment.centerRight,
             child: IconButton(
-              icon: const Icon(Icons.close_rounded, color: AppColors.textSecondaryLight),
+              icon: const Icon(Icons.close_rounded,
+                  color: AppColors.textSecondaryLight),
               onPressed: () => onRemove(item.id),
             ),
           ),
@@ -1465,7 +1580,8 @@ class _FacultyMultiSelect extends StatelessWidget {
     required this.selectedFaculties,
     required this.onChanged,
     this.includeAllOption = false,
-    this.helperText = 'Select one or more faculties this opportunity applies to.',
+    this.helperText =
+        'Select one or more faculties this opportunity applies to.',
   });
 
   static const String allFacultiesLabel = 'All Faculties';
@@ -1551,9 +1667,24 @@ class _VisibilityPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final options = [
-      (PostVisibility.public, 'Public', 'Visible to everyone in StarTrack', Icons.public_rounded),
-      (PostVisibility.followers, 'Followers Only', 'Only people following you can view', Icons.group_rounded),
-      (PostVisibility.collaborators, 'Collaborators Only', 'Invite-only project dashboard', Icons.handshake_rounded),
+      (
+        PostVisibility.public,
+        'Public',
+        'Visible to everyone in StarTrack',
+        Icons.public_rounded
+      ),
+      (
+        PostVisibility.followers,
+        'Followers Only',
+        'Only people following you can view',
+        Icons.group_rounded
+      ),
+      (
+        PostVisibility.collaborators,
+        'Collaborators Only',
+        'Invite-only project dashboard',
+        Icons.handshake_rounded
+      ),
     ];
 
     return Column(
@@ -1579,18 +1710,21 @@ class _VisibilityPicker extends StatelessWidget {
               child: Row(
                 children: [
                   Icon(icon,
-                    color: isSelected ? AppColors.primary : AppColors.textSecondaryLight),
+                      color: isSelected
+                          ? AppColors.primary
+                          : AppColors.textSecondaryLight),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(label,
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 14, fontWeight: FontWeight.w600)),
+                            style: GoogleFonts.plusJakartaSans(
+                                fontSize: 14, fontWeight: FontWeight.w600)),
                         Text(desc,
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 11, color: AppColors.textSecondaryLight)),
+                            style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11,
+                                color: AppColors.textSecondaryLight)),
                       ],
                     ),
                   ),
@@ -1611,4 +1745,3 @@ class _VisibilityPicker extends StatelessWidget {
     );
   }
 }
-

@@ -31,6 +31,7 @@ enum _WebRecommendationCategory { feed, personalized, general }
 enum _DashboardSection {
   overview,
   studentLab,
+  projectApproval,
   kmeans,
   localMath,
   aiStage,
@@ -40,6 +41,126 @@ enum _DashboardSection {
   generalResults,
   studentExplorer,
   skillPatternLab,
+}
+
+class _ApprovalAiReview {
+  const _ApprovalAiReview({
+    required this.decision,
+    required this.confidence,
+    required this.summary,
+    required this.findings,
+    required this.evidence,
+    required this.scores,
+  });
+
+  final String decision;
+  final double confidence;
+  final String summary;
+  final List<String> findings;
+  final List<String> evidence;
+  final Map<String, int> scores;
+
+  factory _ApprovalAiReview.fromPayload(Map<String, dynamic>? payload) {
+    if (payload == null) {
+      return const _ApprovalAiReview(
+        decision: 'needs_human',
+        confidence: 0,
+        summary: 'Local AI did not return a project review.',
+        findings: <String>[],
+        evidence: <String>[],
+        scores: <String, int>{},
+      );
+    }
+
+    final rawDecision = (payload['decision'] ?? 'needs_human')
+        .toString()
+        .trim()
+        .toLowerCase();
+    final decision = switch (rawDecision) {
+      'approve' || 'approved' => 'approve',
+      'reject' || 'rejected' => 'reject',
+      'needs_human' || 'manual_review' => 'needs_human',
+      _ => 'needs_human',
+    };
+
+    final rawScores = payload['scores'];
+    final scores = <String, int>{};
+    if (rawScores is Map) {
+      for (final entry in rawScores.entries) {
+        final key = entry.key.toString().trim();
+        if (key.isEmpty) continue;
+        final parsed = _parseInt(entry.value);
+        if (parsed != null) {
+          scores[key] = parsed.clamp(0, 100);
+        }
+      }
+    }
+
+    final findings = _stringList(payload['findings'] ?? payload['flags']);
+    final evidence = _stringList(
+      payload['evidence'] ?? payload['evidence_needed'],
+    );
+    final finalTake = (payload['final_take'] ??
+            payload['finalTake'] ??
+            payload['admin_summary'] ??
+            '')
+        .toString()
+        .trim();
+
+    return _ApprovalAiReview(
+      decision: decision,
+      confidence: _parseDouble(payload['confidence'])?.clamp(0, 1) ?? 0,
+      summary: finalTake.isNotEmpty ? finalTake : _defaultSummary(decision),
+      findings: findings,
+      evidence: evidence,
+      scores: scores,
+    );
+  }
+
+  factory _ApprovalAiReview.error(Object error) {
+    return _ApprovalAiReview(
+      decision: 'needs_human',
+      confidence: 0,
+      summary: 'Local AI review failed.',
+      findings: <String>[error.toString()],
+      evidence: const <String>[],
+      scores: const <String, int>{},
+    );
+  }
+
+  static String _defaultSummary(String decision) {
+    switch (decision) {
+      case 'approve':
+        return 'Local AI would approve this project.';
+      case 'reject':
+        return 'Local AI would reject this project.';
+      default:
+        return 'Local AI recommends manual review for this project.';
+    }
+  }
+
+  static List<String> _stringList(Object? raw) {
+    if (raw is Iterable) {
+      return raw
+          .map((item) => item.toString().trim())
+          .where((item) => item.isNotEmpty)
+          .toList(growable: false);
+    }
+    final value = raw?.toString().trim() ?? '';
+    if (value.isEmpty) return const <String>[];
+    return <String>[value];
+  }
+
+  static double? _parseDouble(Object? value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '');
+  }
+
+  static int? _parseInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.round();
+    return int.tryParse(value?.toString() ?? '');
+  }
 }
 
 class StarTrackWebRecommendationsApp extends StatelessWidget {
@@ -506,13 +627,18 @@ class _WebRecommendationDashboardState
 
   List<UserModel> _users = const <UserModel>[];
   List<PostModel> _posts = const <PostModel>[];
+  List<PostModel> _approvalPosts = const <PostModel>[];
   _KMeansTrace? _kMeansTrace;
 
   StreamSubscription<List<UserModel>>? _usersSubscription;
   StreamSubscription<List<PostModel>>? _postsSubscription;
+  StreamSubscription<List<PostModel>>? _approvalPostsSubscription;
   bool _loadingRemote = true;
   String? _remoteError;
   int _recomputeToken = 0;
+  final Map<String, _ApprovalAiReview> _approvalAiByPostId =
+      <String, _ApprovalAiReview>{};
+  final Set<String> _approvalAiInFlightPostIds = <String>{};
 
   _WebRecommendationCategory _category = _WebRecommendationCategory.feed;
   String? _selectedUserId;
@@ -535,9 +661,9 @@ class _WebRecommendationDashboardState
   List<Map<String, dynamic>> _remoteRecommendationLogs =
       const <Map<String, dynamic>>[];
   Map<String, int> _followerCountsIndex = const <String, int>{};
-    Map<String, List<String>> _projectCommentSnippetsByPost =
+  Map<String, List<String>> _projectCommentSnippetsByPost =
       const <String, List<String>>{};
-    String _projectCommentSignature = '';
+  String _projectCommentSignature = '';
   List<String> _remoteFaculties = const <String>[];
   final bool _useFirestoreRecs = false;
   RecommendationBenchmarkSnapshot? _benchmark;
@@ -556,17 +682,18 @@ class _WebRecommendationDashboardState
   void dispose() {
     _usersSubscription?.cancel();
     _postsSubscription?.cancel();
+    _approvalPostsSubscription?.cancel();
     super.dispose();
   }
 
   UserModel? get _selectedUser {
     if (_users.isEmpty) return null;
     final requestedId = _selectedUserId;
-    if (requestedId == null) return _users.first;
+    if (requestedId == null || requestedId.isEmpty) return null;
     for (final user in _users) {
       if (user.id == requestedId) return user;
     }
-    return _users.first;
+    return null;
   }
 
   _KMeansTrace get _currentKMeansTrace {
@@ -721,11 +848,18 @@ class _WebRecommendationDashboardState
   }
 
   String get _explorerFaculty {
-    if (_selectedFaculty != _allFaculties) return _selectedFaculty;
-    return _bestFacultyName;
+    return _selectedFaculty;
   }
 
   List<UserModel> _studentsForFaculty(String faculty) {
+    if (faculty == _allFaculties) {
+      return _users.toList(growable: false)
+        ..sort(
+          (a, b) => _displayName(a)
+              .toLowerCase()
+              .compareTo(_displayName(b).toLowerCase()),
+        );
+    }
     return _users.where((user) {
       final value = (user.profile?.faculty ?? '').trim();
       final normalized = value.isEmpty ? 'Unknown Faculty' : value;
@@ -787,7 +921,7 @@ class _WebRecommendationDashboardState
       if (filtered.isEmpty) {
         _selectedUserId = null;
       } else if (!filtered.any((user) => user.id == _selectedUserId)) {
-        _selectedUserId = filtered.first.id;
+        _selectedUserId = null;
       }
     });
     unawaited(_recompute());
@@ -1221,6 +1355,10 @@ class _WebRecommendationDashboardState
 
       final users = await firestore.getAllUsersFromRemote(limit: 600);
       final posts = await firestore.getRecentPosts(limit: 300);
+      final approvalPosts = await firestore.getRecentPosts(
+        limit: 300,
+        includePendingForAdmin: true,
+      );
       final logs = await firestore.getRecentRecommendationLogs(limit: 400);
       final faculties = await firestore.getActiveFacultyNames(limit: 200);
       final followerIndex = await firestore.getFollowerCountIndex(limit: 5000);
@@ -1233,6 +1371,7 @@ class _WebRecommendationDashboardState
         followerCounts: followerIndex,
         allowSetState: true,
       );
+      _applyApprovalSnapshot(approvalPosts, allowSetState: true);
 
       _usersSubscription?.cancel();
       _usersSubscription =
@@ -1254,6 +1393,15 @@ class _WebRecommendationDashboardState
             recommendationLogs: _remoteRecommendationLogs,
             followerCounts: _followerCountsIndex,
           );
+        },
+      );
+
+      _approvalPostsSubscription?.cancel();
+      _approvalPostsSubscription = firestore
+          .watchRecentPosts(limit: 300, includePendingForAdmin: true)
+          .listen(
+        (remotePosts) {
+          _applyApprovalSnapshot(remotePosts);
         },
       );
     } catch (error) {
@@ -1288,7 +1436,7 @@ class _WebRecommendationDashboardState
         ? null
         : (selectedId != null && cleanUsers.any((u) => u.id == selectedId)
             ? selectedId
-            : cleanUsers.first.id);
+            : null);
 
     _users = cleanUsers;
     _posts = posts;
@@ -1332,6 +1480,60 @@ class _WebRecommendationDashboardState
     }
 
     unawaited(_recompute(allowSetState: allowSetState));
+  }
+
+  void _applyApprovalSnapshot(
+    List<PostModel> posts, {
+    bool allowSetState = false,
+  }) {
+    final approvalPosts = posts
+        .where((post) => post.type.toLowerCase() == 'project')
+        .where((post) => !post.isArchived)
+        .toList(growable: false)
+      ..sort((a, b) {
+        final aPending = a.moderationStatus.name == 'pending' ? 0 : 1;
+        final bPending = b.moderationStatus.name == 'pending' ? 0 : 1;
+        if (aPending != bPending) return aPending.compareTo(bPending);
+        return b.createdAt.compareTo(a.createdAt);
+      });
+
+    _approvalPosts = approvalPosts;
+    for (final post in approvalPosts.take(12)) {
+      if (post.moderationStatus.name == 'pending') {
+        _ensureApprovalAiReview(post);
+      }
+    }
+
+    if (mounted && allowSetState) {
+      setState(() {});
+    } else if (mounted && _activeSection == _DashboardSection.projectApproval) {
+      setState(() {});
+    }
+  }
+
+  void _ensureApprovalAiReview(PostModel post) {
+    if (_approvalAiByPostId.containsKey(post.id) ||
+        _approvalAiInFlightPostIds.contains(post.id)) {
+      return;
+    }
+    _approvalAiInFlightPostIds.add(post.id);
+    unawaited(() async {
+      try {
+        final payload = await _openAi.validateProjectPost(post: post.toJson());
+        final review = _ApprovalAiReview.fromPayload(payload);
+        if (!mounted) return;
+        setState(() {
+          _approvalAiByPostId[post.id] = review;
+          _approvalAiInFlightPostIds.remove(post.id);
+        });
+      } catch (error) {
+        if (!mounted) return;
+        setState(() {
+          _approvalAiByPostId[post.id] = _ApprovalAiReview.error(error);
+          _approvalAiInFlightPostIds.remove(post.id);
+        });
+      }
+    }());
   }
 
   void _refreshProjectCommentSnippets(List<PostModel> posts) {
@@ -1446,19 +1648,6 @@ class _WebRecommendationDashboardState
     final currentUser = _selectedUser;
     final trace = _currentKMeansTrace;
     if (currentUser == null) {
-      if (mounted && allowSetState) {
-        setState(() {
-          _feedLocalResults = const <RecommendedPost>[];
-          _feedAiResults = const <RecommendedPost>[];
-          _feedVideoQueue = const <FeedVideoQueueItem>[];
-          _personalLocalResults = const <RecommendedPost>[];
-          _personalAiResults = const <RecommendedPost>[];
-          _feedHybridDiagnostics = null;
-          _personalHybridDiagnostics = null;
-          _collaboratorResults = const <RecommendedUser>[];
-          _generalResults = const <_GeneralStudentScore>[];
-        });
-      }
       return;
     }
 
@@ -1580,10 +1769,18 @@ class _WebRecommendationDashboardState
 
     void applyRecomputeResults() {
       _feedLocalResults = feedLocal;
-      _feedAiResults = feedAi;
+      _feedAiResults = _stableAiRows(
+        nextRows: feedAi,
+        previousRows: _feedAiResults,
+        diagnostics: feedHybrid.diagnostics,
+      );
       _feedVideoQueue = feedQueue;
       _personalLocalResults = personalLocal;
-      _personalAiResults = personalAi;
+      _personalAiResults = _stableAiRows(
+        nextRows: personalAi,
+        previousRows: _personalAiResults,
+        diagnostics: personalHybrid.diagnostics,
+      );
       _feedHybridDiagnostics = feedHybrid.diagnostics;
       _personalHybridDiagnostics = personalHybrid.diagnostics;
       _collaboratorResults = collaborators;
@@ -1596,6 +1793,23 @@ class _WebRecommendationDashboardState
     } else {
       applyRecomputeResults();
     }
+  }
+
+  List<RecommendedPost> _stableAiRows({
+    required List<RecommendedPost> nextRows,
+    required List<RecommendedPost> previousRows,
+    required HybridRerankDiagnostics diagnostics,
+  }) {
+    if (nextRows.isEmpty) return previousRows.isNotEmpty ? previousRows : nextRows;
+    final nextHasAi = _openAiCountFor(nextRows) > 0;
+    final previousHasAi = _openAiCountFor(previousRows) > 0;
+    if (!nextHasAi &&
+        previousHasAi &&
+        diagnostics.openAiAttempted &&
+        !diagnostics.openAiSucceeded) {
+      return previousRows;
+    }
+    return nextRows;
   }
 
   List<_GeneralStudentScore> _buildGeneralRecommendation({
@@ -1963,6 +2177,13 @@ class _WebRecommendationDashboardState
                   activeBg: activeBg,
                   textColor: itemTextColor,
                 ),
+                _sidebarNavItem(
+                  icon: Icons.verified_user_outlined,
+                  label: 'Project Approval',
+                  section: _DashboardSection.projectApproval,
+                  activeBg: activeBg,
+                  textColor: itemTextColor,
+                ),
                 const SizedBox(height: 10),
                 _sidebarParentItem(
                   icon: Icons.science_outlined,
@@ -2280,6 +2501,7 @@ class _WebRecommendationDashboardState
     const sectionNames = {
       _DashboardSection.overview: 'Dashboard Overview',
       _DashboardSection.studentLab: 'Student Recommendation Lab',
+      _DashboardSection.projectApproval: 'Project Approval',
       _DashboardSection.kmeans: 'K-Means Clustering',
       _DashboardSection.localMath: 'Local Ranking Math',
       _DashboardSection.aiStage: 'AI Rerank Stage',
@@ -2417,6 +2639,7 @@ class _WebRecommendationDashboardState
       _DashboardSection.overview => _buildOverviewSection(),
       _DashboardSection.studentLab => _buildStudentLabSection(),
       _DashboardSection.studentExplorer => _buildStudentExplorer(),
+      _DashboardSection.projectApproval => _buildProjectApprovalSection(p, s),
       _DashboardSection.kmeans => ListView(
           padding: const EdgeInsets.all(20),
           children: [_kMeansPanel(p, s)],
@@ -2656,6 +2879,322 @@ class _WebRecommendationDashboardState
         ],
       ),
     );
+  }
+
+  Widget _buildProjectApprovalSection(Color textPrimary, Color textSecondary) {
+    if (_loadingRemote && _approvalPosts.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final pending = _approvalPosts
+        .where((post) => post.moderationStatus.name == 'pending')
+        .toList(growable: false);
+    final approved = _approvalPosts
+        .where((post) => post.moderationStatus.name == 'approved')
+        .length;
+    final rejected = _approvalPosts
+        .where((post) => post.moderationStatus.name == 'rejected')
+        .length;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _panel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryTint10,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.verified_user_outlined,
+                        color: AppColors.primaryDark,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Project Approval',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              color: textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'Pending projects are checked through the local AI proxy, then mapped to approve, reject, or manual review.',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12,
+                              color: textSecondary,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    FilledButton.icon(
+                      onPressed: () {
+                        for (final post in pending) {
+                          _ensureApprovalAiReview(post);
+                        }
+                      },
+                      icon: const Icon(Icons.auto_awesome, size: 16),
+                      label: const Text('Run AI Review'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _InlineMetricChip(
+                      label: 'pending_projects',
+                      value: '${pending.length}',
+                    ),
+                    _InlineMetricChip(
+                      label: 'approved_visible',
+                      value: '$approved',
+                    ),
+                    _InlineMetricChip(
+                      label: 'rejected',
+                      value: '$rejected',
+                    ),
+                    _InlineMetricChip(
+                      label: 'ai_reviewed',
+                      value: '${_approvalAiByPostId.length}',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          if (_approvalPosts.isEmpty)
+            _panel(
+              child: Text(
+                'No project approval records loaded yet.',
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 12,
+                  color: textSecondary,
+                ),
+              ),
+            )
+          else
+            ..._approvalPosts.take(80).map(
+                  (post) => _projectApprovalCard(
+                    post: post,
+                    textPrimary: textPrimary,
+                    textSecondary: textSecondary,
+                  ),
+                ),
+        ],
+      ),
+    );
+  }
+
+  Widget _projectApprovalCard({
+    required PostModel post,
+    required Color textPrimary,
+    required Color textSecondary,
+  }) {
+    final review = _approvalAiByPostId[post.id];
+    final inFlight = _approvalAiInFlightPostIds.contains(post.id);
+    final status = post.moderationStatus.name;
+    final decision = review?.decision ?? (inFlight ? 'checking' : 'not_run');
+    final decisionColor = _approvalDecisionColor(decision);
+    final finalResult = _approvalFinalResult(status, review);
+
+    return _panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  post.title,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: textPrimary,
+                  ),
+                ),
+              ),
+              _statusPill(status, AppColors.textSecondaryLight),
+              const SizedBox(width: 8),
+              _statusPill(decision, decisionColor),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${post.authorName ?? post.authorId} • ${post.faculty ?? 'Unknown faculty'} • ${post.createdAt.toLocal()}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 11,
+              color: textSecondary,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            post.description?.trim().isNotEmpty == true
+                ? post.description!.trim()
+                : 'No project description supplied.',
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 12,
+              height: 1.45,
+              color: textPrimary,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _InlineMetricChip(
+                label: 'skills',
+                value: post.skillsUsed.isEmpty
+                    ? '0'
+                    : post.skillsUsed.take(4).join(', '),
+              ),
+              _InlineMetricChip(
+                label: 'media',
+                value: '${post.mediaUrls.length}',
+              ),
+              _InlineMetricChip(
+                label: 'links',
+                value: '${post.externalLinks.length}',
+              ),
+              _InlineMetricChip(
+                label: 'final_result',
+                value: finalResult,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (inFlight)
+            Row(
+              children: [
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Local AI is reviewing this project...',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 12,
+                    color: textSecondary,
+                  ),
+                ),
+              ],
+            )
+          else if (review != null) ...[
+            Text(
+              review.summary,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: decisionColor,
+              ),
+            ),
+            if (review.findings.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                review.findings.take(3).join(' | '),
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 11,
+                  color: textSecondary,
+                  height: 1.4,
+                ),
+              ),
+            ],
+            if (review.scores.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: review.scores.entries
+                    .take(6)
+                    .map(
+                      (entry) => _InlineMetricChip(
+                        label: entry.key,
+                        value: entry.value.toStringAsFixed(0),
+                      ),
+                    )
+                    .toList(growable: false),
+              ),
+            ],
+          ] else
+            OutlinedButton.icon(
+              onPressed: () => _ensureApprovalAiReview(post),
+              icon: const Icon(Icons.auto_awesome, size: 16),
+              label: const Text('Run local AI review'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusPill(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.plusJakartaSans(
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  Color _approvalDecisionColor(String decision) {
+    switch (decision.toLowerCase()) {
+      case 'approve':
+      case 'approved':
+        return const Color(0xFF0F9D58);
+      case 'reject':
+      case 'rejected':
+        return Colors.red.shade700;
+      case 'needs_human':
+      case 'pending':
+        return AppColors.mustGoldDark;
+      case 'checking':
+        return AppColors.primaryDark;
+      default:
+        return AppColors.textSecondaryLight;
+    }
+  }
+
+  String _approvalFinalResult(String currentStatus, _ApprovalAiReview? review) {
+    if (currentStatus != 'pending') return currentStatus;
+    final decision = review?.decision.toLowerCase();
+    if (decision == 'approve') return 'would_approve';
+    if (decision == 'reject') return 'would_reject';
+    if (decision == 'needs_human') return 'manual_review';
+    return 'pending_ai';
   }
 
   Widget _buildStatsRow() {
