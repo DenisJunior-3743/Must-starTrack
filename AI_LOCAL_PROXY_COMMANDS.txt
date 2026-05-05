@@ -1,0 +1,60 @@
+MUST STARTRACK - LOCAL AI COMMANDS
+
+One local proxy powers:
+- recommendations: openAiRerank
+- skill patterns: openAiSkillPatterns
+- chatbot: openAiChatbot
+- project approval: openAiProjectValidation
+
+All app runs below use:
+OPENAI_PROXY_BASE_URL=http://127.0.0.1:8787
+
+======================================================================
+TEST ALL LOCAL AI ENDPOINTS
+======================================================================
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Run-StarTrackAI.ps1 test-ai
+
+======================================================================
+RUN WEB WITH LOCAL AI
+======================================================================
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Run-StarTrackAI.ps1 web
+
+======================================================================
+RUN ANDROID WITH LOCAL AI
+======================================================================
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Run-StarTrackAI.ps1 android
+
+Optional specific device:
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Run-StarTrackAI.ps1 android -Device RFGYC1PEY6
+
+======================================================================
+ASSEMBLE DEBUG APK WITH LOCAL AI
+======================================================================
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Run-StarTrackAI.ps1 apk-debug
+
+Output:
+build\app\outputs\flutter-apk\app-debug.apk
+
+======================================================================
+START ONLY THE LOCAL AI PROXY
+======================================================================
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Run-StarTrackAI.ps1 proxy
+
+Health check:
+Invoke-RestMethod http://127.0.0.1:8787/health
+
+======================================================================
+STOP THE LOCAL AI PROXY
+======================================================================
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Run-StarTrackAI.ps1 stop
+
+======================================================================
+LOCAL RELEASE APK TEST
+======================================================================
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Run-StarTrackAI.ps1 apk-local
+
+Note:
+Android local AI uses adb reverse:
+device localhost:8787 -> laptop localhost:8787
+
+Keep USB debugging connected while testing a local-proxy APK.
