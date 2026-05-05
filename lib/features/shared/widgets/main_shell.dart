@@ -25,7 +25,6 @@ import '../../../core/di/injection_container.dart';
 import '../../../core/network/connectivity_service.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/router/route_guards.dart';
-import '../../feed/screens/home_feed_screen.dart';
 import '../../messaging/bloc/message_cubit.dart';
 import 'lecturer_bottom_nav.dart';
 import 'startrack_bottom_nav.dart';
@@ -44,7 +43,7 @@ class _MainShellState extends State<MainShell> {
   Timer? _onlineBannerTimer;
   bool _isOnline = true;
   bool _showOnlineBanner = false;
-  int _lastUnreadCount = 0;
+  final int _lastUnreadCount = 0;
 
   void _setStateAfterPointerFrame(VoidCallback update) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -218,8 +217,8 @@ class _MainShellState extends State<MainShell> {
         location.startsWith(RouteNames.lecturerRanking)) {
       return LecturerNavTab.dashboard;
     }
-    if (location.startsWith(RouteNames.lecturerSearch)) {
-      return LecturerNavTab.search;
+    if (location.startsWith(RouteNames.lecturerLeaderboard)) {
+      return LecturerNavTab.leaderboard;
     }
     if (location.startsWith(RouteNames.inbox)) return LecturerNavTab.inbox;
     if (location.startsWith(RouteNames.home) ||
@@ -341,14 +340,14 @@ class _MainShellState extends State<MainShell> {
 
     // Lecturers get their own nav bar with role-specific destinations.
     if (role == UserRole.lecturer) {
-      return Scaffold(
-        body: child,
+      final scaffold = Scaffold(
+        body: widget.child,
         bottomNavigationBar: LecturerBottomNav(
           activeTab: _lecturerCurrentTab(location),
           onFeedTap: () => context.go(RouteNames.home),
           onDashboardTap: () => context.go(RouteNames.lecturerDashboard),
           onAddTap: () => _handleAddTap(context),
-          onSearchTap: () => context.go(RouteNames.lecturerSearch),
+          onLeaderboardTap: () => context.go(RouteNames.lecturerLeaderboard),
           onInboxTap: () => context.go(RouteNames.inbox),
           unreadMessageCount: unreadCount,
         ),
@@ -358,15 +357,15 @@ class _MainShellState extends State<MainShell> {
 
     // Students, admins, super-admins — standard student nav.
     final currentTab = _currentTab(location);
-    return Scaffold(
-      body: child,
+    final scaffold = Scaffold(
+      body: widget.child,
       bottomNavigationBar: StarTrackBottomNav(
         activeTab: currentTab,
         onHomeTap: () => context.go(RouteNames.home),
         onPeersTap: () => context.go(RouteNames.peers),
         onAddTap: () => _handleAddTap(context),
         onInboxTap: () => context.go(RouteNames.inbox),
-        onProjectsTap: () => context.go(RouteNames.projects),
+        onLeaderboardTap: () => context.go(RouteNames.globalRanks),
         unreadMessageCount: unreadCount,
       ),
     );

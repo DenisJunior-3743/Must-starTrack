@@ -13,9 +13,14 @@ class OpenAiService {
     required String apiKey,
     Dio? dio,
     String model = 'gpt-4o-mini',
+    String diagnosticsTag = 'app',
   })  : _apiKey = apiKey.trim(),
         _model = model,
-        _dio = dio ?? Dio();
+        _dio = dio ?? Dio() {
+    if (kDebugMode) {
+      debugPrint('[OpenAIInit][$diagnosticsTag] configured=$isConfigured');
+    }
+  }
 
   final Dio _dio;
   final String _apiKey;
