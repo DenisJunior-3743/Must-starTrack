@@ -72,10 +72,8 @@ class _ApprovalAiReview {
       );
     }
 
-    final rawDecision = (payload['decision'] ?? 'needs_human')
-        .toString()
-        .trim()
-        .toLowerCase();
+    final rawDecision =
+        (payload['decision'] ?? 'needs_human').toString().trim().toLowerCase();
     final decision = switch (rawDecision) {
       'approve' || 'approved' => 'approve',
       'reject' || 'rejected' => 'reject',
@@ -213,8 +211,7 @@ class _WebAdminGate extends StatefulWidget {
 }
 
 class _WebAdminGateState extends State<_WebAdminGate> {
-  final _emailController =
-      TextEditingController(text: 'admin@must.ac.ug');
+  final _emailController = TextEditingController(text: 'admin@must.ac.ug');
   final _passwordController = TextEditingController();
   bool _loading = false;
   bool _obscure = true;
@@ -244,7 +241,7 @@ class _WebAdminGateState extends State<_WebAdminGate> {
       // Ensure Firebase is ready before auth call.
       if (Firebase.apps.isEmpty) {
         await Firebase.initializeApp(
-            options: DefaultFirebaseOptions.web);
+            options: DefaultFirebaseOptions.currentPlatform);
       }
 
       final credential = await FirebaseAuth.instance
@@ -254,8 +251,7 @@ class _WebAdminGateState extends State<_WebAdminGate> {
       final token = await credential.user?.getIdTokenResult();
       final role = token?.claims?['role'] as String? ?? '';
 
-      final isAdmin =
-          role == 'admin' || role == 'super_admin';
+      final isAdmin = role == 'admin' || role == 'super_admin';
 
       // If custom claims not set, fall back to checking Firestore profile.
       if (!isAdmin) {
@@ -490,8 +486,8 @@ class _WebAdminGateState extends State<_WebAdminGate> {
                           keyboardType: TextInputType.emailAddress,
                           decoration: InputDecoration(
                             labelText: 'Admin email',
-                            labelStyle: GoogleFonts.plusJakartaSans(
-                                fontSize: 13),
+                            labelStyle:
+                                GoogleFonts.plusJakartaSans(fontSize: 13),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -500,8 +496,8 @@ class _WebAdminGateState extends State<_WebAdminGate> {
                               borderSide: const BorderSide(
                                   color: Color(0xFF0D1B8F), width: 2),
                             ),
-                            prefixIcon: const Icon(Icons.alternate_email,
-                                size: 18),
+                            prefixIcon:
+                                const Icon(Icons.alternate_email, size: 18),
                             contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 14, vertical: 14),
                           ),
@@ -513,8 +509,8 @@ class _WebAdminGateState extends State<_WebAdminGate> {
                           obscureText: _obscure,
                           decoration: InputDecoration(
                             labelText: 'Password',
-                            labelStyle: GoogleFonts.plusJakartaSans(
-                                fontSize: 13),
+                            labelStyle:
+                                GoogleFonts.plusJakartaSans(fontSize: 13),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -523,8 +519,8 @@ class _WebAdminGateState extends State<_WebAdminGate> {
                               borderSide: const BorderSide(
                                   color: Color(0xFF0D1B8F), width: 2),
                             ),
-                            prefixIcon: const Icon(Icons.lock_outline,
-                                size: 18),
+                            prefixIcon:
+                                const Icon(Icons.lock_outline, size: 18),
                             suffixIcon: IconButton(
                               icon: Icon(
                                 _obscure
@@ -547,8 +543,7 @@ class _WebAdminGateState extends State<_WebAdminGate> {
                             decoration: BoxDecoration(
                               color: Colors.red.shade50,
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                  color: Colors.red.shade200),
+                              border: Border.all(color: Colors.red.shade200),
                             ),
                             child: Row(
                               children: [
@@ -573,8 +568,7 @@ class _WebAdminGateState extends State<_WebAdminGate> {
                           onPressed: _loading ? null : _signIn,
                           style: FilledButton.styleFrom(
                             backgroundColor: const Color(0xFF0D1B8F),
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 16),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -710,7 +704,8 @@ class _WebRecommendationDashboardState
 
   int _effectivePostCountForUser(UserModel user) {
     final profileCount = user.profile?.totalPosts ?? 0;
-    final inferredCount = _posts.where((post) => post.authorId == user.id).length;
+    final inferredCount =
+        _posts.where((post) => post.authorId == user.id).length;
     return math.max(profileCount, inferredCount);
   }
 
@@ -737,9 +732,8 @@ class _WebRecommendationDashboardState
           (row['user_id'] ?? row['userId'] ?? '').toString().trim();
       final rowAlgorithm =
           (row['algorithm'] ?? row['algo'] ?? '').toString().trim();
-      final rowItemType = (row['item_type'] ?? row['itemType'] ?? 'post')
-          .toString()
-          .trim();
+      final rowItemType =
+          (row['item_type'] ?? row['itemType'] ?? 'post').toString().trim();
       return rowUserId == userId &&
           rowAlgorithm == algorithm &&
           rowItemType == 'post';
@@ -771,15 +765,21 @@ class _WebRecommendationDashboardState
   }
 
   int _openAiCountFor(List<RecommendedPost> rows) {
-    return rows.where((row) => row.scoreBreakdown['openai_score'] != null).length;
+    return rows
+        .where((row) => row.scoreBreakdown['openai_score'] != null)
+        .length;
   }
 
   int _realOpenAiCountFor(List<RecommendedPost> rows) {
-    return rows.where((row) => row.scoreBreakdown['ai_source_openai'] == 1.0).length;
+    return rows
+        .where((row) => row.scoreBreakdown['ai_source_openai'] == 1.0)
+        .length;
   }
 
   int _proxyAiCountFor(List<RecommendedPost> rows) {
-    return rows.where((row) => row.scoreBreakdown['ai_source_proxy'] == 1.0).length;
+    return rows
+        .where((row) => row.scoreBreakdown['ai_source_proxy'] == 1.0)
+        .length;
   }
 
   HybridRerankDiagnostics? get _activeHybridDiagnostics {
@@ -841,8 +841,7 @@ class _WebRecommendationDashboardState
       counts[key] = (counts[key] ?? 0) + 1;
     }
     if (counts.isEmpty) return _allFaculties;
-    return (counts.entries.toList()
-          ..sort((a, b) => b.value.compareTo(a.value)))
+    return (counts.entries.toList()..sort((a, b) => b.value.compareTo(a.value)))
         .first
         .key;
   }
@@ -1194,7 +1193,10 @@ class _WebRecommendationDashboardState
                 ? _generalResults.take(6).map((item) => item.score).toList(
                       growable: false,
                     )
-                : local.take(6).map((item) => item.score).toList(growable: false),
+                : local
+                    .take(6)
+                    .map((item) => item.score)
+                    .toList(growable: false),
             color: category == _WebRecommendationCategory.general
                 ? AppColors.mustGoldDark
                 : AppColors.primary,
@@ -1416,7 +1418,8 @@ class _WebRecommendationDashboardState
 
   Future<void> _ensureFirebaseInitializedForWeb() async {
     if (Firebase.apps.isNotEmpty) return;
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.web);
+    await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform);
   }
 
   void _applyRemoteSnapshot({
@@ -1428,9 +1431,8 @@ class _WebRecommendationDashboardState
     bool allowSetState = false,
   }) {
     // Recommendation dashboard is student-centric; exclude lecturers/admins.
-    final cleanUsers = users
-        .where((user) => user.profile != null && user.isStudent)
-        .toList();
+    final cleanUsers =
+        users.where((user) => user.profile != null && user.isStudent).toList();
     final selectedId = _selectedUserId;
     final resolvedSelectedId = cleanUsers.isEmpty
         ? null
@@ -1540,9 +1542,8 @@ class _WebRecommendationDashboardState
     final firestore = _firestore;
     if (firestore == null) return;
 
-    final projectPosts = posts
-        .where((post) => post.type == 'project')
-        .toList(growable: false);
+    final projectPosts =
+        posts.where((post) => post.type == 'project').toList(growable: false);
     final postIds = projectPosts
         .map((post) => post.id.trim())
         .where((id) => id.isNotEmpty)
@@ -1590,7 +1591,8 @@ class _WebRecommendationDashboardState
       final comments = <String>[];
       for (final post in projectPosts) {
         if (post.authorId != student.id) continue;
-        comments.addAll(_projectCommentSnippetsByPost[post.id] ?? const <String>[]);
+        comments
+            .addAll(_projectCommentSnippetsByPost[post.id] ?? const <String>[]);
       }
       final compactComments = comments
           .map((comment) => comment.trim())
@@ -1630,7 +1632,8 @@ class _WebRecommendationDashboardState
         final data = Map<String, dynamic>.from(row);
         final id = (data['postId'] ?? data['id'])?.toString();
         if (id == null || id.isEmpty) continue;
-        final rawScore = data['score'] ?? data['sentimentScore'] ?? data['finalScore'];
+        final rawScore =
+            data['score'] ?? data['sentimentScore'] ?? data['finalScore'];
         final parsed = rawScore is num
             ? rawScore.toDouble()
             : double.tryParse(rawScore?.toString() ?? '');
@@ -1689,7 +1692,7 @@ class _WebRecommendationDashboardState
         .map((item) => item.post)
         .toList(growable: false);
     final feedCandidates =
-      eligibleFeedVideos.isEmpty ? feedSourceCandidates : eligibleFeedVideos;
+        eligibleFeedVideos.isEmpty ? feedSourceCandidates : eligibleFeedVideos;
 
     final feedLocal = _recommender.rankLocally(
       user: currentUser,
@@ -1800,7 +1803,8 @@ class _WebRecommendationDashboardState
     required List<RecommendedPost> previousRows,
     required HybridRerankDiagnostics diagnostics,
   }) {
-    if (nextRows.isEmpty) return previousRows.isNotEmpty ? previousRows : nextRows;
+    if (nextRows.isEmpty)
+      return previousRows.isNotEmpty ? previousRows : nextRows;
     final nextHasAi = _openAiCountFor(nextRows) > 0;
     final previousHasAi = _openAiCountFor(previousRows) > 0;
     if (!nextHasAi &&
@@ -1826,35 +1830,32 @@ class _WebRecommendationDashboardState
     final ranked = filtered.map((student) {
       final profile = student.profile!;
       final streak = (profile.activityStreak / 30).clamp(0.0, 1.0).toDouble();
-        final posts =
+      final posts =
           (_effectivePostCountForUser(student) / 12).clamp(0.0, 1.0).toDouble();
-        final collabs = (_effectiveCollabCountForUser(student) / 8)
+      final collabs = (_effectiveCollabCountForUser(student) / 8)
           .clamp(0.0, 1.0)
           .toDouble();
-        final followers = (_effectiveFollowerCountForUser(student) / 40)
+      final followers = (_effectiveFollowerCountForUser(student) / 40)
           .clamp(0.0, 1.0)
           .toDouble();
       final completeness = _profileCompleteness(student);
       final skillDensity =
           (profile.skills.length / 8).clamp(0.0, 1.0).toDouble();
-        final aiCommentSentiment =
+      final aiCommentSentiment =
           (commentSentimentByStudent[student.id] ?? 0.5).clamp(0.0, 1.0);
-        final sentimentDelta = ((aiCommentSentiment - 0.5) * 0.22)
-          .clamp(-0.11, 0.11)
-          .toDouble();
+      final sentimentDelta =
+          ((aiCommentSentiment - 0.5) * 0.22).clamp(-0.11, 0.11).toDouble();
 
-        final baseScore = ((0.24 * streak) +
-            (0.22 * posts) +
-            (0.20 * collabs) +
-            (0.14 * followers) +
-            (0.12 * completeness) +
-            (0.08 * skillDensity))
+      final baseScore = ((0.24 * streak) +
+              (0.22 * posts) +
+              (0.20 * collabs) +
+              (0.14 * followers) +
+              (0.12 * completeness) +
+              (0.08 * skillDensity))
           .clamp(0.0, 1.0)
           .toDouble();
 
-        final score = (baseScore + sentimentDelta)
-          .clamp(0.0, 1.0)
-          .toDouble();
+      final score = (baseScore + sentimentDelta).clamp(0.0, 1.0).toDouble();
 
       return _GeneralStudentScore(
         user: student,
@@ -1888,7 +1889,7 @@ class _WebRecommendationDashboardState
                   .toDouble(),
               activityDensity:
                   (((_effectivePostCountForUser(user) / 12.0) * 0.55) +
-                      ((_effectiveCollabCountForUser(user) / 8.0) * 0.45))
+                          ((_effectiveCollabCountForUser(user) / 8.0) * 0.45))
                       .clamp(0.0, 1.0)
                       .toDouble(),
               completeness: _profileCompleteness(user),
@@ -1989,10 +1990,15 @@ class _WebRecommendationDashboardState
             .toList() ??
         [];
 
-    final postsById = <String, PostModel>{for (final post in _posts) post.id: post};
-    final usersById = <String, UserModel>{for (final candidate in _users) candidate.id: candidate};
+    final postsById = <String, PostModel>{
+      for (final post in _posts) post.id: post
+    };
+    final usersById = <String, UserModel>{
+      for (final candidate in _users) candidate.id: candidate
+    };
 
-    List<RecommendedPost> mapPostRecommendations(List<Map<String, dynamic>> rows) {
+    List<RecommendedPost> mapPostRecommendations(
+        List<Map<String, dynamic>> rows) {
       final mapped = <RecommendedPost>[];
       for (final row in rows) {
         final postId = row['postId'] as String?;
@@ -2003,7 +2009,8 @@ class _WebRecommendationDashboardState
           RecommendedPost(
             post: post,
             score: (row['score'] as num?)?.toDouble() ?? 0.0,
-            reasons: (row['reasons'] as List?)?.cast<String>() ?? const <String>[],
+            reasons:
+                (row['reasons'] as List?)?.cast<String>() ?? const <String>[],
           ),
         );
       }
@@ -2020,9 +2027,10 @@ class _WebRecommendationDashboardState
         RecommendedUser(
           user: collabUser,
           score: (row['score'] as num?)?.toDouble() ?? 0.0,
-          reasons: (row['reasons'] as List?)?.cast<String>() ?? const <String>[],
-          matchedSkills:
-              (row['matchedSkills'] as List?)?.cast<String>() ?? const <String>[],
+          reasons:
+              (row['reasons'] as List?)?.cast<String>() ?? const <String>[],
+          matchedSkills: (row['matchedSkills'] as List?)?.cast<String>() ??
+              const <String>[],
         ),
       );
     }
@@ -2160,8 +2168,7 @@ class _WebRecommendationDashboardState
           // ── Nav items ──────────────────────────────────────────────────
           Expanded(
             child: ListView(
-              padding:
-                  const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
               children: [
                 _sidebarNavItem(
                   icon: Icons.dashboard_outlined,
@@ -2340,8 +2347,7 @@ class _WebRecommendationDashboardState
                   style: GoogleFonts.plusJakartaSans(
                     color: isActive ? Colors.white : textColor,
                     fontSize: 13,
-                    fontWeight:
-                        isActive ? FontWeight.w700 : FontWeight.w500,
+                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                   ),
                 ),
               ],
@@ -2434,8 +2440,7 @@ class _WebRecommendationDashboardState
                   style: GoogleFonts.plusJakartaSans(
                     color: isActive ? Colors.white : textColor,
                     fontSize: 12,
-                    fontWeight:
-                        isActive ? FontWeight.w700 : FontWeight.w400,
+                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
                   ),
                 ),
               ],
@@ -2496,8 +2501,8 @@ class _WebRecommendationDashboardState
   // ── Top bar ───────────────────────────────────────────────────────────────
 
   Widget _buildTopBar() {
-    final aiCoveragePercent = (_aiCoverageFor(_activeAiPostResults) * 100)
-        .toStringAsFixed(0);
+    final aiCoveragePercent =
+        (_aiCoverageFor(_activeAiPostResults) * 100).toStringAsFixed(0);
     const sectionNames = {
       _DashboardSection.overview: 'Dashboard Overview',
       _DashboardSection.studentLab: 'Student Recommendation Lab',
@@ -2563,8 +2568,7 @@ class _WebRecommendationDashboardState
           const Spacer(),
           if (_remoteError != null)
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: Colors.red.shade50,
                 borderRadius: BorderRadius.circular(6),
@@ -2588,8 +2592,7 @@ class _WebRecommendationDashboardState
             ),
           const SizedBox(width: 8),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
               color: const Color(0xFF7C3AED).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(6),
@@ -2718,8 +2721,7 @@ class _WebRecommendationDashboardState
             _panel(
               child: Text(
                 'No users found from Firestore. Ensure your users collection contains profile data.',
-                style: GoogleFonts.plusJakartaSans(
-                    fontSize: 12, color: s),
+                style: GoogleFonts.plusJakartaSans(fontSize: 12, color: s),
               ),
             ),
           ],
@@ -3209,9 +3211,8 @@ class _WebRecommendationDashboardState
               ..sort((a, b) => b.value.compareTo(a.value)))
             .first
             .key;
-    final short = topFaculty.length > 18
-        ? '${topFaculty.substring(0, 18)}…'
-        : topFaculty;
+    final short =
+        topFaculty.length > 18 ? '${topFaculty.substring(0, 18)}…' : topFaculty;
 
     return Row(
       children: [
@@ -3316,8 +3317,8 @@ class _WebRecommendationDashboardState
       return Center(
         child: Text(
           'No students loaded yet.',
-          style: GoogleFonts.plusJakartaSans(
-              color: AppColors.textSecondaryLight),
+          style:
+              GoogleFonts.plusJakartaSans(color: AppColors.textSecondaryLight),
         ),
       );
     }
@@ -3372,8 +3373,8 @@ class _WebRecommendationDashboardState
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: AppColors.primaryTint10,
                       borderRadius: BorderRadius.circular(999),
@@ -3533,8 +3534,7 @@ class _WebRecommendationDashboardState
                         color: const Color(0xFFF4B400).withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color:
-                              const Color(0xFFF4B400).withValues(alpha: 0.4),
+                          color: const Color(0xFFF4B400).withValues(alpha: 0.4),
                         ),
                       ),
                       child: Text(
@@ -3572,8 +3572,7 @@ class _WebRecommendationDashboardState
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    _MetricPill(
-                        label: 'Students', value: '${_users.length}'),
+                    _MetricPill(label: 'Students', value: '${_users.length}'),
                     _MetricPill(
                         label: 'Content Pool', value: '${_posts.length}'),
                     _MetricPill(
@@ -3604,8 +3603,7 @@ class _WebRecommendationDashboardState
                               ),
                             ),
                             Text(
-                              currentUser.profile?.faculty ??
-                                  currentUser.email,
+                              currentUser.profile?.faculty ?? currentUser.email,
                               style: GoogleFonts.plusJakartaSans(
                                 color: Colors.white.withValues(alpha: 0.7),
                                 fontSize: 11,
@@ -3616,8 +3614,7 @@ class _WebRecommendationDashboardState
                           ],
                         ),
                       ),
-                      if ((currentUser.profile?.programName ?? '')
-                          .isNotEmpty)
+                      if ((currentUser.profile?.programName ?? '').isNotEmpty)
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 5),
@@ -3838,7 +3835,8 @@ class _WebRecommendationDashboardState
             decoration: BoxDecoration(
               color: AppColors.mustGold.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.mustGold.withValues(alpha: 0.35)),
+              border:
+                  Border.all(color: AppColors.mustGold.withValues(alpha: 0.35)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -3934,12 +3932,31 @@ class _WebRecommendationDashboardState
                         ),
                       ),
                     ),
-                    DataCell(SizedBox(width: 54, child: Text(_d(breakdown['content_similarity']), style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(width: 54, child: Text(_d(breakdown['behavioral_relevance']), style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(width: 54, child: Text(_d(breakdown['cluster_affinity']), style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(width: 54, child: Text(_d(breakdown['quality_score']), style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(width: 54, child: Text(_d(breakdown['freshness']), style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(width: 54, child: Text(_d(item.score), style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w700)))),
+                    DataCell(SizedBox(
+                        width: 54,
+                        child: Text(_d(breakdown['content_similarity']),
+                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(
+                        width: 54,
+                        child: Text(_d(breakdown['behavioral_relevance']),
+                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(
+                        width: 54,
+                        child: Text(_d(breakdown['cluster_affinity']),
+                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(
+                        width: 54,
+                        child: Text(_d(breakdown['quality_score']),
+                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(
+                        width: 54,
+                        child: Text(_d(breakdown['freshness']),
+                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(
+                        width: 54,
+                        child: Text(_d(item.score),
+                            style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11, fontWeight: FontWeight.w700)))),
                   ],
                 );
               }).toList(growable: false),
@@ -3978,7 +3995,8 @@ class _WebRecommendationDashboardState
             decoration: BoxDecoration(
               color: AppColors.primary.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+              border:
+                  Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -4083,14 +4101,42 @@ class _WebRecommendationDashboardState
                 final breakdown = item.scoreBreakdown;
                 return DataRow(
                   cells: [
-                    DataCell(SizedBox(width: 130, child: Text(_displayName(item.user), maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(width: 40, child: Text('C${item.cluster}', style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(width: 54, child: Text(_d(breakdown['streak_score']), style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(width: 54, child: Text(_d(breakdown['post_score']), style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(width: 54, child: Text(_d(breakdown['collab_score']), style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(width: 54, child: Text(_d(breakdown['follower_score']), style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(width: 54, child: Text(_d(breakdown['ai_comment_sentiment']), style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w700)))),
-                    DataCell(SizedBox(width: 54, child: Text(_d(item.score), style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w700)))),
+                    DataCell(SizedBox(
+                        width: 130,
+                        child: Text(_displayName(item.user),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(
+                        width: 40,
+                        child: Text('C${item.cluster}',
+                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(
+                        width: 54,
+                        child: Text(_d(breakdown['streak_score']),
+                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(
+                        width: 54,
+                        child: Text(_d(breakdown['post_score']),
+                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(
+                        width: 54,
+                        child: Text(_d(breakdown['collab_score']),
+                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(
+                        width: 54,
+                        child: Text(_d(breakdown['follower_score']),
+                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(
+                        width: 54,
+                        child: Text(_d(breakdown['ai_comment_sentiment']),
+                            style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11, fontWeight: FontWeight.w700)))),
+                    DataCell(SizedBox(
+                        width: 54,
+                        child: Text(_d(item.score),
+                            style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11, fontWeight: FontWeight.w700)))),
                   ],
                 );
               }).toList(growable: false),
@@ -4265,10 +4311,12 @@ class _WebRecommendationDashboardState
               ],
               rows: rows.map((item) {
                 final breakdown = item.scoreBreakdown;
-                final localScore =
-                    breakdown['local_score'] ?? breakdown['blended_score'] ?? item.score;
-                final aiScore =
-                    breakdown['openai_score'] ?? breakdown['blended_score'] ?? item.score;
+                final localScore = breakdown['local_score'] ??
+                    breakdown['blended_score'] ??
+                    item.score;
+                final aiScore = breakdown['openai_score'] ??
+                    breakdown['blended_score'] ??
+                    item.score;
                 return DataRow(
                   cells: [
                     DataCell(
@@ -4282,9 +4330,19 @@ class _WebRecommendationDashboardState
                         ),
                       ),
                     ),
-                    DataCell(SizedBox(width: 54, child: Text(_d(localScore), style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(width: 54, child: Text(_d(aiScore), style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
-                    DataCell(SizedBox(width: 54, child: Text(_d(item.score), style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w700)))),
+                    DataCell(SizedBox(
+                        width: 54,
+                        child: Text(_d(localScore),
+                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(
+                        width: 54,
+                        child: Text(_d(aiScore),
+                            style: GoogleFonts.plusJakartaSans(fontSize: 11)))),
+                    DataCell(SizedBox(
+                        width: 54,
+                        child: Text(_d(item.score),
+                            style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11, fontWeight: FontWeight.w700)))),
                   ],
                 );
               }).toList(growable: false),
@@ -4294,7 +4352,6 @@ class _WebRecommendationDashboardState
       ),
     );
   }
-
 
   Widget _benchmarkPanel(Color textPrimary, Color textSecondary) {
     final benchmark = _benchmark;
@@ -4702,9 +4759,8 @@ class _WebRecommendationDashboardState
                         '$rank',
                         style: GoogleFonts.plusJakartaSans(
                           fontWeight: FontWeight.w900,
-                          color: rank <= 3
-                              ? Colors.white
-                              : AppColors.mustGoldDark,
+                          color:
+                              rank <= 3 ? Colors.white : AppColors.mustGoldDark,
                           fontSize: 12,
                         ),
                       ),
@@ -4741,8 +4797,8 @@ class _WebRecommendationDashboardState
                   ),
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 7, vertical: 3),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                     decoration: BoxDecoration(
                       color: clusterColor.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(999),
@@ -5081,8 +5137,10 @@ class _ClusterScatterPainter extends CustomPainter {
     for (final point in points) {
       final cluster = assignments[point.user.id] ?? 0;
       final color = _clusterColors[cluster.clamp(0, _clusterColors.length - 1)];
-      final x = chart.left + (point.vector.skillsDensity.clamp(0.0, 1.0) * chart.width);
-      final y = chart.bottom - (point.vector.activityDensity.clamp(0.0, 1.0) * chart.height);
+      final x = chart.left +
+          (point.vector.skillsDensity.clamp(0.0, 1.0) * chart.width);
+      final y = chart.bottom -
+          (point.vector.activityDensity.clamp(0.0, 1.0) * chart.height);
 
       final dotPaint = Paint()..color = color;
       canvas.drawCircle(Offset(x, y), 4.5, dotPaint);
@@ -5105,7 +5163,8 @@ class _ClusterScatterPainter extends CustomPainter {
       text: TextSpan(text: 'Skills density', style: labelStyle),
       textDirection: TextDirection.ltr,
     )..layout();
-    xPainter.paint(canvas, Offset(chart.right - xPainter.width, chart.bottom + 8));
+    xPainter.paint(
+        canvas, Offset(chart.right - xPainter.width, chart.bottom + 8));
 
     final yPainter = TextPainter(
       text: TextSpan(text: 'Activity', style: labelStyle),
@@ -5116,7 +5175,8 @@ class _ClusterScatterPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _ClusterScatterPainter oldDelegate) {
-    return oldDelegate.points != points || oldDelegate.assignments != assignments;
+    return oldDelegate.points != points ||
+        oldDelegate.assignments != assignments;
   }
 }
 
@@ -5460,5 +5520,3 @@ bool _isVideoCandidate(PostModel post) {
         lower.contains('video/upload');
   });
 }
-
-

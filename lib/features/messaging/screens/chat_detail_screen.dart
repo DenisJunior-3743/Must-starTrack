@@ -84,6 +84,16 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
       if (!mounted) {
         return;
       }
+      if (state.playing && _activeAudioMessageId != null) {
+        setState(() {
+          _playingMessageId = _activeAudioMessageId;
+        });
+      }
+      if (!state.playing && _playingMessageId != null) {
+        setState(() {
+          _playingMessageId = null;
+        });
+      }
       if (state.processingState == ProcessingState.completed) {
         setState(() {
           _playingMessageId = null;
@@ -548,13 +558,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
     try {
       final isSameMessage = _activeAudioMessageId == message.id;
       if (isSameMessage && _audioPlayer.playing) {
+        setState(() {
+          _playingMessageId = null;
+        });
         await _audioPlayer.pause();
         if (!mounted || requestId != _audioPlaybackRequestId) {
           return;
         }
-        setState(() {
-          _playingMessageId = null;
-        });
         return;
       }
 
@@ -597,13 +607,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         }
       }
 
+      setState(() {
+        _playingMessageId = message.id;
+        _activeAudioMessageId = message.id;
+      });
+
       await _audioPlayer.play();
       if (!mounted || requestId != _audioPlaybackRequestId) {
         return;
       }
-      setState(() {
-        _playingMessageId = message.id;
-      });
     } catch (error) {
       if (!mounted || requestId != _audioPlaybackRequestId) {
         return;
@@ -984,6 +996,16 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.call_rounded),
+            onPressed: () => _showNotImplemented('Voice call'),
+            tooltip: 'Voice call',
+          ),
+          IconButton(
+            icon: const Icon(Icons.videocam_rounded),
+            onPressed: () => _showNotImplemented('Video call'),
+            tooltip: 'Video call',
+          ),
+          IconButton(
             icon: const Icon(Icons.more_vert_rounded),
             onPressed: () => _showNotImplemented('Conversation menu'),
             tooltip: 'More',
@@ -1046,7 +1068,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                   return const SizedBox.shrink();
                 }
 
-                final currentUserId = context.read<MessageCubit>().currentUserId;
+                final currentUserId =
+                    context.read<MessageCubit>().currentUserId;
                 final messages = state.messages;
                 final safeTopPad =
                     MediaQuery.of(context).padding.top + kToolbarHeight + 4;
@@ -1068,7 +1091,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                           : ListView.builder(
                               controller: _scrollCtrl,
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
+                                horizontal: 8,
                                 vertical: 8,
                               ),
                               itemCount: messages.length,
@@ -1076,11 +1099,22 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                                 final message = messages[index];
                                 final previous =
                                     index > 0 ? messages[index - 1] : null;
+                                final next = index + 1 < messages.length
+                                    ? messages[index + 1]
+                                    : null;
                                 final showDate = previous == null ||
                                     !_isSameDay(
                                       previous.createdAt,
                                       message.createdAt,
                                     );
+                                final groupedWithPrevious = previous != null &&
+                                    previous.senderId == message.senderId &&
+                                    _isSameDay(
+                                        previous.createdAt, message.createdAt);
+                                final groupedWithNext = next != null &&
+                                    next.senderId == message.senderId &&
+                                    _isSameDay(
+                                        next.createdAt, message.createdAt);
 
                                 return Column(
                                   children: [
@@ -1103,8 +1137,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
                                           isMine:
                                               message.senderId == currentUserId,
                                           isAudioPlaying:
-                                              _playingMessageId == message.id &&
-                                                  _audioPlayer.playing,
+                                              _playingMessageId == message.id,
+                                          groupedWithPrevious:
+                                              groupedWithPrevious,
+                                          groupedWithNext: groupedWithNext,
                                           playbackPosition:
                                               _activeAudioMessageId ==
                                                       message.id
@@ -1231,6 +1267,7 @@ class _ChatHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final typing = statusText.toLowerCase().contains('typing');
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: onTap,
@@ -1247,9 +1284,7 @@ class _ChatHeader extends StatelessWidget {
                       peerPhotoUrl != null ? NetworkImage(peerPhotoUrl!) : null,
                   child: peerPhotoUrl == null
                       ? Text(
-                          peerName.isNotEmpty
-                              ? peerName[0].toUpperCase()
-                              : '?',
+                          peerName.isNotEmpty ? peerName[0].toUpperCase() : '?',
                           style: GoogleFonts.plusJakartaSans(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
@@ -1321,16 +1356,33 @@ class _ChatHeader extends StatelessWidget {
                       ],
                     ],
                   ),
-                  Text(
-                    statusText,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: isActiveRecently
-                          ? AppColors.primary
-                          : AppColors.textSecondaryLight,
+                  if (typing)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'typing',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const _TypingDots(),
+                      ],
+                    )
+                  else
+                    Text(
+                      statusText,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: isActiveRecently
+                            ? AppColors.primary
+                            : AppColors.textSecondaryLight,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
@@ -1372,10 +1424,66 @@ class _DateDivider extends StatelessWidget {
   }
 }
 
+class _TypingDots extends StatefulWidget {
+  const _TypingDots();
+
+  @override
+  State<_TypingDots> createState() => _TypingDotsState();
+}
+
+class _TypingDotsState extends State<_TypingDots>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(3, (index) {
+            final phase = (_controller.value - (index * 0.16)).clamp(0.0, 1.0);
+            final opacity = 0.35 + (math.sin(phase * math.pi).abs() * 0.65);
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              child: Container(
+                width: 4,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: opacity),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            );
+          }),
+        );
+      },
+    );
+  }
+}
+
 class _MessageBubble extends StatelessWidget {
   final MessageModel message;
   final bool isMine;
   final bool isAudioPlaying;
+  final bool groupedWithPrevious;
+  final bool groupedWithNext;
   final Duration playbackPosition;
   final Duration playbackDuration;
   final double playbackSpeed;
@@ -1387,6 +1495,8 @@ class _MessageBubble extends StatelessWidget {
     required this.message,
     required this.isMine,
     this.isAudioPlaying = false,
+    this.groupedWithPrevious = false,
+    this.groupedWithNext = false,
     this.playbackPosition = Duration.zero,
     this.playbackDuration = Duration.zero,
     this.playbackSpeed = 1.0,
@@ -1415,105 +1525,108 @@ class _MessageBubble extends StatelessWidget {
     Widget bubbleChild;
     if (isAudio) {
       bubbleChild = Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: onAudioTap,
+            borderRadius: BorderRadius.circular(16),
+            child: Row(
+              mainAxisSize: MainAxisSize.max,
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: isMine
+                        ? Colors.white.withValues(alpha: 0.16)
+                        : AppColors.primary.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    isAudioPlaying
+                        ? Icons.pause_rounded
+                        : Icons.play_arrow_rounded,
+                    color: isMine ? Colors.white : AppColors.primary,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _AudioWaveform(
+                    progress: progress,
+                    activeColor: isMine ? Colors.white : AppColors.primary,
+                    inactiveColor: isMine
+                        ? Colors.white.withValues(alpha: 0.28)
+                        : AppColors.primary.withValues(alpha: 0.18),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
             children: [
-              InkWell(
-                onTap: onAudioTap,
-                borderRadius: BorderRadius.circular(16),
-                child: Row(
-                  mainAxisSize: MainAxisSize.max,
-                  children: [
-                    Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        color: isMine
-                            ? Colors.white.withValues(alpha: 0.16)
-                            : AppColors.primary.withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        isAudioPlaying
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                        color: isMine ? Colors.white : AppColors.primary,
-                        size: 28,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _AudioWaveform(
-                        progress: isAudioPlaying ? progress : 0,
-                        activeColor: isMine ? Colors.white : AppColors.primary,
-                        inactiveColor: isMine
-                            ? Colors.white.withValues(alpha: 0.28)
-                            : AppColors.primary.withValues(alpha: 0.18),
-                      ),
-                    ),
-                  ],
+              Text(
+                _formatDuration(
+                  playbackPosition.inMilliseconds > 0
+                      ? playbackPosition
+                      : playbackDuration,
+                ),
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 10,
+                  color: isMine ? Colors.white70 : AppColors.textSecondaryLight,
                 ),
               ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Text(
-                    _formatDuration(
-                      isAudioPlaying ? playbackPosition : playbackDuration,
-                    ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () {
+                  onSpeedTap?.call();
+                },
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isMine
+                        ? Colors.white.withValues(alpha: 0.18)
+                        : AppColors.primaryTint10,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '${playbackSpeed.toStringAsFixed(playbackSpeed.truncateToDouble() == playbackSpeed ? 0 : 2)}x',
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 10,
-                      color: isMine
-                          ? Colors.white70
-                          : AppColors.textSecondaryLight,
+                      fontWeight: FontWeight.w700,
+                      color: isMine ? Colors.white : AppColors.primary,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () {
-                      onSpeedTap?.call();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: isMine
-                            ? Colors.white.withValues(alpha: 0.18)
-                            : AppColors.primaryTint10,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        '${playbackSpeed.toStringAsFixed(playbackSpeed.truncateToDouble() == playbackSpeed ? 0 : 2)}x',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: isMine ? Colors.white : AppColors.primary,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ],
-          );
+          ),
+        ],
+      );
     } else if (isImage) {
       final src = message.fileUrl;
       bubbleChild = GestureDetector(
         onTap: onOpenFile,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
-          child: src != null && (src.startsWith('http://') || src.startsWith('https://'))
+          child: src != null &&
+                  (src.startsWith('http://') || src.startsWith('https://'))
               ? Image.network(src,
                   width: 200,
                   height: 200,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_rounded))
+                  errorBuilder: (_, __, ___) =>
+                      const Icon(Icons.broken_image_rounded))
               : src != null
                   ? Image.file(File(src),
                       width: 200,
                       height: 200,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_rounded))
+                      errorBuilder: (_, __, ___) =>
+                          const Icon(Icons.broken_image_rounded))
                   : const SizedBox.shrink(),
         ),
       );
@@ -1639,22 +1752,25 @@ class _MessageBubble extends StatelessWidget {
         : bubbleChild;
 
     if (isMine) {
+      final bottomSpacing = groupedWithNext ? 4.0 : 10.0;
+      final topSpacing = groupedWithPrevious ? 2.0 : 8.0;
       return Padding(
-        padding: const EdgeInsets.only(bottom: 12, left: 48),
+        padding: EdgeInsets.fromLTRB(72, topSpacing, 8, bottomSpacing),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Container(
               padding: const EdgeInsets.all(12),
               constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.68,
+                maxWidth: MediaQuery.of(context).size.width * 0.70,
               ),
               decoration: BoxDecoration(
                 color: AppColors.primary,
                 borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(16),
-                  bottomLeft: Radius.circular(16),
+                  topLeft: Radius.circular(18),
+                  topRight: Radius.circular(18),
+                  bottomLeft: Radius.circular(18),
+                  bottomRight: Radius.circular(6),
                 ),
                 boxShadow: [
                   BoxShadow(
@@ -1666,7 +1782,7 @@ class _MessageBubble extends StatelessWidget {
               ),
               child: bubbleBody,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 3),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1683,15 +1799,6 @@ class _MessageBubble extends StatelessWidget {
                   size: 14,
                   color: _statusColor(),
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  _statusLabel(),
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 10,
-                    color: AppColors.textSecondaryLight,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
               ],
             ),
           ],
@@ -1699,8 +1806,10 @@ class _MessageBubble extends StatelessWidget {
       );
     }
 
+    final bottomSpacing = groupedWithNext ? 4.0 : 10.0;
+    final topSpacing = groupedWithPrevious ? 2.0 : 8.0;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12, right: 48),
+      padding: EdgeInsets.fromLTRB(8, topSpacing, 72, bottomSpacing),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
@@ -1717,14 +1826,15 @@ class _MessageBubble extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 constraints: BoxConstraints(
-                  maxWidth: MediaQuery.of(context).size.width * 0.65,
+                  maxWidth: MediaQuery.of(context).size.width * 0.70,
                 ),
                 decoration: BoxDecoration(
                   color: isDark ? AppColors.surfaceDark : Colors.white,
                   borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                    bottomRight: Radius.circular(16),
+                    topLeft: Radius.circular(18),
+                    topRight: Radius.circular(18),
+                    bottomRight: Radius.circular(18),
+                    bottomLeft: Radius.circular(6),
                   ),
                   boxShadow: isDark
                       ? const []
@@ -1957,7 +2067,8 @@ class _InputBar extends StatelessWidget {
                                 controller: controller,
                                 maxLines: null,
                                 textInputAction: TextInputAction.newline,
-                                style: GoogleFonts.plusJakartaSans(fontSize: 14),
+                                style:
+                                    GoogleFonts.plusJakartaSans(fontSize: 14),
                                 decoration: InputDecoration(
                                   hintText: 'Message…',
                                   hintStyle: GoogleFonts.plusJakartaSans(
@@ -2034,9 +2145,7 @@ class _ComposerIconBtn extends StatelessWidget {
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: isDark
-              ? const Color(0xFF1A2640)
-              : const Color(0xFFF2F6FC),
+          color: isDark ? const Color(0xFF1A2640) : const Color(0xFFF2F6FC),
           shape: BoxShape.circle,
         ),
         child: Icon(icon, size: 20, color: AppColors.primary),
@@ -2065,8 +2174,7 @@ class _AttachmentPreviewBar extends StatelessWidget {
     final isImage = type == 'image';
     final iconColor =
         isImage ? const Color(0xFF6366F1) : const Color(0xFFEF4444);
-    final icon =
-        isImage ? Icons.image_rounded : Icons.picture_as_pdf_rounded;
+    final icon = isImage ? Icons.image_rounded : Icons.picture_as_pdf_rounded;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -2102,8 +2210,8 @@ class _AttachmentPreviewBar extends StatelessWidget {
                 color: AppColors.primary,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.send_rounded,
-                  color: Colors.white, size: 16),
+              child:
+                  const Icon(Icons.send_rounded, color: Colors.white, size: 16),
             ),
           ),
           const SizedBox(width: 6),
@@ -2340,13 +2448,11 @@ class _CancelZone extends StatelessWidget {
         shape: BoxShape.circle,
         color: willCancel
             ? AppColors.danger
-            : AppColors.danger
-                .withValues(alpha: 0.06 + 0.14 * dragFraction),
+            : AppColors.danger.withValues(alpha: 0.06 + 0.14 * dragFraction),
         border: Border.all(
           color: willCancel
               ? AppColors.danger
-              : AppColors.danger
-                  .withValues(alpha: 0.20 + 0.60 * dragFraction),
+              : AppColors.danger.withValues(alpha: 0.20 + 0.60 * dragFraction),
           width: 1.5,
         ),
       ),
@@ -2355,8 +2461,7 @@ class _CancelZone extends StatelessWidget {
         size: 18,
         color: willCancel
             ? Colors.white
-            : AppColors.danger
-                .withValues(alpha: 0.30 + 0.70 * dragFraction),
+            : AppColors.danger.withValues(alpha: 0.30 + 0.70 * dragFraction),
       ),
     );
   }
@@ -2518,12 +2623,11 @@ class _LockedRecordingRow extends StatelessWidget {
               height: 40,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
-                color: isDark
-                    ? const Color(0xFF1A2640)
-                    : const Color(0xFFF2F6FC),
+                color:
+                    isDark ? const Color(0xFF1A2640) : const Color(0xFFF2F6FC),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                    color: AppColors.primary.withValues(alpha: 0.2)),
+                border:
+                    Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
               ),
               child: Row(
                 children: [
@@ -2592,8 +2696,8 @@ class _LockGuide extends StatelessWidget {
                 ? AppColors.primary
                 : AppColors.primary.withValues(alpha: 0.08 + 0.22 * progress),
             border: Border.all(
-              color: AppColors.primary
-                  .withValues(alpha: 0.25 + 0.75 * progress),
+              color:
+                  AppColors.primary.withValues(alpha: 0.25 + 0.75 * progress),
               width: 1.5,
             ),
           ),
@@ -2602,8 +2706,7 @@ class _LockGuide extends StatelessWidget {
             size: 13,
             color: isLocked
                 ? Colors.white
-                : AppColors.primary
-                    .withValues(alpha: 0.35 + 0.65 * progress),
+                : AppColors.primary.withValues(alpha: 0.35 + 0.65 * progress),
           ),
         ),
         const SizedBox(height: 3),
@@ -2628,8 +2731,8 @@ class _LockGuide extends StatelessWidget {
                 height: (24 * progress).clamp(0.0, 24.0),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(2),
-                  color: AppColors.primary
-                      .withValues(alpha: 0.5 + 0.5 * progress),
+                  color:
+                      AppColors.primary.withValues(alpha: 0.5 + 0.5 * progress),
                 ),
               ),
             ],
